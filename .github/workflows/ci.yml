@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  # ==========================================================================
+  # Python Tests (Mac Central)
+  # ==========================================================================
+  test-python:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r mac-central/requirements.txt
+
+      - name: Generate protobuf code
+        run: python3 tools/generate_proto.py
+
+      - name: Lint with flake8
+        run: flake8 mac-central/src/ mac-central/tests/ --max-line-length=100
+        continue-on-error: true
+
+      - name: Format check with black
+        run: black --check mac-central/src/ mac-central/tests/
+        continue-on-error: true
+
+      - name: Run pytest
+        run: |
+          cd mac-central
+          pytest tests/ -v --tb=short
+
+  # ==========================================================================
+  # Protobuf Validation
+  # ==========================================================================
+  validate-proto:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install protobuf compiler
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Validate proto file
+        run: protoc --proto_path=proto --cpp_out=/tmp proto/neuro_pipeline.proto
+
+  # ==========================================================================
+  # Documentation Check
+  # ==========================================================================
+  docs-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check required docs exist
+        run: |
+          test -f README.md
+          test -f docs/ARCHITECTURE.md
+          test -f docs/API_REFERENCE.md
+          test -f docs/DEVLOG.md
+          test -f proto/neuro_pipeline.proto

@@ -1,0 +1,165 @@
+syntax = "proto3";
+
+package neuro_pipeline;
+
+option java_multiple_files = true;
+option java_package = "com.neuropipeline.proto";
+
+// =============================================================================
+// Service Definition
+// =============================================================================
+
+// Core service for edge-cloud communication.
+service NeuroPipelineService {
+  // Edge streams detection results to central (Client Streaming)
+  rpc StreamDetectionResults(stream DetectionResult) returns (StreamResponse);
+
+  // Central sends control commands to edge (Unary)
+  rpc SendControlCommand(ControlCommand) returns (CommandResponse);
+
+  // Bidirectional event streaming
+  rpc BidirectionalEventStream(stream EdgeEvent) returns (stream CentralEvent);
+
+  // Health check
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+// =============================================================================
+// Detection Messages
+// =============================================================================
+
+// Object detection result from edge NPU inference.
+message DetectionResult {
+  uint64 frame_id = 1;             // Unique frame identifier (monotonic)
+  uint64 timestamp_us = 2;         // Microseconds since epoch (monotonic clock)
+  repeated BoundingBox boxes = 3;  // Detected objects
+  bytes frame_data = 4;            // Optional JPEG-encoded frame (sent on events)
+  DeviceMetrics metrics = 5;       // System performance metrics
+}
+
+// Single detected object bounding box.
+message BoundingBox {
+  uint32 class_id = 1;     // COCO dataset class ID
+  string class_name = 2;   // Human-readable class label
+  float confidence = 3;    // Detection confidence [0.0, 1.0]
+
+  // Normalized coordinates [0.0, 1.0] relative to frame width/height
+  float x_min = 4;
+  float y_min = 5;
+  float x_max = 6;
+  float y_max = 7;
+}
+
+// Device performance metrics.
+message DeviceMetrics {
+  float cpu_usage = 1;       // CPU usage percentage [0.0, 100.0]
+  float npu_usage = 2;       // NPU usage percentage [0.0, 100.0]
+  float memory_used_mb = 3;  // Memory usage in MB
+  float temperature_c = 4;   // Device temperature in Celsius
+  uint32 fps = 5;            // Current processing frame rate
+}
+
+// Response to streaming detection results.
+message StreamResponse {
+  bool success = 1;
+  string message = 2;
+  uint64 frames_received = 3;
+}
+
+// =============================================================================
+// Control Messages
+// =============================================================================
+
+// Command from central to edge device.
+message ControlCommand {
+  enum CommandType {
+    SET_FPS = 0;                   // Adjust camera frame rate
+    CHANGE_MODEL = 1;              // Switch AI model
+    ENABLE_DEBUG = 2;              // Toggle debug logging
+    SET_DETECTION_THRESHOLD = 3;   // Adjust confidence threshold
+    SHUTDOWN = 4;                  // Graceful shutdown
+  }
+
+  CommandType type = 1;
+  map<string, string> parameters = 2;   // Command-specific parameters
+  uint64 command_id = 3;                // Unique command identifier
+}
+
+// Response to a control command.
+message CommandResponse {
+  bool success = 1;
+  string message = 2;
+  uint64 command_id = 3;   // Echo back command_id for correlation
+}
+
+// =============================================================================
+// Event Messages
+// =============================================================================
+
+// Event from edge to central.
+message EdgeEvent {
+  enum EventType {
+    DETECTION_ALERT = 0;    // Critical detection (e.g., person in restricted area)
+    SYSTEM_ERROR = 1;       // System-level error
+    MODEL_LOADED = 2;       // Model successfully loaded
+    HEALTH_UPDATE = 3;      // Periodic health heartbeat
+  }
+
+  EventType type = 1;
+  uint64 timestamp_us = 2;
+  string description = 3;
+  map<string, string> metadata = 4;   // Event-specific key-value data
+}
+
+// Event from central to edge.
+message CentralEvent {
+  enum EventType {
+    COMMAND_ACK = 0;         // Acknowledge received command
+    INFERENCE_RESULT = 1;    // VLM inference result
+    ALERT = 2;               // Alert from central analysis
+  }
+
+  EventType type = 1;
+  uint64 timestamp_us = 2;
+  string payload = 3;       // JSON or plain text payload
+}
+
+// =============================================================================
+// Health Check
+// =============================================================================
+
+message HealthCheckRequest {
+  string client_id = 1;
+}
+
+message HealthCheckResponse {
+  enum Status {
+    SERVING = 0;
+    NOT_SERVING = 1;
+    UNKNOWN = 2;
+  }
+
+  Status status = 1;
+  string version = 2;
+}
+
+// =============================================================================
+// Video Frame (for streaming)
+// =============================================================================
+
+// Raw or compressed video frame.
+message VideoFrame {
+  uint64 frame_id = 1;
+  uint64 timestamp_us = 2;
+  uint32 width = 3;
+  uint32 height = 4;
+
+  enum PixelFormat {
+    RGB888 = 0;
+    NV12 = 1;
+    JPEG = 2;
+  }
+
+  PixelFormat format = 5;
+  bytes data = 6;            // Raw or compressed frame data
+}

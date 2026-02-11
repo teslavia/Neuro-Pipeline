@@ -1,0 +1,87 @@
+# ==============================================================================
+# Neuro-Pipeline .gitignore
+# ==============================================================================
+
+# C/C++ Build Artifacts
+*.o
+*.a
+*.so
+*.so.*
+*.dylib
+*.out
+*.exe
+*.elf
+build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+Makefile
+
+# RK3588 Specific
+*.rknn
+rk3588-edge/src/generated/*
+!rk3588-edge/src/generated/.gitkeep
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+*.egg-info/
+mac-central/src/generated/*
+!mac-central/src/generated/.gitkeep
+!mac-central/src/generated/__init__.py
+
+# Model Files (large binaries)
+*.onnx
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.mlx
+mac-central/models/*
+!mac-central/models/.gitkeep
+rk3588-edge/models/*
+!rk3588-edge/models/.gitkeep
+
+# IDE & Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# OS Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs & Debug
+*.log
+core
+vgcore.*
+perf.data
+perf.data.old
+
+# Temporary & Test Output
+tmp/
+temp/
+*.tmp
+test_output/
+
+工程架构设计与任务拆解.md

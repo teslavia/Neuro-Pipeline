@@ -1,0 +1,25 @@
+# Core Dependencies
+grpcio>=1.60.0
+grpcio-tools>=1.60.0
+protobuf>=4.25.0
+
+# MLX Framework (Apple Silicon only)
+mlx>=0.5.0
+
+# Data Processing
+numpy>=1.24.0
+opencv-python>=4.8.0
+pillow>=10.0.0
+
+# Utilities
+pyyaml>=6.0.1
+
+# Development Tools
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-asyncio>=0.21.0
+black>=23.7.0
+flake8>=6.1.0
+mypy>=1.5.0
+isort>=5.12.0
+structlog>=24.1.0

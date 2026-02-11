@@ -1,0 +1,63 @@
+---
+BasedOnStyle: Google
+Language: Cpp
+Standard: c++17
+
+# Indentation
+IndentWidth: 2
+TabWidth: 2
+UseTab: Never
+ColumnLimit: 100
+
+# Alignment
+AlignAfterOpenBracket: Align
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+AlignOperands: true
+AlignTrailingComments: true
+
+# Braces
+BreakBeforeBraces: Attach
+
+# Pointers & References
+DerivePointerAlignment: false
+PointerAlignment: Left
+ReferenceAlignment: Left
+
+# Includes
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex:           '^"rk_hal/'
+    Priority:        1
+  - Regex:           '^"common/'
+    Priority:        2
+  - Regex:           '^<(rknn|rga|mpp|drm)/'
+    Priority:        3
+  - Regex:           '^<grpc'
+    Priority:        4
+  - Regex:           '^<google/protobuf'
+    Priority:        5
+  - Regex:           '^<.*\.h>'
+    Priority:        6
+  - Regex:           '^<.*>'
+    Priority:        7
+  - Regex:           '.*'
+    Priority:        8
+
+# Namespace
+NamespaceIndentation: None
+CompactNamespaces: false
+
+# Functions
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+
+# Comments
+ReflowComments: true
+SpacesBeforeTrailingComments: 2
+
+# Constructor
+ConstructorInitializerIndentWidth: 4
+BreakConstructorInitializers: BeforeColon
+...
