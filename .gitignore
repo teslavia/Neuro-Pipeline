@@ -84,4 +84,7 @@ temp/
 *.tmp
 test_output/
 
+
+# plan & notes
 工程架构设计与任务拆解.md
+**/docs/notes/**

@@ -133,12 +133,17 @@ set(HAL_SOURCES
   src/hal/mpp_decoder.cpp
   src/hal/rga_processor.cpp
   src/hal/drm_allocator.cpp
+  src/hal/dmabuf_sim.cpp
 )
 
 set(DATA_PROCESSING_SOURCES
   src/data_processing/zero_copy_buffer.cpp
   src/data_processing/memory_pool.cpp
   src/data_processing/thread_pool.cpp
+  src/data_processing/mmap_ipc.cpp
+  src/data_processing/cache_analysis.cpp
+  src/data_processing/neon_image_ops.cpp
+  src/data_processing/virtual_device_io.cpp
 )
 
 set(AI_INFERENCE_SOURCES

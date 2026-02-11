@@ -23,6 +23,12 @@ set(UNIT_TEST_SOURCES
   unit_tests/test_thread_pool.cpp
   unit_tests/test_zero_copy_buffer.cpp
   unit_tests/test_yolo_postprocess.cpp
+  unit_tests/test_mmap_ipc.cpp
+  unit_tests/test_npu_scheduler.cpp
+  unit_tests/test_cache_analysis.cpp
+  unit_tests/test_neon_image_ops.cpp
+  unit_tests/test_dmabuf_sim.cpp
+  unit_tests/test_virtual_device_io.cpp
 )
 
 add_executable(run_unit_tests ${UNIT_TEST_SOURCES})

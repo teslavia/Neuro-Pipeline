@@ -1,55 +1,88 @@
-#include <cstdint>
-#include <memory>
-#include <string>
+#include "common/npu_scheduler.hpp"
 
-// TODO: Include RKNN headers when available
-// #include "rknn_api.h"
+#include <algorithm>
+#include <limits>
 
 namespace ai_inference {
 
-/**
- * @brief NPU multi-core task scheduler (mock/simplified).
- *
- * Distributes inference tasks across RK3588's 3 NPU cores
- * for load balancing and maximum throughput.
- */
-class NPUScheduler {
- public:
-  enum class Strategy {
-    kRoundRobin,   // Rotate across cores
-    kLoadBalance,  // Pick least loaded core
-    kSingleCore,   // Use one core only
-    kTripleCore,   // Use all 3 cores for one model (highest perf)
-  };
+NPUScheduler::NPUScheduler(Strategy strategy) : strategy_(strategy) {
+  for (auto& count : active_tasks_) {
+    count.store(0, std::memory_order_relaxed);
+  }
+}
 
-  explicit NPUScheduler(Strategy strategy = Strategy::kRoundRobin)
-      : strategy_(strategy), current_core_(0) {}
+int NPUScheduler::CoreIndexToMask(int idx) {
+  // Core 0 → 0x01, Core 1 → 0x02, Core 2 → 0x04
+  return 1 << idx;
+}
 
-  /// Select next NPU core mask for inference.
-  int SelectCore() {
-    switch (strategy_) {
-      case Strategy::kRoundRobin: {
-        // RK3588 has 3 NPU cores: mask 1, 2, 4
-        int masks[] = {1, 2, 4};
-        int core = masks[current_core_ % 3];
-        current_core_++;
-        return core;
-      }
-      case Strategy::kTripleCore:
-        return 7;  // All 3 cores (1|2|4)
-      case Strategy::kSingleCore:
-        return 1;  // Core 0 only
-      case Strategy::kLoadBalance:
-        // TODO: Read /sys/kernel/debug/rknpu/load and select least loaded
-        return 1;
-      default:
-        return 0;  // Auto
+int NPUScheduler::SelectCore() {
+  total_submitted_.fetch_add(1, std::memory_order_relaxed);
+
+  std::lock_guard<std::mutex> lock(strategy_mutex_);
+  switch (strategy_) {
+    case Strategy::kRoundRobin:
+      return SelectRoundRobin();
+    case Strategy::kLoadBalance:
+      return SelectLoadBalance();
+    case Strategy::kSingleCore:
+      return kCore0;
+    case Strategy::kTripleCore:
+      return kAllCores;
+    default:
+      return kCore0;
+  }
+}
+
+int NPUScheduler::SelectRoundRobin() {
+  uint32_t idx = round_robin_counter_.fetch_add(1, std::memory_order_relaxed);
+  return CoreIndexToMask(idx % kNumCores);
+}
+
+int NPUScheduler::SelectLoadBalance() {
+  int min_load = std::numeric_limits<int>::max();
+  int best_core = 0;
+
+  for (int i = 0; i < kNumCores; ++i) {
+    int load = active_tasks_[i].load(std::memory_order_relaxed);
+    if (load < min_load) {
+      min_load = load;
+      best_core = i;
     }
   }
 
- private:
-  Strategy strategy_;
-  uint32_t current_core_;
-};
+  return CoreIndexToMask(best_core);
+}
+
+void NPUScheduler::NotifyTaskStart(int core_index) {
+  if (IsValidCoreIndex(core_index)) {
+    active_tasks_[core_index].fetch_add(1, std::memory_order_relaxed);
+  }
+}
+
+void NPUScheduler::NotifyTaskEnd(int core_index) {
+  if (IsValidCoreIndex(core_index)) {
+    active_tasks_[core_index].fetch_sub(1, std::memory_order_relaxed);
+  }
+}
+
+int NPUScheduler::ActiveTasks(int core_index) const {
+  if (!IsValidCoreIndex(core_index)) return 0;
+  return active_tasks_[core_index].load(std::memory_order_relaxed);
+}
+
+uint64_t NPUScheduler::TotalSubmitted() const {
+  return total_submitted_.load(std::memory_order_relaxed);
+}
+
+void NPUScheduler::SetStrategy(Strategy strategy) {
+  std::lock_guard<std::mutex> lock(strategy_mutex_);
+  strategy_ = strategy;
+}
+
+NPUScheduler::Strategy NPUScheduler::GetStrategy() const {
+  std::lock_guard<std::mutex> lock(strategy_mutex_);
+  return strategy_;
+}
 
 }  // namespace ai_inference
