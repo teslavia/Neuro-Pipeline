@@ -129,7 +129,6 @@ jobs:
           test -f VERSION.json
           test -f docs/ARCHITECTURE.md
           test -f docs/API_REFERENCE.md
-          test -f docs/DEVLOG.md
           test -f proto/neuro_pipeline.proto
 
       - name: Validate VERSION.json
