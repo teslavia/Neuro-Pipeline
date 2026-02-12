@@ -134,17 +134,17 @@ fi
 log_step "3/6 Checking NPU driver..."
 
 if [ "${DRY_RUN}" -eq 0 ]; then
-    NPU_VERSION=$(run_ssh "cat /sys/kernel/debug/rknpu/version 2>/dev/null || echo 'NOT_FOUND'")
+    NPU_VERSION=$(run_ssh "sudo cat /sys/kernel/debug/rknpu/version 2>/dev/null || echo 'NOT_FOUND'")
     if [ "${NPU_VERSION}" != "NOT_FOUND" ]; then
         log_ok "NPU driver version: ${NPU_VERSION}"
         report_add "NPU driver: ${NPU_VERSION}"
     else
-        # Try alternative path
-        NPU_VERSION=$(run_ssh "dmesg | grep -i rknpu | head -3 2>/dev/null || echo 'NOT_FOUND'")
-        if [ "${NPU_VERSION}" != "NOT_FOUND" ] && [ -n "${NPU_VERSION}" ]; then
-            log_warn "NPU driver detected via dmesg (debugfs may need root)"
-            echo "  ${NPU_VERSION}"
-            report_add "NPU driver: detected (debugfs unavailable)"
+        # Try alternative: check /dev/rknpu device node
+        NPU_DEV=$(run_ssh "ls -la /dev/rknpu* 2>/dev/null || echo 'NOT_FOUND'")
+        if [ "${NPU_DEV}" != "NOT_FOUND" ] && [ -n "${NPU_DEV}" ]; then
+            log_ok "NPU device node found"
+            echo "  ${NPU_DEV}"
+            report_add "NPU driver: detected (/dev/rknpu exists)"
         else
             log_warn "NPU driver not detected — may need kernel update"
             report_add "NPU driver: NOT FOUND"
@@ -152,7 +152,7 @@ if [ "${DRY_RUN}" -eq 0 ]; then
     fi
 
     # Check NPU load
-    NPU_LOAD=$(run_ssh "cat /sys/kernel/debug/rknpu/load 2>/dev/null || echo 'N/A'")
+    NPU_LOAD=$(run_ssh "sudo cat /sys/kernel/debug/rknpu/load 2>/dev/null || echo 'N/A'")
     if [ "${NPU_LOAD}" != "N/A" ]; then
         log_info "NPU load: ${NPU_LOAD}"
     fi
@@ -190,6 +190,7 @@ fi
 RKNN_SERVER="${RKNPU2_DIR}/runtime/Linux/rknn_server/aarch64/usr/bin/rknn_server"
 if [ -f "${RKNN_SERVER}" ]; then
     log_info "Deploying rknn_server..."
+    run_ssh "sudo killall rknn_server 2>/dev/null || true"
     run_scp "${RKNN_SERVER}" "${SSH_TARGET}:/tmp/rknn_server"
     run_ssh "sudo cp /tmp/rknn_server /usr/bin/ && sudo chmod 755 /usr/bin/rknn_server"
     log_ok "rknn_server deployed"
@@ -253,7 +254,7 @@ if [ "${DRY_RUN}" -eq 0 ]; then
     echo ""
     echo -e "${BOLD}--- Library Verification ---${NC}"
     for lib in librknnrt.so librockchip_mpp.so librga.so; do
-        FOUND=$(run_ssh "ldconfig -p | grep ${lib} || echo 'NOT_FOUND'")
+        FOUND=$(run_ssh "sudo ldconfig -p | grep ${lib} || echo 'NOT_FOUND'")
         if [ "${FOUND}" != "NOT_FOUND" ] && [ -n "${FOUND}" ]; then
             log_ok "${lib} — linked"
         else

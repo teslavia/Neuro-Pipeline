@@ -34,54 +34,19 @@ option(USE_MOCK_HAL "Use mock HAL for development without RK3588 hardware" OFF)
 # Threads (required)
 find_package(Threads REQUIRED)
 
-# Protobuf — when cross-compiling, protoc runs on host and code is pre-generated.
-# We only need the protobuf headers/library for compilation, which may not be in
-# the aarch64 sysroot. Use find_package when available, otherwise fall back to
-# the host-installed protobuf headers (accessible outside sysroot in Docker).
-if(CMAKE_CROSSCOMPILING)
-  # In cross-compile Docker container, protobuf is installed as a host package.
-  # Temporarily bypass sysroot to find it.
-  set(_saved_root_mode ${CMAKE_FIND_ROOT_PATH_MODE_INCLUDE})
-  set(_saved_lib_mode ${CMAKE_FIND_ROOT_PATH_MODE_LIBRARY})
-  set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE BOTH)
-  set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY BOTH)
-  find_package(Protobuf QUIET)
-  set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ${_saved_root_mode})
-  set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ${_saved_lib_mode})
-  if(NOT Protobuf_FOUND)
-    message(STATUS "Protobuf not found via find_package in cross-compile — using pre-generated code")
-    # Manually set protobuf include/lib from host paths
-    find_path(Protobuf_INCLUDE_DIRS google/protobuf/message.h
-      PATHS /usr/include NO_CMAKE_FIND_ROOT_PATH)
-    find_library(Protobuf_LIBRARIES NAMES protobuf
-      PATHS /usr/lib /usr/lib/aarch64-linux-gnu NO_CMAKE_FIND_ROOT_PATH)
-    if(Protobuf_INCLUDE_DIRS)
-      include_directories(${Protobuf_INCLUDE_DIRS})
-    endif()
-  else()
-    include_directories(${Protobuf_INCLUDE_DIRS})
-  endif()
-else()
-  find_package(Protobuf REQUIRED)
-  include_directories(${Protobuf_INCLUDE_DIRS})
-endif()
+# Protobuf
+find_package(Protobuf REQUIRED)
+include_directories(${Protobuf_INCLUDE_DIRS})
 
 # gRPC (try cmake config first, fallback to pkg-config)
-# When cross-compiling, also search host paths
 find_package(gRPC CONFIG QUIET)
 if(gRPC_FOUND)
   set(GRPC_LIBS gRPC::grpc++ gRPC::grpc)
   message(STATUS "Found gRPC via CMake config")
 else()
-  if(CMAKE_CROSSCOMPILING)
-    find_library(GRPCPP_LIBRARY NAMES grpc++ PATHS /usr/lib /usr/lib/aarch64-linux-gnu NO_CMAKE_FIND_ROOT_PATH)
-    find_library(GRPC_LIBRARY NAMES grpc PATHS /usr/lib /usr/lib/aarch64-linux-gnu NO_CMAKE_FIND_ROOT_PATH)
-    find_path(GRPC_INCLUDE_DIR grpc/grpc.h PATHS /usr/include NO_CMAKE_FIND_ROOT_PATH)
-  else()
-    find_library(GRPCPP_LIBRARY NAMES grpc++)
-    find_library(GRPC_LIBRARY NAMES grpc)
-    find_path(GRPC_INCLUDE_DIR grpc/grpc.h)
-  endif()
+  find_library(GRPCPP_LIBRARY NAMES grpc++)
+  find_library(GRPC_LIBRARY NAMES grpc)
+  find_path(GRPC_INCLUDE_DIR grpc/grpc.h)
   if(GRPCPP_LIBRARY AND GRPC_LIBRARY)
     set(GRPC_LIBS ${GRPCPP_LIBRARY} ${GRPC_LIBRARY})
     include_directories(${GRPC_INCLUDE_DIR})
@@ -94,9 +59,11 @@ endif()
 
 # RK3588 Platform Libraries (only when cross-compiling for ARM64)
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64" AND NOT USE_MOCK_HAL)
-  find_library(RKNN_API_LIBRARY NAMES rknnrt PATHS /usr/lib)
-  find_library(RGA_LIBRARY NAMES rga PATHS /usr/lib)
-  find_library(MPP_LIBRARY NAMES rockchip_mpp PATHS /usr/lib)
+  # Search both system paths and the SDK sysroot
+  set(_SDK_LIB_PATHS /usr/lib /opt/rk3588-sysroot/usr/lib)
+  find_library(RKNN_API_LIBRARY NAMES rknnrt PATHS ${_SDK_LIB_PATHS})
+  find_library(RGA_LIBRARY NAMES rga PATHS ${_SDK_LIB_PATHS})
+  find_library(MPP_LIBRARY NAMES rockchip_mpp PATHS ${_SDK_LIB_PATHS})
   find_library(DRM_LIBRARY NAMES drm)
 
   if(NOT RKNN_API_LIBRARY)

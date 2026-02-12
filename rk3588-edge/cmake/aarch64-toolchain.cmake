@@ -17,52 +17,48 @@ set(CMAKE_AR aarch64-linux-gnu-ar)
 set(CMAKE_RANLIB aarch64-linux-gnu-ranlib)
 set(CMAKE_STRIP aarch64-linux-gnu-strip)
 
-# Sysroot — only set when using real HAL (USE_MOCK_HAL=OFF).
-# Our sysroot only contains RKNN/MPP/RGA libs, not a full libc,
-# so setting CMAKE_SYSROOT in mock mode breaks standard header resolution.
+# RK3588 optimization flags (Cortex-A76 big cores + Cortex-A55 little cores)
+set(CMAKE_C_FLAGS_RELEASE "-O3 -march=armv8.2-a -mtune=cortex-a76" CACHE STRING "" FORCE)
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -march=armv8.2-a -mtune=cortex-a76" CACHE STRING "" FORCE)
+
+# NOTE: We do NOT set CMAKE_SYSROOT because our sysroot only contains
+# RKNN/MPP/RGA libs — not a full libc. Setting CMAKE_SYSROOT would hide
+# the cross-compiler's built-in system headers (features.h, etc.).
+# Instead, we add the SDK paths as additional include/link directories
+# in the USE_MOCK_HAL=OFF block below.
+
 option(USE_MOCK_HAL "Use mock HAL instead of real RK3588 SDK" ON)
 
 if(NOT USE_MOCK_HAL)
-  # Sysroot detection: environment > cmake arg > Docker default
+  # Determine RK3588 SDK sysroot path
   if(DEFINED ENV{SYSROOT})
-    set(CMAKE_SYSROOT $ENV{SYSROOT})
-  elseif(NOT CMAKE_SYSROOT)
-    set(CMAKE_SYSROOT /opt/rk3588-sysroot)
+    set(RK3588_SDK_PATH $ENV{SYSROOT})
+  else()
+    set(RK3588_SDK_PATH /opt/rk3588-sysroot)
   endif()
 
-  # Search paths — programs from host, libraries/headers from sysroot + host
-  set(CMAKE_FIND_ROOT_PATH ${CMAKE_SYSROOT})
-  set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
-  set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY BOTH)
-  set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE BOTH)
-  set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE BOTH)
-
-  message(STATUS "Using real RK3588 SDK from sysroot: ${CMAKE_SYSROOT}")
-
-  # Additional include directories
-  include_directories(
-    ${CMAKE_SYSROOT}/usr/include
-    ${CMAKE_SYSROOT}/usr/include/rockchip
-    ${CMAKE_SYSROOT}/usr/include/rga
-  )
-
-  # Library search path
-  link_directories(
-    ${CMAKE_SYSROOT}/usr/lib
-  )
+  message(STATUS "Using real RK3588 SDK from: ${RK3588_SDK_PATH}")
 
   # Verify critical files exist
-  if(NOT EXISTS "${CMAKE_SYSROOT}/usr/include/rknn_api.h")
+  if(NOT EXISTS "${RK3588_SDK_PATH}/usr/include/rknn_api.h")
     message(FATAL_ERROR
-      "rknn_api.h not found in sysroot.\n"
+      "rknn_api.h not found in ${RK3588_SDK_PATH}.\n"
       "Run: bash tools/cross_compile_env/prepare_sysroot.sh")
   endif()
 
-  if(NOT EXISTS "${CMAKE_SYSROOT}/usr/lib/librknnrt.so")
+  if(NOT EXISTS "${RK3588_SDK_PATH}/usr/lib/librknnrt.so")
     message(FATAL_ERROR
-      "librknnrt.so not found in sysroot.\n"
+      "librknnrt.so not found in ${RK3588_SDK_PATH}.\n"
       "Run: bash tools/cross_compile_env/prepare_sysroot.sh")
   endif()
+
+  # Add SDK include/library paths (without replacing system paths)
+  include_directories(SYSTEM
+    ${RK3588_SDK_PATH}/usr/include
+    ${RK3588_SDK_PATH}/usr/include/rockchip
+    ${RK3588_SDK_PATH}/usr/include/rga
+  )
+  link_directories(${RK3588_SDK_PATH}/usr/lib)
 else()
   message(STATUS "Using mock HAL (no real SDK required)")
 endif()
