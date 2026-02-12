@@ -1,0 +1,48 @@
+# Docker build context exclusions for cross-compile environment
+# Keeps the build context small and fast
+
+# Build artifacts
+**/build/
+**/cmake-build-*/
+**/*.o
+**/*.a
+**/*.so
+**/*.dylib
+
+# Python caches
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+**/.coverage
+**/htmlcov/
+**/*.egg-info/
+**/venv/
+**/.venv/
+
+# Model files (large binaries)
+**/*.onnx
+**/*.pt
+**/*.pth
+**/*.bin
+**/*.safetensors
+**/*.mlx
+**/*.rknn
+
+# IDE & OS
+**/.vscode/
+**/.idea/
+**/.DS_Store
+**/*.swp
+
+# Git
+**/.git/
+
+# Logs
+**/*.log
+
+# Docs & notes
+**/*.md
+**/docs/
+
+# Don't exclude sysroot — it's needed!
+!sysroot/

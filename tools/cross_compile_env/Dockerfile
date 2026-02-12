@@ -1,9 +1,9 @@
-FROM ubuntu:22.04
+FROM debian:bookworm AS base
 
 # Avoid interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install base tools
+# Install base tools + cross-compilation toolchain in one layer
 RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
@@ -13,10 +13,7 @@ RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
     pkg-config \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install cross-compilation toolchain
-RUN apt-get update && apt-get install -y \
+    libssl-dev \
     gcc-aarch64-linux-gnu \
     g++-aarch64-linux-gnu \
     binutils-aarch64-linux-gnu \
@@ -32,7 +29,12 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python gRPC tools
-RUN pip3 install grpcio-tools
+RUN pip3 install --break-system-packages grpcio-tools
+
+# ── RK3588 Sysroot ───────────────────────────────────────────────
+# Copy pre-assembled sysroot (run prepare_sysroot.sh first)
+# Contains RKNN, MPP, RGA headers and aarch64 libraries
+COPY sysroot/ /opt/rk3588-sysroot/
 
 # Create workspace
 WORKDIR /workspace
@@ -42,9 +44,9 @@ ENV CC=aarch64-linux-gnu-gcc
 ENV CXX=aarch64-linux-gnu-g++
 ENV AR=aarch64-linux-gnu-ar
 ENV RANLIB=aarch64-linux-gnu-ranlib
+ENV SYSROOT=/opt/rk3588-sysroot
 
-# TODO: Add RK3588-specific libraries
-# COPY sysroot/ /opt/rk3588-sysroot/
-# ENV SYSROOT=/opt/rk3588-sysroot
+# Marker so scripts can detect they're inside the container
+ENV IN_DOCKER=1
 
 CMD ["/bin/bash"]

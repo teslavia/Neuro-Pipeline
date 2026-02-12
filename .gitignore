@@ -85,6 +85,12 @@ temp/
 test_output/
 
 
+# Cross-compile sysroot (assembled from RKSDK, large binaries)
+tools/cross_compile_env/sysroot/
+
+# Device logs
+tmp/device_logs/
+
 # plan & notes
 工程架构设计与任务拆解.md
 **/docs/notes/**
