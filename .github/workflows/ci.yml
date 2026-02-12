@@ -2,11 +2,71 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, dev]
   pull_request:
-    branches: [main, develop]
+    branches: [main, dev]
 
 jobs:
+  # ==========================================================================
+  # C++ Cross-Compile (RK3588 Edge)
+  # ==========================================================================
+  build-edge:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        mock_hal: [ON, OFF]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install cross-compilation toolchain
+        run: |
+          sudo apt-get update && sudo apt-get install -y \
+            gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+            cmake protobuf-compiler libprotobuf-dev \
+            libgrpc++-dev libgrpc-dev protobuf-compiler-grpc \
+            python3 python3-pip
+          pip3 install grpcio-tools
+
+      - name: Generate protobuf code
+        run: python3 tools/generate_proto.py
+
+      - name: Create empty sysroot (mock HAL)
+        if: matrix.mock_hal == 'ON'
+        run: |
+          mkdir -p tools/cross_compile_env/sysroot/usr/include
+          mkdir -p tools/cross_compile_env/sysroot/usr/lib
+
+      - name: Create stub sysroot (real HAL CI check)
+        if: matrix.mock_hal == 'OFF'
+        run: |
+          mkdir -p tools/cross_compile_env/sysroot/usr/include/rockchip
+          mkdir -p tools/cross_compile_env/sysroot/usr/include/rga
+          mkdir -p tools/cross_compile_env/sysroot/usr/lib
+          # Create minimal stub headers for compilation check
+          echo '#pragma once' > tools/cross_compile_env/sysroot/usr/include/rknn_api.h
+          echo 'typedef int rknn_context;' >> tools/cross_compile_env/sysroot/usr/include/rknn_api.h
+          # Create stub .so (empty shared lib)
+          aarch64-linux-gnu-gcc -shared -o tools/cross_compile_env/sysroot/usr/lib/librknnrt.so -xc /dev/null
+          aarch64-linux-gnu-gcc -shared -o tools/cross_compile_env/sysroot/usr/lib/librga.so -xc /dev/null
+          aarch64-linux-gnu-gcc -shared -o tools/cross_compile_env/sysroot/usr/lib/librockchip_mpp.so -xc /dev/null
+
+      - name: CMake configure
+        run: |
+          mkdir -p rk3588-edge/build && cd rk3588-edge/build
+          cmake .. \
+            -DCMAKE_TOOLCHAIN_FILE=../cmake/aarch64-toolchain.cmake \
+            -DUSE_MOCK_HAL=${{ matrix.mock_hal }} \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=OFF
+
+      - name: Build
+        run: cd rk3588-edge/build && make -j$(nproc)
+
+      - name: Verify binary
+        run: |
+          file rk3588-edge/build/neuro_pipeline_edge
+          file rk3588-edge/build/neuro_pipeline_edge | grep -q "ARM aarch64"
+
   # ==========================================================================
   # Python Tests (Mac Central)
   # ==========================================================================
@@ -56,7 +116,7 @@ jobs:
         run: protoc --proto_path=proto --cpp_out=/tmp proto/neuro_pipeline.proto
 
   # ==========================================================================
-  # Documentation Check
+  # Documentation & Version Check
   # ==========================================================================
   docs-check:
     runs-on: ubuntu-latest
@@ -66,7 +126,11 @@ jobs:
       - name: Check required docs exist
         run: |
           test -f README.md
+          test -f VERSION.json
           test -f docs/ARCHITECTURE.md
           test -f docs/API_REFERENCE.md
           test -f docs/DEVLOG.md
           test -f proto/neuro_pipeline.proto
+
+      - name: Validate VERSION.json
+        run: python3 -c "import json; v=json.load(open('VERSION.json')); print(f'Version: {v[\"version\"]}')"

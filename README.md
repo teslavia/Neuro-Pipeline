@@ -55,13 +55,39 @@ V4L2 Camera ──► MPP Decoder ──► RGA Processor ──► RKNN NPU
 - Python 3.10+
 - MLX 框架
 
-### Build RK3588 Edge
+### Build RK3588 Edge (Docker — Recommended)
 
 ```bash
-# 生成 Protobuf 代码
-python3 tools/generate_proto.py
+# 1. 组装 sysroot（从本地 RKSDK 提取头文件和库）
+bash tools/cross_compile_env/prepare_sysroot.sh
 
-# 交叉编译
+# 2. Docker 内交叉编译（自动构建镜像 + 编译）
+USE_MOCK_HAL=ON bash tools/cross_compile_env/build_rk3588.sh
+
+# 3. 验证生成的 aarch64 二进制
+file rk3588-edge/build/neuro_pipeline_edge
+# → ELF 64-bit LSB pie executable, ARM aarch64
+```
+
+环境变量:
+- `USE_MOCK_HAL=ON` — 无需真实 SDK，用于开发验证（默认）
+- `USE_MOCK_HAL=OFF` — 链接真实 RKNN/MPP/RGA 库
+- `BUILD_TYPE=Release|Debug` — 构建类型（默认 Release）
+
+### Deploy to RK3588 Device
+
+```bash
+# 部署 SDK 库到设备（librknnrt, MPP, RGA）
+bash tools/deploy_rk3588.sh
+
+# 一键：编译 → 部署 → 远程运行
+bash tools/deploy_and_run.sh
+```
+
+### Build RK3588 Edge (Native — Without Docker)
+
+```bash
+# 需要本地安装 aarch64-linux-gnu-gcc
 cd rk3588-edge
 mkdir build && cd build
 cmake .. -DCMAKE_TOOLCHAIN_FILE=../cmake/aarch64-toolchain.cmake
@@ -86,9 +112,11 @@ cd mac-central && python main.py --port 50051
 ### Docker Cross-Compilation (Alternative)
 
 ```bash
+# 如果需要手动控制 Docker 流程
 cd tools/cross_compile_env
 docker build -t neuro-pipeline-builder .
-docker run -v $(pwd)/../..:/workspace neuro-pipeline-builder bash /workspace/tools/cross_compile_env/build_rk3588.sh
+docker run -v $(pwd)/../..:/workspace -e USE_MOCK_HAL=ON -e IN_DOCKER=1 \
+  neuro-pipeline-builder bash /workspace/tools/cross_compile_env/build_rk3588.sh
 ```
 
 ## Directory Structure
@@ -124,9 +152,16 @@ neuro-pipeline/
 │   ├── requirements.txt           # Python 依赖
 │   └── main.py                    # 入口程序
 ├── tools/                         # 工具与脚本
+│   ├── cross_compile_env/         # Docker 交叉编译环境
+│   │   ├── Dockerfile             #   debian:bookworm + aarch64 toolchain
+│   │   ├── build_rk3588.sh        #   自动化编译脚本
+│   │   └── prepare_sysroot.sh     #   RKSDK sysroot 组装
+│   ├── deploy_rk3588.sh           # RK3588 SDK 部署
+│   ├── deploy_and_run.sh          # 编译→部署→运行一体化
+│   ├── rk3588_device.conf         # 设备连接配置
 │   ├── rknn_toolkit_scripts/      # 模型转换, 量化脚本
-│   ├── cross_compile_env/         # 交叉编译环境
 │   └── generate_proto.py          # Protobuf 代码生成
+├── VERSION.json                   # 版本号文件
 └── extensions/                    # 拓展任务隔离区
 ```
 

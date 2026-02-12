@@ -184,7 +184,148 @@
 
 ---
 
-## Entry Template
+## 2026-02-12: Week 1 — 交叉编译工具链 + RK3588 设备部署
+
+### 概述
+
+Week 1 编码任务 (W1-1 ~ W1-7, 101 个测试用例) 已在前一天完成。本日完成两个硬件依赖任务：
+1. Docker 交叉编译环境搭建
+2. RK3588 设备 SDK 部署与验证
+
+### W1-8: Docker 交叉编译环境
+
+**Objective**: 在 Mac 上通过 Docker 容器编译出 aarch64 可执行文件。
+
+**Implementation**:
+- `tools/cross_compile_env/prepare_sysroot.sh` — 从 RKSDK 提取 RKNN/MPP/RGA 头文件+库到 sysroot/
+- `tools/cross_compile_env/Dockerfile` — debian:bookworm + aarch64-linux-gnu 工具链
+- `tools/cross_compile_env/build_rk3588.sh` — Docker 自动化：外部自动 build image + run，内部执行 cmake + make
+- `rk3588-edge/cmake/aarch64-toolchain.cmake` — 重构 sysroot 逻辑
+- `rk3588-edge/CMakeLists.txt` — 交叉编译 protobuf/gRPC 发现修复
+
+**Challenges & Solutions**:
+
+| # | 问题 | 根因 | 解决方案 |
+|---|---|---|---|
+| 1 | MPP `librockchip_mpp.so` 复制失败 | macOS 上 git 无法正确还原 ELF 格式的 symlink target，`.so` 和 `.so.1` 是 broken symlinks | 从 `.so.0` (真实 ELF) 复制，手动创建 `.so` → `.so.0` 符号链接 |
+| 2 | `docker pull ubuntu:22.04` 失败 (content size of zero) | Docker Desktop 本地 containerd manifest 缓存损坏 | 切换基础镜像为 `debian:bookworm`（同为 Debian 系，包完全兼容） |
+| 3 | Docker build context xattr 错误 | macOS `._` 扩展属性文件导致 Docker buildx 的 xattr 操作失败 | 构建前执行 `dot_clean` 清理 |
+| 4 | `find_package(Protobuf)` 在交叉编译时失败 | `CMAKE_SYSROOT` 设置后 `CMAKE_FIND_ROOT_PATH_MODE_*=ONLY` 限制了搜索范围 | 初版：用 `NO_CMAKE_FIND_ROOT_PATH` 绕过。最终版：不设 CMAKE_SYSROOT |
+| 5 | `features.h: No such file or directory` | 我们的 sysroot 只有 RKNN/MPP/RGA 库，没有完整 libc headers，但 `CMAKE_SYSROOT` 让编译器只在 sysroot 里找 | 彻底移除 `CMAKE_SYSROOT`，改用 `include_directories(SYSTEM ...)` + `link_directories()` 添加 SDK 路径 |
+| 6 | `.dockerignore` 排除了 sysroot 中的 `.so` 文件 | `**/*.so` 规则过于宽泛，`!sysroot/` 只保留目录不保留内容 | 从 `.dockerignore` 移除 `**/*.so` 和 `**/*.a` |
+| 7 | CMakeLists.txt `endif()` 嵌套错误 | 编辑 gRPC 查找逻辑时遗留了多余的 `endif()` | 修正 if/else/endif 嵌套结构 |
+| 8 | `find_library(rknnrt)` 在 Docker 内找不到 | 库在 `/opt/rk3588-sysroot/usr/lib` 但 `find_library` 只搜索 `/usr/lib` | 在 `PATHS` 中添加 `/opt/rk3588-sysroot/usr/lib` |
+
+**Key Architectural Decision**:
+
+> **不使用 CMAKE_SYSROOT 做部分 sysroot**
+>
+> 标准交叉编译流程中 `CMAKE_SYSROOT` 指向一个完整的 target rootfs（包含 libc、libstdc++ 等）。
+> 我们的 sysroot 只包含 RKNN/MPP/RGA 三个 vendor 库，设置 `CMAKE_SYSROOT` 会导致编译器
+> 丢失 cross-compiler 自带的 system headers。正确做法是保持编译器默认搜索路径不变，
+> 仅通过 `include_directories(SYSTEM ...)` 和 `link_directories()` 追加 vendor SDK 路径。
+
+**Result**: 256K aarch64 ELF 可执行文件，`USE_MOCK_HAL=ON` 和 `OFF` 两种模式均编译通过。
+
+### W1-9: RK3588 设备 SDK 部署
+
+**Objective**: 通过 SSH 部署 SDK 到 Radxa ROCK 5B Plus，验证 NPU 可用性。
+
+**Implementation**:
+- `tools/rk3588_device.conf` — 设备连接配置
+- `tools/deploy_rk3588.sh` — 6 步 SDK 部署脚本
+- `tools/deploy_and_run.sh` — 编译→部署→运行一体化脚本
+
+**Challenges & Solutions**:
+
+| # | 问题 | 根因 | 解决方案 |
+|---|---|---|---|
+| 1 | SSH 密钥认证失败 | 设备未配置 Mac 的公钥 | `sshpass` + `ssh-copy-id` 推送 ed25519 公钥 |
+| 2 | NPU 驱动检测失败 (dmesg permission denied) | 非 root 用户无法读取 debugfs | 改用 `sudo cat /sys/kernel/debug/rknpu/version` |
+| 3 | `rknn_server` 部署失败 (Text file busy) | 设备上 rknn_server 进程正在运行 | 部署前先 `sudo killall rknn_server` |
+| 4 | `ldconfig -p` 验证失败 (command not found) | 非 root 用户 PATH 中没有 `/sbin` | 改用 `sudo ldconfig -p` |
+| 5 | sudo 需要密码导致脚本中断 | 设备默认需要交互式密码输入 | 配置 `/etc/sudoers.d/rock` NOPASSWD |
+
+**Device Verification Results**:
+
+```
+Board:      Radxa ROCK 5B Plus
+Kernel:     Linux 6.1.84-8-rk2410 aarch64
+CPU:        8 cores (4x Cortex-A76 + 4x Cortex-A55)
+RAM:        16GB
+Storage:    63GB NVMe
+NPU:        RKNPU driver v0.9.8, 3 cores (Core0/1/2: 0% idle)
+Libraries:  librknnrt.so ✓  librockchip_mpp.so ✓  librga.so ✓
+Binary:     neuro_pipeline_edge runs successfully (pipeline stub)
+```
+
+### Sysroot 组装结果
+
+```
+sysroot/usr/include/
+  rknn_api.h, rknn_matmul_api.h, rknn_custom_op.h     (RKNN: 3 files)
+  rockchip/*.h                                          (MPP: 23 files)
+  rga/*.h, *.hpp                                        (RGA: 18 files)
+sysroot/usr/lib/
+  librknnrt.so                                          (RKNN runtime)
+  librockchip_mpp.so → .so.0                            (MPP, symlink fixed)
+  librga.so, librga.a                                   (RGA)
+Total: 37MB
+```
+
+### 版本发布
+
+- `VERSION.json` — v0.1.0
+- Git tag: `v0.1.0`
+- Branch: `milestone/week1-foundation` → merged to `main`
+
+---
+
+## 2026-02-12: Week 1 复盘 (Retrospective)
+
+### 完成度评估
+
+| 计划任务 | 状态 | 测试覆盖 |
+|---|---|---|
+| W1-1: mmap IPC 共享内存 | ✅ | 9 tests |
+| W1-2: MemoryPool 物理/虚拟地址 | ✅ | 14 tests |
+| W1-3: NPU 多核任务调度器 | ✅ | 16 tests |
+| W1-4: CPU 缓存优化分析 | ✅ | 12 tests |
+| W1-5: ARM NEON 图像操作 | ✅ | 14 tests |
+| W1-6: DMA-BUF 共享模拟 | ✅ | 12 tests |
+| W1-7: 虚拟设备文件 I/O | ✅ | 14 tests |
+| W1-8: Docker 交叉编译环境 | ✅ | 手动验证 |
+| W1-9: RK3588 设备 SDK 部署 | ✅ | 手动验证 |
+| **Total** | **9/9 (100%)** | **101 unit tests** |
+
+### 做得好的
+
+1. **TDD 严格执行** — 每个模块先写测试再实现，101 个测试用例全部通过
+2. **Mock HAL 设计** — `USE_MOCK_HAL` 开关让开发和真实部署无缝切换
+3. **文档体系** — ARCHITECTURE.md, API_REFERENCE.md, 9 份技术笔记
+4. **问题追踪** — 每个 bug 都有根因分析和解决方案记录
+
+### 需要改进的
+
+1. **CI/CD 不完整** — 现有 CI 只覆盖 Python 测试和 proto 验证，缺少 C++ 交叉编译验证
+2. **DEVLOG 滞后** — 交叉编译和设备部署的工作没有实时记录，事后补写
+3. **README Quick Start 过时** — 没有反映 Docker 工作流和设备部署流程
+4. **集成测试缺失** — 只有单元测试，没有端到端集成测试
+5. **错误处理不够健壮** — 部署脚本遇到 sudo/ldconfig 问题时直接失败，缺少优雅降级
+
+### 关键经验 (Lessons Learned)
+
+1. **macOS + Docker + 交叉编译 = 三重陷阱** — `._ 文件`、`symlink 语义差异`、`Docker Desktop 缓存损坏` 三个平台差异问题叠加
+2. **部分 sysroot 不能用 CMAKE_SYSROOT** — 这是一个容易踩的坑，文档中很少提及
+3. **设备部署脚本必须假设最差环境** — sudo 需要密码、服务正在运行、PATH 不完整
+4. **`.dockerignore` 的排除规则是全局的** — `!dir/` 只保留目录，不覆盖内容级别的排除规则
+
+### 优化点 (Action Items for Week 2)
+
+- [ ] CI 增加 Docker 交叉编译 job
+- [ ] 增加 C++ 单元测试在 Docker 内运行的 CI job
+- [ ] README 更新 Docker 工作流
+- [ ] 考虑 Makefile 或 justfile 统一常用命令入口
 
 ### YYYY-MM-DD: [Task/Feature Name]
 
