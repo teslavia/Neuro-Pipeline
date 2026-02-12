@@ -39,6 +39,9 @@ class Buffer {
   /// Get buffer metadata.
   virtual const Metadata& GetMetadata() const = 0;
 
+  /// Set buffer metadata (dimensions, format, timestamp).
+  virtual void SetMetadata(const Metadata& meta) = 0;
+
   /// Synchronize CPU cache.
   /// @param for_device true = flush (CPU→DMA), false = invalidate (DMA→CPU).
   virtual void SyncForDevice(bool for_device) = 0;

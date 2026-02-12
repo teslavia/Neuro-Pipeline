@@ -1,6 +1,7 @@
 #include <csignal>
 #include <chrono>
 #include <iostream>
+#include <string>
 #include <thread>
 
 #include "common/pipeline_coordinator.hpp"
@@ -15,7 +16,7 @@ void SignalHandler(int signal) {
 }
 }  // namespace
 
-int main(int /*argc*/, char* /*argv*/[]) {
+int main(int argc, char* argv[]) {
   std::cout << "============================================" << std::endl;
   std::cout << "  Neuro-Pipeline Edge v1.0.0" << std::endl;
   std::cout << "  RK3588 NPU Inference Engine" << std::endl;
@@ -26,9 +27,35 @@ int main(int /*argc*/, char* /*argv*/[]) {
   std::signal(SIGTERM, SignalHandler);
 
   try {
-    // TODO: Parse command-line arguments (device, model, server, etc.)
+    // Parse command-line arguments
+    app::PipelineCoordinator::Config config;
+    config.model_path = "/opt/neuro-pipeline/models/yolov5s.rknn";
 
-    app::PipelineCoordinator coordinator;
+    for (int i = 1; i < argc; ++i) {
+      std::string arg = argv[i];
+      if ((arg == "-v" || arg == "--video") && i + 1 < argc) {
+        config.video_source = argv[++i];
+      } else if ((arg == "-m" || arg == "--model") && i + 1 < argc) {
+        config.model_path = argv[++i];
+      } else if ((arg == "-w" || arg == "--width") && i + 1 < argc) {
+        config.width = std::stoul(argv[++i]);
+      } else if ((arg == "-h" || arg == "--height") && i + 1 < argc) {
+        config.height = std::stoul(argv[++i]);
+      } else if ((arg == "-n" || arg == "--max-frames") && i + 1 < argc) {
+        config.max_frames = std::stoul(argv[++i]);
+      } else if (arg == "--help") {
+        std::cout << "Usage: neuro_pipeline_edge [options]\n"
+                  << "  -v, --video <path>    Input video file (default: camera)\n"
+                  << "  -m, --model <path>    RKNN model file\n"
+                  << "  -w, --width <N>       Input width (default: 1920)\n"
+                  << "  -h, --height <N>      Input height (default: 1080)\n"
+                  << "  -n, --max-frames <N>  Stop after N frames (default: unlimited)\n"
+                  << std::endl;
+        return 0;
+      }
+    }
+
+    app::PipelineCoordinator coordinator(config);
 
     if (!coordinator.Initialize()) {
       std::cerr << "[FATAL] Failed to initialize pipeline" << std::endl;
