@@ -1,0 +1,10 @@
+{
+  "version": "0.1.0",
+  "name": "neuro-pipeline",
+  "description": "Edge-Central AI inference pipeline for RK3588 + Mac Mini",
+  "milestone": "Week 1 - Foundation & Cross-Compile Toolchain",
+  "components": {
+    "rk3588-edge": "1.0.0",
+    "mac-central": "0.0.1"
+  }
+}
