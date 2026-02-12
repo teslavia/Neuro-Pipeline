@@ -50,7 +50,7 @@ else()
   if(GRPCPP_LIBRARY AND GRPC_LIBRARY)
     set(GRPC_LIBS ${GRPCPP_LIBRARY} ${GRPC_LIBRARY})
     include_directories(${GRPC_INCLUDE_DIR})
-    message(STATUS "Found gRPC via find_library")
+    message(STATUS "Found gRPC via find_library: ${GRPCPP_LIBRARY}")
   else()
     message(WARNING "gRPC not found - communication module will not build")
     set(GRPC_LIBS "")
@@ -59,9 +59,11 @@ endif()
 
 # RK3588 Platform Libraries (only when cross-compiling for ARM64)
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64" AND NOT USE_MOCK_HAL)
-  find_library(RKNN_API_LIBRARY NAMES rknnrt PATHS /usr/lib)
-  find_library(RGA_LIBRARY NAMES rga PATHS /usr/lib)
-  find_library(MPP_LIBRARY NAMES rockchip_mpp PATHS /usr/lib)
+  # Search both system paths and the SDK sysroot
+  set(_SDK_LIB_PATHS /usr/lib /opt/rk3588-sysroot/usr/lib)
+  find_library(RKNN_API_LIBRARY NAMES rknnrt PATHS ${_SDK_LIB_PATHS})
+  find_library(RGA_LIBRARY NAMES rga PATHS ${_SDK_LIB_PATHS})
+  find_library(MPP_LIBRARY NAMES rockchip_mpp PATHS ${_SDK_LIB_PATHS})
   find_library(DRM_LIBRARY NAMES drm)
 
   if(NOT RKNN_API_LIBRARY)
@@ -133,12 +135,17 @@ set(HAL_SOURCES
   src/hal/mpp_decoder.cpp
   src/hal/rga_processor.cpp
   src/hal/drm_allocator.cpp
+  src/hal/dmabuf_sim.cpp
 )
 
 set(DATA_PROCESSING_SOURCES
   src/data_processing/zero_copy_buffer.cpp
   src/data_processing/memory_pool.cpp
   src/data_processing/thread_pool.cpp
+  src/data_processing/mmap_ipc.cpp
+  src/data_processing/cache_analysis.cpp
+  src/data_processing/neon_image_ops.cpp
+  src/data_processing/virtual_device_io.cpp
 )
 
 set(AI_INFERENCE_SOURCES
