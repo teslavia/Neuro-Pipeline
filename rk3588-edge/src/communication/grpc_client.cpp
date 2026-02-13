@@ -120,7 +120,8 @@ bool GRPCClient::StreamDetection(const neuro_pipeline::DetectionResult& result) 
   grpc::ClientContext context;
   context.set_deadline(std::chrono::system_clock::now() + std::chrono::seconds(5));
 
-  auto stream = stub_->StreamDetectionResults(&context);
+  neuro_pipeline::StreamResponse response;
+  auto stream = stub_->StreamDetectionResults(&context, &response);
   if (!stream) {
     std::cerr << "[GRPCClient] Failed to create stream" << std::endl;
     connected_ = false;
@@ -133,7 +134,6 @@ bool GRPCClient::StreamDetection(const neuro_pipeline::DetectionResult& result) 
     return false;
   }
 
-  neuro_pipeline::StreamResponse response;
   stream->WritesDone();
   grpc::Status status = stream->Finish();
 
