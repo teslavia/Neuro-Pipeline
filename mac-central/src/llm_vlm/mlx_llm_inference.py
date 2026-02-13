@@ -30,9 +30,8 @@ class MLXInferenceEngine:
     async def load_model(self) -> None:
         """Load model into unified memory."""
         if not self.model_path.exists():
-            logger.warning(f"Model path not found: {self.model_path}, using stub mode")
-            self.use_stub = True
-            return
+            logger.error(f"Model path not found: {self.model_path}")
+            raise FileNotFoundError(f"Model not found: {self.model_path}")
 
         try:
             import mlx.core as mx
@@ -42,12 +41,12 @@ class MLXInferenceEngine:
             self.model, self.tokenizer = load(str(self.model_path))
             self.use_stub = False
             logger.info(f"Model loaded successfully (MLX device: {mx.default_device()})")
-        except ImportError:
-            logger.warning("mlx_lm not installed, using stub mode")
-            self.use_stub = True
+        except ImportError as e:
+            logger.error(f"mlx_lm not installed: {e}")
+            raise ImportError("Install mlx_lm: pip install mlx mlx-lm")
         except Exception as e:
-            logger.error(f"Failed to load model: {e}, using stub mode")
-            self.use_stub = True
+            logger.error(f"Failed to load model: {e}")
+            raise
 
     async def generate(
         self,
@@ -68,9 +67,8 @@ class MLXInferenceEngine:
         """
         import time
 
-        if self.use_stub or not self.model:
-            logger.debug(f"Generate (stub): prompt_len={len(prompt)}")
-            return f"[Analysis] Detected objects in scene. Confidence levels indicate normal activity patterns. No immediate safety concerns identified."
+        if not self.model:
+            raise RuntimeError("Model not loaded. Call load_model() first.")
 
         try:
             from mlx_lm import generate as mlx_generate
@@ -89,7 +87,7 @@ class MLXInferenceEngine:
             return response
         except Exception as e:
             logger.error(f"Generation failed: {e}")
-            return f"[Error] Failed to generate response: {str(e)}"
+            raise
 
     async def analyze_image(
         self,
@@ -108,18 +106,12 @@ class MLXInferenceEngine:
         Returns:
             VLM analysis result.
         """
-        if self.use_stub or not self.model:
-            logger.debug(f"Analyze image (stub): {len(image_data)} bytes")
-            return f"[VLM Analysis] Scene contains detected objects. Image quality: good ({len(image_data)} bytes). Spatial analysis: objects positioned within normal operational zones."
+        if not self.model:
+            raise RuntimeError("Model not loaded. Call load_model() first.")
 
-        try:
-            # For VLM models like Qwen2-VL, image handling differs
-            # This is a placeholder for actual VLM inference
-            logger.warning("VLM inference not yet implemented, using text-only")
-            return await self.generate(prompt, max_tokens=max_tokens)
-        except Exception as e:
-            logger.error(f"VLM analysis failed: {e}")
-            return f"[Error] VLM analysis failed: {str(e)}"
+        # Llama-3.2-3B is text-only, use text prompt
+        logger.info(f"Text-only model, using prompt without image ({len(image_data)} bytes)")
+        return await self.generate(prompt, max_tokens=max_tokens)
 
     async def unload_model(self) -> None:
         """Unload model from memory."""
