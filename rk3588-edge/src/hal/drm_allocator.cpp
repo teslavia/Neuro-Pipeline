@@ -171,18 +171,9 @@ class DRMAllocator::Impl {
       return nullptr;
     }
 
-    // Map for CPU access
-    struct drm_mode_map_dumb map = {};
-    map.handle = create.handle;
-    if (ioctl(drm_fd_, DRM_IOCTL_MODE_MAP_DUMB, &map) < 0) {
-      std::cerr << "[DRMAllocator] MAP_DUMB failed: " << strerror(errno) << std::endl;
-      close(prime.fd);
-      DestroyDumb(create.handle);
-      return nullptr;
-    }
-
+    // Map for CPU access via DMA-BUF fd (works on render nodes without DRM master)
     void* mapped = mmap(nullptr, create.size, PROT_READ | PROT_WRITE,
-                        MAP_SHARED, drm_fd_, map.offset);
+                        MAP_SHARED, prime.fd, 0);
     if (mapped == MAP_FAILED) {
       std::cerr << "[DRMAllocator] mmap failed: " << strerror(errno) << std::endl;
       close(prime.fd);
@@ -205,16 +196,9 @@ class DRMAllocator::Impl {
       return nullptr;
     }
 
-    // Map for CPU access
-    struct drm_mode_map_dumb map = {};
-    map.handle = prime.handle;
-    if (ioctl(drm_fd_, DRM_IOCTL_MODE_MAP_DUMB, &map) < 0) {
-      std::cerr << "[DRMAllocator] MAP_DUMB (import) failed: " << strerror(errno) << std::endl;
-      return nullptr;
-    }
-
+    // Map for CPU access via DMA-BUF fd (works on render nodes)
     void* mapped = mmap(nullptr, size, PROT_READ | PROT_WRITE,
-                        MAP_SHARED, drm_fd_, map.offset);
+                        MAP_SHARED, dmabuf_fd, 0);
     if (mapped == MAP_FAILED) {
       std::cerr << "[DRMAllocator] mmap (import) failed: " << strerror(errno) << std::endl;
       return nullptr;

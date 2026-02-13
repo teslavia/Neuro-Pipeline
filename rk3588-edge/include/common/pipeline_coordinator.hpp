@@ -22,6 +22,7 @@ class PipelineCoordinator {
   struct Config {
     std::string video_source;       // Video file path, or empty for camera
     std::string model_path;         // .rknn model file
+    std::string camera_device = "/dev/video0";  // V4L2 device
     uint32_t width = 1920;
     uint32_t height = 1080;
     uint32_t model_width = 640;

@@ -1,17 +1,24 @@
 cmake_minimum_required(VERSION 3.20)
 
 # ==============================================================================
-# GoogleTest
+# GoogleTest — use local vendored copy (avoids network dependency in Docker)
 # ==============================================================================
-include(FetchContent)
-FetchContent_Declare(
-  googletest
-  GIT_REPOSITORY https://github.com/google/googletest.git
-  GIT_TAG v1.14.0
-)
-# Prevent overriding parent project compiler/linker settings
-set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(googletest)
+set(GOOGLETEST_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/googletest")
+if(EXISTS "${GOOGLETEST_DIR}/CMakeLists.txt")
+  # Prevent overriding parent project compiler/linker settings
+  set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+  add_subdirectory("${GOOGLETEST_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/googletest")
+else()
+  # Fallback: fetch from network
+  include(FetchContent)
+  FetchContent_Declare(
+    googletest
+    GIT_REPOSITORY https://github.com/google/googletest.git
+    GIT_TAG v1.14.0
+  )
+  set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+  FetchContent_MakeAvailable(googletest)
+endif()
 
 include(GoogleTest)
 

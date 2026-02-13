@@ -35,30 +35,35 @@ std::vector<common::DetectionBox> YOLOPostProcessor::Process(
 
   std::vector<common::DetectionBox> candidates;
   const int nc = static_cast<int>(config_.num_classes);
-  const int entry_size = 5 + nc;  // cx, cy, w, h, obj_conf, class_scores...
+  const int prop_size = 5 + nc;  // x, y, w, h, obj_conf, class_scores...
 
   // Process each scale (3 output heads for YOLOv5)
   for (size_t s = 0; s < raw_outputs.size() && s < 3; ++s) {
     const auto& output = raw_outputs[s];
     int grid_w = static_cast<int>(config_.input_width) / kStrides[s];
     int grid_h = static_cast<int>(config_.input_height) / kStrides[s];
-    int expected_size = grid_h * grid_w * kNumAnchors * entry_size;
+    int grid_len = grid_h * grid_w;
+    int expected_size = grid_len * kNumAnchors * prop_size;
 
     if (static_cast<int>(output.size()) != expected_size) continue;
 
-    for (int y = 0; y < grid_h; ++y) {
-      for (int x = 0; x < grid_w; ++x) {
-        for (int a = 0; a < kNumAnchors; ++a) {
-          int idx = ((y * grid_w + x) * kNumAnchors + a) * entry_size;
+    // RKNN NCHW layout: output[(anchor * prop_size + channel) * grid_len + y * grid_w + x]
+    // Values are already dequantized (want_float=1) and post-sigmoid from RKNN conversion.
+    for (int a = 0; a < kNumAnchors; ++a) {
+      int base = a * prop_size * grid_len;
 
-          float obj_conf = Sigmoid(output[idx + 4]);
+      for (int y = 0; y < grid_h; ++y) {
+        for (int x = 0; x < grid_w; ++x) {
+          int pos = y * grid_w + x;
+
+          float obj_conf = output[base + 4 * grid_len + pos];
           if (obj_conf < config_.confidence_threshold) continue;
 
           // Find best class
           int best_class = 0;
           float best_score = -1.0f;
           for (int c = 0; c < nc; ++c) {
-            float score = Sigmoid(output[idx + 5 + c]);
+            float score = output[base + (5 + c) * grid_len + pos];
             if (score > best_score) {
               best_score = score;
               best_class = c;
@@ -68,26 +73,28 @@ std::vector<common::DetectionBox> YOLOPostProcessor::Process(
           float confidence = obj_conf * best_score;
           if (confidence < config_.confidence_threshold) continue;
 
-          // Decode bbox (YOLOv5 format)
-          float cx = (Sigmoid(output[idx + 0]) * 2.0f - 0.5f + x) * kStrides[s];
-          float cy = (Sigmoid(output[idx + 1]) * 2.0f - 0.5f + y) * kStrides[s];
-          float w = std::pow(Sigmoid(output[idx + 2]) * 2.0f, 2.0f) * kAnchors[s][a * 2];
-          float h = std::pow(Sigmoid(output[idx + 3]) * 2.0f, 2.0f) * kAnchors[s][a * 2 + 1];
+          // Decode bbox (RKNN YOLOv5: values already post-sigmoid)
+          float bx = output[base + 0 * grid_len + pos];
+          float by = output[base + 1 * grid_len + pos];
+          float bw = output[base + 2 * grid_len + pos];
+          float bh = output[base + 3 * grid_len + pos];
 
-          // Convert to xyxy in input image coordinates
-          float x_min = cx - w / 2.0f;
-          float y_min = cy - h / 2.0f;
-          float x_max = cx + w / 2.0f;
-          float y_max = cy + h / 2.0f;
+          float cx = (bx * 2.0f - 0.5f + x) * kStrides[s];
+          float cy = (by * 2.0f - 0.5f + y) * kStrides[s];
+          float w = std::pow(bw * 2.0f, 2.0f) * kAnchors[s][a * 2];
+          float h = std::pow(bh * 2.0f, 2.0f) * kAnchors[s][a * 2 + 1];
 
-          // Scale to original image and normalize to [0, 1]
-          float scale_x = static_cast<float>(original_width) / config_.input_width;
-          float scale_y = static_cast<float>(original_height) / config_.input_height;
+          // Convert to xyxy in pixel coordinates
+          float x_min = (cx - w / 2.0f) / config_.input_width;
+          float y_min = (cy - h / 2.0f) / config_.input_height;
+          float x_max = (cx + w / 2.0f) / config_.input_width;
+          float y_max = (cy + h / 2.0f) / config_.input_height;
 
-          x_min = std::max(0.0f, std::min(1.0f, (x_min * scale_x) / original_width));
-          y_min = std::max(0.0f, std::min(1.0f, (y_min * scale_y) / original_height));
-          x_max = std::max(0.0f, std::min(1.0f, (x_max * scale_x) / original_width));
-          y_max = std::max(0.0f, std::min(1.0f, (y_max * scale_y) / original_height));
+          // Clamp to [0, 1]
+          x_min = std::max(0.0f, std::min(1.0f, x_min));
+          y_min = std::max(0.0f, std::min(1.0f, y_min));
+          x_max = std::max(0.0f, std::min(1.0f, x_max));
+          y_max = std::max(0.0f, std::min(1.0f, y_max));
 
           std::string name = (best_class < static_cast<int>(class_names_.size()))
                                  ? class_names_[best_class]

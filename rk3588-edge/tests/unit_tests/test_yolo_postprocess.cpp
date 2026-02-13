@@ -13,13 +13,14 @@ inline float InvSigmoid(float y) {
 
 class YOLOPostProcessTest : public ::testing::Test {
  protected:
-  ai_inference::YOLOPostProcessor::Config config_{
-      .confidence_threshold = 0.5f,
-      .nms_threshold = 0.45f,
-      .num_classes = 80,
-      .input_width = 640,
-      .input_height = 640,
-  };
+  void SetUp() override {
+    config_.confidence_threshold = 0.5f;
+    config_.nms_threshold = 0.45f;
+    config_.num_classes = 80;
+    config_.input_width = 640;
+    config_.input_height = 640;
+  }
+  ai_inference::YOLOPostProcessor::Config config_{};
 };
 
 TEST_F(YOLOPostProcessTest, ComputeIoUIdenticalBoxes) {
@@ -89,27 +90,31 @@ TEST_F(YOLOPostProcessTest, ProcessWrongSizeOutputReturnsEmpty) {
 }
 
 TEST_F(YOLOPostProcessTest, ProcessDecodesHighConfidenceDetection) {
-  // Construct a synthetic P3/8 output (80×80 grid, 3 anchors, 85 entries)
+  // Construct a synthetic P3/8 output in RKNN NCHW format
+  // Layout: (3_anchors × 85_channels) × grid_h × grid_w
   const int grid = 80;
-  const int entry_size = 85;
-  const int total = grid * grid * 3 * entry_size;
+  const int prop_size = 85;
+  const int grid_len = grid * grid;
+  const int total = 3 * prop_size * grid_len;
 
-  std::vector<float> p3(total, -5.0f);  // All low confidence
+  std::vector<float> p3(total, 0.05f);  // Low values (post-sigmoid)
 
-  // Place a high-confidence "person" (class 0) at grid cell (10, 20), anchor 0
-  int idx = ((10 * grid + 20) * 3 + 0) * entry_size;
-  p3[idx + 0] = InvSigmoid(0.5f);  // cx offset → center of cell
-  p3[idx + 1] = InvSigmoid(0.5f);  // cy offset → center of cell
-  p3[idx + 2] = InvSigmoid(0.5f);  // w scale → 1.0 × anchor_w
-  p3[idx + 3] = InvSigmoid(0.5f);  // h scale → 1.0 × anchor_h
-  p3[idx + 4] = InvSigmoid(0.95f); // objectness = 0.95
-  p3[idx + 5] = InvSigmoid(0.9f);  // class 0 (person) = 0.9
+  // Place a high-confidence "person" at grid cell (20, 10), anchor 0
+  int pos = 10 * grid + 20;  // y=10, x=20
+  int base = 0 * prop_size * grid_len;  // anchor 0
+  // NCHW: output[base + channel * grid_len + pos]
+  p3[base + 0 * grid_len + pos] = 0.5f;  // bx (post-sigmoid)
+  p3[base + 1 * grid_len + pos] = 0.5f;  // by
+  p3[base + 2 * grid_len + pos] = 0.5f;  // bw
+  p3[base + 3 * grid_len + pos] = 0.5f;  // bh
+  p3[base + 4 * grid_len + pos] = 0.95f; // objectness
+  p3[base + 5 * grid_len + pos] = 0.9f;  // class 0 (person)
 
   // P4 and P5 are all low confidence
-  const int p4_total = 40 * 40 * 3 * entry_size;
-  const int p5_total = 20 * 20 * 3 * entry_size;
-  std::vector<float> p4(p4_total, -5.0f);
-  std::vector<float> p5(p5_total, -5.0f);
+  const int p4_total = 3 * prop_size * 40 * 40;
+  const int p5_total = 3 * prop_size * 20 * 20;
+  std::vector<float> p4(p4_total, 0.05f);
+  std::vector<float> p5(p5_total, 0.05f);
 
   std::vector<std::vector<float>> outputs = {p3, p4, p5};
 
@@ -132,15 +137,13 @@ TEST_F(YOLOPostProcessTest, ProcessDecodesHighConfidenceDetection) {
 
 TEST_F(YOLOPostProcessTest, ProcessFiltersLowConfidence) {
   const int grid = 80;
-  const int entry_size = 85;
-  const int total = grid * grid * 3 * entry_size;
+  const int prop_size = 85;
+  const int grid_len = grid * grid;
 
-  // All entries have very low objectness
-  std::vector<float> p3(total, -10.0f);
-  const int p4_total = 40 * 40 * 3 * entry_size;
-  const int p5_total = 20 * 20 * 3 * entry_size;
-  std::vector<float> p4(p4_total, -10.0f);
-  std::vector<float> p5(p5_total, -10.0f);
+  // All entries have very low values (post-sigmoid)
+  std::vector<float> p3(3 * prop_size * grid_len, 0.01f);
+  std::vector<float> p4(3 * prop_size * 40 * 40, 0.01f);
+  std::vector<float> p5(3 * prop_size * 20 * 20, 0.01f);
 
   std::vector<std::vector<float>> outputs = {p3, p4, p5};
 
@@ -152,24 +155,23 @@ TEST_F(YOLOPostProcessTest, ProcessFiltersLowConfidence) {
 
 TEST_F(YOLOPostProcessTest, ProcessScalesToOriginalImage) {
   const int grid = 80;
-  const int entry_size = 85;
-  const int total = grid * grid * 3 * entry_size;
+  const int prop_size = 85;
+  const int grid_len = grid * grid;
 
-  std::vector<float> p3(total, -5.0f);
+  std::vector<float> p3(3 * prop_size * grid_len, 0.05f);
 
-  // Place detection at center of grid
-  int idx = ((40 * grid + 40) * 3 + 0) * entry_size;
-  p3[idx + 0] = InvSigmoid(0.5f);
-  p3[idx + 1] = InvSigmoid(0.5f);
-  p3[idx + 2] = InvSigmoid(0.5f);
-  p3[idx + 3] = InvSigmoid(0.5f);
-  p3[idx + 4] = InvSigmoid(0.95f);
-  p3[idx + 5] = InvSigmoid(0.9f);
+  // Place detection at center of grid (40, 40)
+  int pos = 40 * grid + 40;
+  int base = 0 * prop_size * grid_len;
+  p3[base + 0 * grid_len + pos] = 0.5f;
+  p3[base + 1 * grid_len + pos] = 0.5f;
+  p3[base + 2 * grid_len + pos] = 0.5f;
+  p3[base + 3 * grid_len + pos] = 0.5f;
+  p3[base + 4 * grid_len + pos] = 0.95f;
+  p3[base + 5 * grid_len + pos] = 0.9f;
 
-  const int p4_total = 40 * 40 * 3 * entry_size;
-  const int p5_total = 20 * 20 * 3 * entry_size;
-  std::vector<float> p4(p4_total, -5.0f);
-  std::vector<float> p5(p5_total, -5.0f);
+  std::vector<float> p4(3 * prop_size * 40 * 40, 0.05f);
+  std::vector<float> p5(3 * prop_size * 20 * 20, 0.05f);
 
   std::vector<std::vector<float>> outputs = {p3, p4, p5};
 

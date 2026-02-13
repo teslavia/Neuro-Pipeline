@@ -29,7 +29,7 @@ int main(int argc, char* argv[]) {
   try {
     // Parse command-line arguments
     app::PipelineCoordinator::Config config;
-    config.model_path = "/opt/neuro-pipeline/models/yolov5s.rknn";
+    config.model_path = "/opt/neuro-pipeline/models/yolov5s-640-640.rknn";
 
     for (int i = 1; i < argc; ++i) {
       std::string arg = argv[i];
@@ -43,6 +43,8 @@ int main(int argc, char* argv[]) {
         config.height = std::stoul(argv[++i]);
       } else if ((arg == "-n" || arg == "--max-frames") && i + 1 < argc) {
         config.max_frames = std::stoul(argv[++i]);
+      } else if ((arg == "-d" || arg == "--device") && i + 1 < argc) {
+        config.camera_device = argv[++i];
       } else if (arg == "--help") {
         std::cout << "Usage: neuro_pipeline_edge [options]\n"
                   << "  -v, --video <path>    Input video file (default: camera)\n"
@@ -50,6 +52,7 @@ int main(int argc, char* argv[]) {
                   << "  -w, --width <N>       Input width (default: 1920)\n"
                   << "  -h, --height <N>      Input height (default: 1080)\n"
                   << "  -n, --max-frames <N>  Stop after N frames (default: unlimited)\n"
+                  << "  -d, --device <path>   V4L2 camera device (default: /dev/video0)\n"
                   << std::endl;
         return 0;
       }

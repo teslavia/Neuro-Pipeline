@@ -204,34 +204,38 @@ class RKNNEngine::Impl {
              std::vector<std::vector<float>>& outputs) {
     if (!input) return false;
 
-    // Generate synthetic outputs matching YOLOv5 format
-    // Each output: grid_h × grid_w × 3_anchors × 85_entries
+    // Generate synthetic outputs matching RKNN YOLOv5 NCHW format
+    // Each output: (3_anchors × 85_entries) × grid_h × grid_w
     const int grids[] = {80, 40, 20};
-    const int entry_size = 85;  // 5 + 80 classes
+    const int prop_size = 85;  // 5 + 80 classes
 
     outputs.resize(3);
     std::mt19937 rng(42 + frame_count_);
-    std::normal_distribution<float> dist(0.0f, 1.0f);
+    std::uniform_real_distribution<float> dist(0.0f, 0.1f);
 
     for (int s = 0; s < 3; ++s) {
-      int total = grids[s] * grids[s] * 3 * entry_size;
+      int grid_len = grids[s] * grids[s];
+      int total = 3 * prop_size * grid_len;
       outputs[s].resize(total);
 
-      // Fill with mostly low-confidence noise
+      // Fill with low values (post-sigmoid, so 0.0-0.1 = low confidence)
       for (int i = 0; i < total; ++i) {
-        outputs[s][i] = dist(rng) * 0.5f - 2.0f;  // Low sigmoid output
+        outputs[s][i] = dist(rng);
       }
 
-      // Inject a few "detections" for testing
+      // Inject a "person" detection at grid center for testing
       if (s == 0 && frame_count_ % 5 == 0) {
-        // Place a "person" detection at grid (40, 40)
-        int idx = (40 * grids[s] + 40) * 3 * entry_size;
-        outputs[s][idx + 0] = 0.0f;   // cx offset
-        outputs[s][idx + 1] = 0.0f;   // cy offset
-        outputs[s][idx + 2] = 0.0f;   // w
-        outputs[s][idx + 3] = 0.0f;   // h
-        outputs[s][idx + 4] = 3.0f;   // high objectness (sigmoid → 0.95)
-        outputs[s][idx + 5] = 4.0f;   // high "person" score (sigmoid → 0.98)
+        int cx = grids[s] / 2, cy = grids[s] / 2;
+        int pos = cy * grids[s] + cx;
+        int a = 0;  // anchor 0
+        int base = a * prop_size * grid_len;
+        // NCHW: output[base + channel * grid_len + pos]
+        outputs[s][base + 0 * grid_len + pos] = 0.5f;  // bx (post-sigmoid)
+        outputs[s][base + 1 * grid_len + pos] = 0.5f;  // by
+        outputs[s][base + 2 * grid_len + pos] = 0.5f;  // bw
+        outputs[s][base + 3 * grid_len + pos] = 0.5f;  // bh
+        outputs[s][base + 4 * grid_len + pos] = 0.95f; // objectness
+        outputs[s][base + 5 * grid_len + pos] = 0.9f;  // person class
       }
     }
 

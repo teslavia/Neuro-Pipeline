@@ -33,6 +33,7 @@ class PipelineCoordinator::Impl {
 
     if (use_camera_) {
       rk_hal::V4L2Camera::Config cam_cfg;
+      cam_cfg.device_path = config_.camera_device;
       cam_cfg.width = config_.width;
       cam_cfg.height = config_.height;
       cam_cfg.fps = config_.fps;
