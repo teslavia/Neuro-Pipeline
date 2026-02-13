@@ -81,7 +81,6 @@ class MLXInferenceEngine:
                 self.tokenizer,
                 prompt=prompt,
                 max_tokens=max_tokens,
-                temp=temperature,
                 verbose=False
             )
             t1 = time.perf_counter()
