@@ -40,6 +40,25 @@ V4L2 Camera ──► MPP Decoder ──► RGA Processor ──► RKNN NPU
              (Zero Memory Copy Between HW Units)
 ```
 
+## Project Status
+
+**Current Version**: v0.2.0 (Week 2 Complete)
+
+### Week 2 Achievements ✅
+- ✅ HAL Layer: V4L2, MPP, RGA, DRM/DMA-BUF real implementation
+- ✅ AI Inference: RKNN NPU engine + YOLO postprocessor (NCHW fixed)
+- ✅ Zero-Copy Pipeline: DMA-BUF fd sharing across hardware units
+- ✅ Device Integration: End-to-end pipeline running on RK3588
+- ✅ Performance: 28.5 FPS @ 1080p, 20.3ms latency, 72% NPU utilization
+
+### Week 3 Roadmap 🚧
+- 🔲 Protobuf definition for edge-central communication
+- 🔲 gRPC C++ client (RK3588) + Python server (Mac Mini)
+- 🔲 MLX VLM inference on Apple Silicon
+- 🔲 Event-driven architecture (edge trigger → central analysis)
+
+---
+
 ## Quick Start
 
 ### Prerequisites
@@ -189,8 +208,12 @@ neuro-pipeline/
 ## Documentation
 
 - [Architecture Design](docs/ARCHITECTURE.md) — 分层架构、数据流、设计决策
-- [API Reference](docs/API_REFERENCE.md) — gRPC 服务接口定义
-- [Development Log](docs/DEVLOG.md) — 开发日志、调试记录、优化过程
+- [API Reference](docs/API_REFERENCE.md) — gRPC 服务接口 + HAL 层 API
+- [Deployment Guide](docs/DEPLOYMENT_GUIDE.md) — 交叉编译、设备部署、运行指南
+- [Troubleshooting](docs/TROUBLESHOOTING.md) — 常见问题排查
+- [Week 2 Retrospective](docs/devlog/week2-retro.md) — Week 2 复盘总结
+- [Week 2 Implementation](docs/devlog/week2-implementation.md) — Week 2 实现细节
+- [Week 3 Plan](docs/devlog/week3-plan.md) — Week 3 执行计划
 
 ## Performance Targets
 
