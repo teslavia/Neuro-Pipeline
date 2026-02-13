@@ -34,16 +34,20 @@ class NeuroPipelineServicer(neuro_pipeline_pb2_grpc.NeuroPipelineServiceServicer
         Returns:
             StreamResponse with processing summary.
         """
+        import time
         frames_received = 0
 
         try:
             async for result in request_iterator:
+                t0 = time.perf_counter()
                 logger.debug(
                     f"Received detection result: frame_id={result.frame_id}, "
                     f"boxes={len(result.boxes)}"
                 )
                 await self.orchestrator.process_detection(result)
                 frames_received += 1
+                t1 = time.perf_counter()
+                logger.info(f"[Perf] Processing latency: {(t1-t0)*1000:.1f}ms")
 
         except Exception as e:
             logger.error(f"Error during streaming: {e}")

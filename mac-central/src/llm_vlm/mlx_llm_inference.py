@@ -66,6 +66,8 @@ class MLXInferenceEngine:
         Returns:
             Generated text response.
         """
+        import time
+
         if self.use_stub or not self.model:
             logger.debug(f"Generate (stub): prompt_len={len(prompt)}")
             return f"[Analysis] Detected objects in scene. Confidence levels indicate normal activity patterns. No immediate safety concerns identified."
@@ -73,6 +75,7 @@ class MLXInferenceEngine:
         try:
             from mlx_lm import generate as mlx_generate
 
+            t0 = time.perf_counter()
             response = mlx_generate(
                 self.model,
                 self.tokenizer,
@@ -81,6 +84,8 @@ class MLXInferenceEngine:
                 temp=temperature,
                 verbose=False
             )
+            t1 = time.perf_counter()
+            logger.info(f"[Perf] MLX inference: {(t1-t0)*1000:.1f}ms")
             logger.debug(f"Generated {len(response)} chars")
             return response
         except Exception as e:

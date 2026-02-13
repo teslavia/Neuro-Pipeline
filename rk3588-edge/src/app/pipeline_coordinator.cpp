@@ -176,6 +176,8 @@ class PipelineCoordinator::Impl {
 
         // Send to central server if gRPC enabled
         if (grpc_client_ && grpc_client_->IsConnected()) {
+          auto t_grpc_start = Clock::now();
+
           neuro_pipeline::DetectionResult result;
           result.set_frame_id(frame_count);
           result.set_timestamp_us(
@@ -196,6 +198,11 @@ class PipelineCoordinator::Impl {
           if (!grpc_client_->StreamDetection(result)) {
             std::cerr << "[Pipeline] Failed to send detection to server" << std::endl;
           }
+
+          auto t_grpc_end = Clock::now();
+          double grpc_ms = std::chrono::duration<double, std::milli>(
+              t_grpc_end - t_grpc_start).count();
+          std::printf("[Perf] gRPC send: %.1fms\n", grpc_ms);
         }
       }
 
