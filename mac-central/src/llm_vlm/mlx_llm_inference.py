@@ -24,15 +24,29 @@ class MLXInferenceEngine:
         self.quantization = quantization
         self.model = None
         self.tokenizer = None
+        self.use_stub = True
         logger.info(f"MLXInferenceEngine created: path={model_path}, quant={quantization}")
 
     async def load_model(self) -> None:
         """Load model into unified memory."""
-        # TODO: Implement MLX model loading
-        # import mlx.core as mx
-        # from mlx_lm import load
-        # self.model, self.tokenizer = load(str(self.model_path))
-        logger.info(f"Model loaded from {self.model_path} (stub)")
+        if not self.model_path.exists():
+            logger.error(f"Model path not found: {self.model_path}")
+            raise FileNotFoundError(f"Model not found: {self.model_path}")
+
+        try:
+            import mlx.core as mx
+            from mlx_lm import load
+
+            logger.info(f"Loading MLX model from {self.model_path}...")
+            self.model, self.tokenizer = load(str(self.model_path))
+            self.use_stub = False
+            logger.info(f"Model loaded successfully (MLX device: {mx.default_device()})")
+        except ImportError as e:
+            logger.error(f"mlx_lm not installed: {e}")
+            raise ImportError("Install mlx_lm: pip install mlx mlx-lm")
+        except Exception as e:
+            logger.error(f"Failed to load model: {e}")
+            raise
 
     async def generate(
         self,
@@ -51,16 +65,29 @@ class MLXInferenceEngine:
         Returns:
             Generated text response.
         """
-        # TODO: Implement MLX generation
-        # from mlx_lm import generate as mlx_generate
-        # response = mlx_generate(
-        #     self.model, self.tokenizer, prompt=prompt,
-        #     max_tokens=max_tokens, temp=temperature
-        # )
-        # return response
+        import time
 
-        logger.debug(f"Generate called: prompt_len={len(prompt)}, max_tokens={max_tokens}")
-        return f"[STUB] MLX response for: {prompt[:50]}..."
+        if not self.model:
+            raise RuntimeError("Model not loaded. Call load_model() first.")
+
+        try:
+            from mlx_lm import generate as mlx_generate
+
+            t0 = time.perf_counter()
+            response = mlx_generate(
+                self.model,
+                self.tokenizer,
+                prompt=prompt,
+                max_tokens=max_tokens,
+                verbose=False
+            )
+            t1 = time.perf_counter()
+            logger.info(f"[Perf] MLX inference: {(t1-t0)*1000:.1f}ms")
+            logger.debug(f"Generated {len(response)} chars")
+            return response
+        except Exception as e:
+            logger.error(f"Generation failed: {e}")
+            raise
 
     async def analyze_image(
         self,
@@ -79,9 +106,12 @@ class MLXInferenceEngine:
         Returns:
             VLM analysis result.
         """
-        # TODO: Implement VLM inference
-        logger.debug(f"Analyze image: {len(image_data)} bytes, prompt={prompt[:30]}...")
-        return f"[STUB] VLM analysis for image ({len(image_data)} bytes)"
+        if not self.model:
+            raise RuntimeError("Model not loaded. Call load_model() first.")
+
+        # Llama-3.2-3B is text-only, use text prompt
+        logger.info(f"Text-only model, using prompt without image ({len(image_data)} bytes)")
+        return await self.generate(prompt, max_tokens=max_tokens)
 
     async def unload_model(self) -> None:
         """Unload model from memory."""

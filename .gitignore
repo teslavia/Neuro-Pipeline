@@ -97,3 +97,6 @@ tmp/device_logs/
 **/docs/notes/**
 **/docs/devlog/**
 docs/DEVLOG.md
+
+# Documentation (exclude all docs/ from commits)
+docs/

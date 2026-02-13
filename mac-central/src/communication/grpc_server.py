@@ -4,14 +4,15 @@ gRPC server implementation for receiving edge detection results.
 
 import asyncio
 import logging
-from typing import AsyncIterator, Optional
+from typing import AsyncIterator
 
 import grpc
+from src.generated import neuro_pipeline_pb2, neuro_pipeline_pb2_grpc
 
 logger = logging.getLogger(__name__)
 
 
-class NeuroPipelineServicer:
+class NeuroPipelineServicer(neuro_pipeline_pb2_grpc.NeuroPipelineServiceServicer):
     """gRPC service implementation for Neuro-Pipeline."""
 
     def __init__(self, orchestrator) -> None:
@@ -33,38 +34,41 @@ class NeuroPipelineServicer:
         Returns:
             StreamResponse with processing summary.
         """
-        # TODO: Uncomment when generated protobuf code is available
-        # from src.generated import neuro_pipeline_pb2
-
+        import time
         frames_received = 0
 
         try:
             async for result in request_iterator:
+                t0 = time.perf_counter()
                 logger.debug(
                     f"Received detection result: frame_id={result.frame_id}, "
                     f"boxes={len(result.boxes)}"
                 )
                 await self.orchestrator.process_detection(result)
                 frames_received += 1
+                t1 = time.perf_counter()
+                logger.info(f"[Perf] Processing latency: {(t1-t0)*1000:.1f}ms")
 
         except Exception as e:
             logger.error(f"Error during streaming: {e}")
-            # return neuro_pipeline_pb2.StreamResponse(
-            #     success=False, message=str(e), frames_received=frames_received
-            # )
+            return neuro_pipeline_pb2.StreamResponse(
+                success=False, message=str(e), frames_received=frames_received
+            )
 
-        # return neuro_pipeline_pb2.StreamResponse(
-        #     success=True,
-        #     message=f"Processed {frames_received} frames",
-        #     frames_received=frames_received,
-        # )
-        return None  # Stub
+        return neuro_pipeline_pb2.StreamResponse(
+            success=True,
+            message=f"Processed {frames_received} frames",
+            frames_received=frames_received,
+        )
 
     async def SendControlCommand(self, request, context: grpc.aio.ServicerContext):
         """Send control command to edge device."""
         logger.info(f"Received control command: type={request.type}")
-        # TODO: Implement command handling
-        return None  # Stub
+        return neuro_pipeline_pb2.CommandResponse(
+            success=True,
+            message="Command received",
+            command_id=request.command_id
+        )
 
     async def BidirectionalEventStream(
         self,
@@ -72,16 +76,21 @@ class NeuroPipelineServicer:
         context: grpc.aio.ServicerContext,
     ):
         """Bidirectional event streaming."""
-        # TODO: Implement bidirectional streaming
         async for event in request_iterator:
             logger.debug(f"Received edge event: type={event.type}")
-            # yield CentralEvent(...)
+            yield neuro_pipeline_pb2.CentralEvent(
+                type=neuro_pipeline_pb2.CentralEvent.COMMAND_ACK,
+                timestamp_us=event.timestamp_us,
+                payload="Event acknowledged"
+            )
 
     async def HealthCheck(self, request, context: grpc.aio.ServicerContext):
         """Health check endpoint."""
-        # TODO: Return proper HealthCheckResponse
         logger.debug(f"Health check from client: {request.client_id}")
-        return None  # Stub
+        return neuro_pipeline_pb2.HealthCheckResponse(
+            status=neuro_pipeline_pb2.HealthCheckResponse.SERVING,
+            version="0.3.0"
+        )
 
 
 class NeuroPipelineServer:
@@ -91,16 +100,15 @@ class NeuroPipelineServer:
         self.host = host
         self.port = port
         self.orchestrator = orchestrator
-        self.server: Optional[grpc.aio.Server] = None
+        self.server = None
 
     async def start(self) -> None:
         """Start gRPC server."""
         self.server = grpc.aio.server()
 
-        # TODO: Register servicer when generated code is available
-        # neuro_pipeline_pb2_grpc.add_NeuroPipelineServiceServicer_to_server(
-        #     NeuroPipelineServicer(self.orchestrator), self.server
-        # )
+        neuro_pipeline_pb2_grpc.add_NeuroPipelineServiceServicer_to_server(
+            NeuroPipelineServicer(self.orchestrator), self.server
+        )
 
         listen_addr = f"{self.host}:{self.port}"
         self.server.add_insecure_port(listen_addr)
