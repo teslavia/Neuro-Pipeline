@@ -93,6 +93,15 @@ if [ "${SKIP_DEPLOY}" -eq 0 ]; then
             "${SSH_TARGET}:${RK3588_DEPLOY_DIR}/"
     fi
 
+    # Copy model files if they exist
+    MODELS_DIR="${REPO_ROOT}/rk3588-edge/models"
+    if ls "${MODELS_DIR}"/*.rknn 1>/dev/null 2>&1; then
+        ssh ${SSH_OPTS} "${SSH_TARGET}" "mkdir -p ${RK3588_DEPLOY_DIR}/models"
+        scp -P "${RK3588_PORT}" "${MODELS_DIR}"/*.rknn \
+            "${SSH_TARGET}:${RK3588_DEPLOY_DIR}/models/"
+        log_info "Deployed models to ${RK3588_DEPLOY_DIR}/models/"
+    fi
+
     # Make executable
     ssh ${SSH_OPTS} "${SSH_TARGET}" "chmod +x ${RK3588_DEPLOY_DIR}/${BINARY_NAME}"
 

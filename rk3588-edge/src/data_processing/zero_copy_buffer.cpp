@@ -18,11 +18,8 @@ class HeapBuffer : public Buffer {
   size_t Size() const override { return data_.size(); }
   int GetDMABufFd() const override { return -1; }
   const Metadata& GetMetadata() const override { return metadata_; }
-  void SyncForDevice(bool /*for_device*/) override {
-    // No-op for heap buffers (no DMA cache coherency needed)
-  }
-
-  Metadata& MutableMetadata() { return metadata_; }
+  void SetMetadata(const Metadata& meta) override { metadata_ = meta; }
+  void SyncForDevice(bool /*for_device*/) override {}
 
  private:
   std::vector<uint8_t> data_;

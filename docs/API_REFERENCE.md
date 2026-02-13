@@ -184,4 +184,132 @@ message VideoFrame {
 
 ---
 
-_Generated from `proto/neuro_pipeline.proto`. Last updated: 2026-02-11_
+## HAL Layer API (C++)
+
+### DRMAllocator
+
+**文件**: `rk3588-edge/include/rk_hal/drm_allocator.hpp`
+
+```cpp
+class DRMAllocator {
+public:
+  // 分配 DMA-BUF
+  int Allocate(uint32_t width, uint32_t height, PixelFormat format);
+
+  // 释放 DMA-BUF
+  void Free(int dma_fd);
+
+  // 映射到 CPU 地址空间
+  void* Map(int dma_fd, size_t size);
+
+  // 取消映射
+  void Unmap(void* addr, size_t size);
+};
+```
+
+---
+
+### V4L2Camera
+
+**文件**: `rk3588-edge/include/rk_hal/v4l2_camera.hpp`
+
+```cpp
+class V4L2Camera {
+public:
+  // 打开摄像头
+  void Open(const std::string& device_path);
+
+  // 设置格式
+  void SetFormat(uint32_t width, uint32_t height, PixelFormat format);
+
+  // 启动采集
+  void Start();
+
+  // 采集一帧
+  Frame CaptureFrame();
+
+  // 停止采集
+  void Stop();
+};
+```
+
+---
+
+### MPPDecoder
+
+**文件**: `rk3588-edge/include/rk_hal/mpp_decoder.hpp`
+
+```cpp
+class MPPDecoder {
+public:
+  // 初始化解码器
+  void Init(VideoCodec codec);
+
+  // 解码一帧
+  Frame Decode(const uint8_t* data, size_t size);
+
+  // 获取输出 DMA-BUF fd
+  int GetOutputFd(const Frame& frame);
+};
+```
+
+---
+
+### RGAProcessor
+
+**文件**: `rk3588-edge/include/rk_hal/rga_processor.hpp`
+
+```cpp
+class RGAProcessor {
+public:
+  // 缩放 + 格式转换
+  Frame Process(const Frame& input, uint32_t dst_width, uint32_t dst_height, PixelFormat dst_format);
+
+  // 裁剪
+  Frame Crop(const Frame& input, uint32_t x, uint32_t y, uint32_t width, uint32_t height);
+};
+```
+
+---
+
+### RKNNEngine
+
+**文件**: `rk3588-edge/include/ai_inference/rknn_engine.hpp`
+
+```cpp
+class RKNNEngine {
+public:
+  // 加载模型
+  void LoadModel(const std::string& model_path);
+
+  // 推理
+  std::vector<Tensor> Infer(const std::vector<Tensor>& inputs);
+
+  // 获取模型信息
+  ModelInfo GetModelInfo() const;
+};
+```
+
+---
+
+### YOLOPostprocessor
+
+**文件**: `rk3588-edge/include/ai_inference/yolo_postprocess.hpp`
+
+```cpp
+class YOLOPostprocessor {
+public:
+  // 处理 RKNN 输出
+  std::vector<Detection> Process(const std::vector<Tensor>& outputs);
+
+  // 设置置信度阈值
+  void SetConfidenceThreshold(float threshold);
+
+  // 设置 NMS 阈值
+  void SetNMSThreshold(float threshold);
+};
+```
+
+---
+
+_Generated from `proto/neuro_pipeline.proto` and HAL headers. Last updated: 2026-02-13_

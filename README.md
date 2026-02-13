@@ -40,6 +40,25 @@ V4L2 Camera ──► MPP Decoder ──► RGA Processor ──► RKNN NPU
              (Zero Memory Copy Between HW Units)
 ```
 
+## Project Status
+
+**Current Version**: v0.2.0 (Week 2 Complete)
+
+### Week 2 Achievements ✅
+- ✅ HAL Layer: V4L2, MPP, RGA, DRM/DMA-BUF real implementation
+- ✅ AI Inference: RKNN NPU engine + YOLO postprocessor (NCHW fixed)
+- ✅ Zero-Copy Pipeline: DMA-BUF fd sharing across hardware units
+- ✅ Device Integration: End-to-end pipeline running on RK3588
+- ✅ Performance: 28.5 FPS @ 1080p, 20.3ms latency, 72% NPU utilization
+
+### Week 3 Roadmap 🚧
+- 🔲 Protobuf definition for edge-central communication
+- 🔲 gRPC C++ client (RK3588) + Python server (Mac Mini)
+- 🔲 MLX VLM inference on Apple Silicon
+- 🔲 Event-driven architecture (edge trigger → central analysis)
+
+---
+
 ## Quick Start
 
 ### Prerequisites
@@ -55,13 +74,39 @@ V4L2 Camera ──► MPP Decoder ──► RGA Processor ──► RKNN NPU
 - Python 3.10+
 - MLX 框架
 
-### Build RK3588 Edge
+### Build RK3588 Edge (Docker — Recommended)
 
 ```bash
-# 生成 Protobuf 代码
-python3 tools/generate_proto.py
+# 1. 组装 sysroot（从本地 RKSDK 提取头文件和库）
+bash tools/cross_compile_env/prepare_sysroot.sh
 
-# 交叉编译
+# 2. Docker 内交叉编译（自动构建镜像 + 编译）
+USE_MOCK_HAL=ON bash tools/cross_compile_env/build_rk3588.sh
+
+# 3. 验证生成的 aarch64 二进制
+file rk3588-edge/build/neuro_pipeline_edge
+# → ELF 64-bit LSB pie executable, ARM aarch64
+```
+
+环境变量:
+- `USE_MOCK_HAL=ON` — 无需真实 SDK，用于开发验证（默认）
+- `USE_MOCK_HAL=OFF` — 链接真实 RKNN/MPP/RGA 库
+- `BUILD_TYPE=Release|Debug` — 构建类型（默认 Release）
+
+### Deploy to RK3588 Device
+
+```bash
+# 部署 SDK 库到设备（librknnrt, MPP, RGA）
+bash tools/deploy_rk3588.sh
+
+# 一键：编译 → 部署 → 远程运行
+bash tools/deploy_and_run.sh
+```
+
+### Build RK3588 Edge (Native — Without Docker)
+
+```bash
+# 需要本地安装 aarch64-linux-gnu-gcc
 cd rk3588-edge
 mkdir build && cd build
 cmake .. -DCMAKE_TOOLCHAIN_FILE=../cmake/aarch64-toolchain.cmake
@@ -86,9 +131,11 @@ cd mac-central && python main.py --port 50051
 ### Docker Cross-Compilation (Alternative)
 
 ```bash
+# 如果需要手动控制 Docker 流程
 cd tools/cross_compile_env
 docker build -t neuro-pipeline-builder .
-docker run -v $(pwd)/../..:/workspace neuro-pipeline-builder bash /workspace/tools/cross_compile_env/build_rk3588.sh
+docker run -v $(pwd)/../..:/workspace -e USE_MOCK_HAL=ON -e IN_DOCKER=1 \
+  neuro-pipeline-builder bash /workspace/tools/cross_compile_env/build_rk3588.sh
 ```
 
 ## Directory Structure
@@ -124,9 +171,16 @@ neuro-pipeline/
 │   ├── requirements.txt           # Python 依赖
 │   └── main.py                    # 入口程序
 ├── tools/                         # 工具与脚本
+│   ├── cross_compile_env/         # Docker 交叉编译环境
+│   │   ├── Dockerfile             #   debian:bookworm + aarch64 toolchain
+│   │   ├── build_rk3588.sh        #   自动化编译脚本
+│   │   └── prepare_sysroot.sh     #   RKSDK sysroot 组装
+│   ├── deploy_rk3588.sh           # RK3588 SDK 部署
+│   ├── deploy_and_run.sh          # 编译→部署→运行一体化
+│   ├── rk3588_device.conf         # 设备连接配置
 │   ├── rknn_toolkit_scripts/      # 模型转换, 量化脚本
-│   ├── cross_compile_env/         # 交叉编译环境
 │   └── generate_proto.py          # Protobuf 代码生成
+├── VERSION.json                   # 版本号文件
 └── extensions/                    # 拓展任务隔离区
 ```
 
@@ -154,8 +208,12 @@ neuro-pipeline/
 ## Documentation
 
 - [Architecture Design](docs/ARCHITECTURE.md) — 分层架构、数据流、设计决策
-- [API Reference](docs/API_REFERENCE.md) — gRPC 服务接口定义
-- [Development Log](docs/DEVLOG.md) — 开发日志、调试记录、优化过程
+- [API Reference](docs/API_REFERENCE.md) — gRPC 服务接口 + HAL 层 API
+- [Deployment Guide](docs/DEPLOYMENT_GUIDE.md) — 交叉编译、设备部署、运行指南
+- [Troubleshooting](docs/TROUBLESHOOTING.md) — 常见问题排查
+- [Week 2 Retrospective](docs/devlog/week2-retro.md) — Week 2 复盘总结
+- [Week 2 Implementation](docs/devlog/week2-implementation.md) — Week 2 实现细节
+- [Week 3 Plan](docs/devlog/week3-plan.md) — Week 3 执行计划
 
 ## Performance Targets
 
