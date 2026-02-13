@@ -7,6 +7,10 @@
 #include <string>
 #include <thread>
 
+namespace communication {
+class GRPCClient;
+}
+
 namespace app {
 
 /**
@@ -32,6 +36,8 @@ class PipelineCoordinator {
     float confidence_threshold = 0.5f;
     float nms_threshold = 0.45f;
     uint32_t max_frames = 0;        // 0=unlimited
+    bool enable_grpc = false;       // Enable gRPC communication
+    std::string grpc_server = "192.168.1.100:50051";
   };
 
   explicit PipelineCoordinator(const Config& config);

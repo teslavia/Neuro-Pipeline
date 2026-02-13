@@ -9,6 +9,7 @@
 
 #include "common/rknn_engine.hpp"
 #include "common/yolo_postprocess.hpp"
+#include "communication/grpc_client.hpp"
 #include "rk_hal/drm_allocator.hpp"
 #include "rk_hal/mpp_decoder.hpp"
 #include "rk_hal/rga_processor.hpp"
@@ -18,7 +19,13 @@ namespace app {
 
 class PipelineCoordinator::Impl {
  public:
-  explicit Impl(const Config& config) : config_(config) {}
+  explicit Impl(const Config& config) : config_(config) {
+    if (config_.enable_grpc) {
+      communication::GRPCClient::Config grpc_cfg;
+      grpc_cfg.server_address = config_.grpc_server;
+      grpc_client_ = std::make_unique<communication::GRPCClient>(grpc_cfg);
+    }
+  }
 
   bool Initialize() {
     // DRM allocator (shared by components)
@@ -91,6 +98,15 @@ class PipelineCoordinator::Impl {
     yolo_cfg.input_height = config_.model_height;
     postprocessor_ = std::make_unique<ai_inference::YOLOPostProcessor>(yolo_cfg);
 
+    // Initialize gRPC client if enabled
+    if (grpc_client_) {
+      if (grpc_client_->Connect()) {
+        std::cout << "[Pipeline] gRPC client connected" << std::endl;
+      } else {
+        std::cerr << "[Pipeline] gRPC connection failed, running in local mode" << std::endl;
+      }
+    }
+
     std::cout << "[Pipeline] All components initialized" << std::endl;
     return true;
   }
@@ -157,6 +173,30 @@ class PipelineCoordinator::Impl {
                       det.class_name.c_str(), det.confidence * 100.0f,
                       det.x_min, det.y_min, det.x_max, det.y_max);
         }
+
+        // Send to central server if gRPC enabled
+        if (grpc_client_ && grpc_client_->IsConnected()) {
+          neuro_pipeline::DetectionResult result;
+          result.set_frame_id(frame_count);
+          result.set_timestamp_us(
+              std::chrono::duration_cast<std::chrono::microseconds>(
+                  t0.time_since_epoch()).count());
+
+          for (const auto& det : detections) {
+            auto* box = result.add_boxes();
+            box->set_class_id(0);
+            box->set_class_name(det.class_name);
+            box->set_confidence(det.confidence);
+            box->set_x_min(det.x_min);
+            box->set_y_min(det.y_min);
+            box->set_x_max(det.x_max);
+            box->set_y_max(det.y_max);
+          }
+
+          if (!grpc_client_->StreamDetection(result)) {
+            std::cerr << "[Pipeline] Failed to send detection to server" << std::endl;
+          }
+        }
       }
 
       // 6. Release frame
@@ -215,6 +255,7 @@ class PipelineCoordinator::Impl {
   std::unique_ptr<rk_hal::RGAProcessor> rga_;
   std::unique_ptr<ai_inference::RKNNEngine> engine_;
   std::unique_ptr<ai_inference::YOLOPostProcessor> postprocessor_;
+  std::unique_ptr<communication::GRPCClient> grpc_client_;
 
   std::ifstream video_file_;
 };
