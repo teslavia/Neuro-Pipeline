@@ -1,8 +1,13 @@
 """
 MLX-based LLM/VLM inference engine for Apple Silicon.
+
+Supports two modes:
+  - "llm": text-only via mlx_lm (default, existing behavior)
+  - "vlm": vision-language via mlx_vlm (Qwen2-VL, etc.)
 """
 
 import logging
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -12,44 +17,66 @@ logger = logging.getLogger(__name__)
 class MLXInferenceEngine:
     """MLX-based inference engine for Apple Silicon UMA."""
 
-    def __init__(self, model_path: Path, quantization: str = "4bit") -> None:
-        """
-        Initialize MLX inference engine.
-
-        Args:
-            model_path: Path to MLX model directory.
-            quantization: Quantization mode ("4bit", "8bit", "none").
-        """
+    def __init__(
+        self,
+        model_path: Path,
+        quantization: str = "4bit",
+        mode: str = "llm",
+        vlm_model_path: Optional[Path] = None,
+    ) -> None:
         self.model_path = model_path
         self.quantization = quantization
+        self.mode = mode
+        self.vlm_model_path = vlm_model_path
         self.model = None
         self.tokenizer = None
+        self.vlm_model = None
+        self.vlm_processor = None
         self.use_stub = True
         self._loaded = False
-        logger.info(f"MLXInferenceEngine created: path={model_path}, quant={quantization}")
+        logger.info(
+            f"MLXInferenceEngine created: path={model_path}, "
+            f"quant={quantization}, mode={mode}"
+        )
 
     async def load_model(self) -> None:
-        """Load model into unified memory. Falls back to stub mode if mlx_lm unavailable."""
+        """Load model into unified memory. Falls back to stub mode if unavailable."""
         if not self.model_path.exists():
             logger.error(f"Model path not found: {self.model_path}")
             raise FileNotFoundError(f"Model not found: {self.model_path}")
 
+        # Load LLM (text) model
         try:
             import mlx.core as mx
             from mlx_lm import load
 
-            logger.info(f"Loading MLX model from {self.model_path}...")
+            logger.info(f"Loading MLX LLM from {self.model_path}...")
             self.model, self.tokenizer = load(str(self.model_path))
             self.use_stub = False
-            logger.info(f"Model loaded successfully (MLX device: {mx.default_device()})")
+            logger.info(f"LLM loaded (MLX device: {mx.default_device()})")
         except ImportError:
             logger.warning("mlx_lm not installed, running in stub mode")
-            self.model = None
-            self.tokenizer = None
             self.use_stub = True
         except Exception as e:
-            logger.error(f"Failed to load model: {e}")
+            logger.error(f"Failed to load LLM: {e}")
             raise
+
+        # Load VLM model if mode=vlm and path provided
+        if self.mode == "vlm" and self.vlm_model_path:
+            try:
+                from mlx_vlm import load as vlm_load
+
+                vlm_path = self.vlm_model_path
+                if not vlm_path.exists():
+                    logger.warning(f"VLM model path not found: {vlm_path}")
+                else:
+                    logger.info(f"Loading MLX VLM from {vlm_path}...")
+                    self.vlm_model, self.vlm_processor = vlm_load(str(vlm_path))
+                    logger.info("VLM loaded successfully")
+            except ImportError:
+                logger.warning("mlx_vlm not installed, VLM disabled")
+            except Exception as e:
+                logger.error(f"Failed to load VLM: {e}")
 
         self._loaded = True
 
@@ -59,19 +86,7 @@ class MLXInferenceEngine:
         max_tokens: int = 512,
         temperature: float = 0.7,
     ) -> str:
-        """
-        Generate text from prompt using MLX model.
-
-        Args:
-            prompt: Input prompt text.
-            max_tokens: Maximum tokens to generate.
-            temperature: Sampling temperature.
-
-        Returns:
-            Generated text response.
-        """
-        import time
-
+        """Generate text from prompt using MLX LLM."""
         if not self._loaded:
             raise RuntimeError("Model not loaded. Call load_model() first.")
 
@@ -91,14 +106,13 @@ class MLXInferenceEngine:
                 self.tokenizer,
                 prompt=prompt,
                 max_tokens=max_tokens,
-                verbose=False
+                verbose=False,
             )
             t1 = time.perf_counter()
-            logger.info(f"[Perf] MLX inference: {(t1-t0)*1000:.1f}ms")
-            logger.debug(f"Generated {len(response)} chars")
+            logger.info(f"[Perf] MLX LLM inference: {(t1-t0)*1000:.1f}ms")
             return response
         except Exception as e:
-            logger.error(f"Generation failed: {e}")
+            logger.error(f"LLM generation failed: {e}")
             raise
 
     async def analyze_image(
@@ -107,28 +121,45 @@ class MLXInferenceEngine:
         prompt: str,
         max_tokens: int = 256,
     ) -> str:
-        """
-        Analyze image with VLM (Vision-Language Model).
-
-        Args:
-            image_data: JPEG-encoded image bytes.
-            prompt: Analysis prompt.
-            max_tokens: Maximum tokens to generate.
-
-        Returns:
-            VLM analysis result.
-        """
+        """Analyze image with VLM or fall back to text-only LLM."""
         if not self._loaded:
             raise RuntimeError("Model not loaded. Call load_model() first.")
 
         if self.use_stub:
             return await self.generate(prompt, max_tokens=max_tokens)
 
-        logger.info(f"Text-only model, using prompt without image ({len(image_data)} bytes)")
+        # VLM mode: real image understanding
+        if self.mode == "vlm" and self.vlm_model and self.vlm_processor:
+            try:
+                from mlx_vlm import generate as vlm_generate
+                from PIL import Image
+                import io
+
+                image = Image.open(io.BytesIO(image_data))
+                t0 = time.perf_counter()
+                result = vlm_generate(
+                    self.vlm_model,
+                    self.vlm_processor,
+                    image,
+                    prompt,
+                    max_tokens=max_tokens,
+                    verbose=False,
+                )
+                t1 = time.perf_counter()
+                logger.info(f"[Perf] MLX VLM inference: {(t1-t0)*1000:.1f}ms")
+                return result
+            except Exception as e:
+                logger.error(f"VLM inference failed, falling back to LLM: {e}")
+
+        # Fallback: text-only
+        logger.info(f"Text-only mode, ignoring image ({len(image_data)} bytes)")
         return await self.generate(prompt, max_tokens=max_tokens)
 
     async def unload_model(self) -> None:
-        """Unload model from memory."""
+        """Unload all models from memory."""
         self.model = None
         self.tokenizer = None
-        logger.info("Model unloaded")
+        self.vlm_model = None
+        self.vlm_processor = None
+        self._loaded = False
+        logger.info("Models unloaded")

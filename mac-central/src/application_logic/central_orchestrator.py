@@ -54,7 +54,11 @@ class CentralOrchestrator:
     async def initialize(self) -> None:
         """Initialize orchestrator and load models."""
         logger.info("Initializing CentralOrchestrator...")
-        self.inference_engine = MLXInferenceEngine(self.model_path)
+        self.inference_engine = MLXInferenceEngine(
+            self.model_path,
+            mode=self._inference_mode,
+            vlm_model_path=self._vlm_model_path,
+        )
         await self.inference_engine.load_model()
         logger.info("CentralOrchestrator initialized successfully")
 
