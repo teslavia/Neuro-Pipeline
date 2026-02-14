@@ -2,9 +2,16 @@
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 import yaml
+
+
+@dataclass
+class VLMRuleConfig:
+    class_name: str = "person"
+    min_confidence: float = 0.8
+    prompt_template: str = "person_behavior"
 
 
 @dataclass
@@ -26,6 +33,7 @@ class LoggingConfig:
 class AppConfig:
     central: CentralConfig = field(default_factory=CentralConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
+    vlm_rules: List[VLMRuleConfig] = field(default_factory=lambda: [VLMRuleConfig()])
 
     @classmethod
     def from_yaml(cls, path: Path) -> "AppConfig":
@@ -48,4 +56,14 @@ class AppConfig:
             format=lg.get("format", cfg.logging.format),
             trace_enabled=bool(lg.get("trace_enabled", cfg.logging.trace_enabled)),
         )
+        rules_data = data.get("vlm_rules", [])
+        if rules_data:
+            cfg.vlm_rules = [
+                VLMRuleConfig(
+                    class_name=r.get("class_name", "person"),
+                    min_confidence=float(r.get("min_confidence", 0.8)),
+                    prompt_template=r.get("prompt_template", "person_behavior"),
+                )
+                for r in rules_data
+            ]
         return cfg

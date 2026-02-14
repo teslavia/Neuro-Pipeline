@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from communication.grpc_server import NeuroPipelineServer
-from application_logic.central_orchestrator import CentralOrchestrator
+from application_logic.central_orchestrator import CentralOrchestrator, VLMTriggerRule
 from config import AppConfig
 
 logging.basicConfig(
@@ -39,13 +39,22 @@ async def main():
     model_path = Path(args.model_path or cfg.central.model_path)
 
     logger.info("=" * 60)
-    logger.info("  Neuro-Pipeline Central Server v0.3.5")
+    logger.info("  Neuro-Pipeline Central Server v0.4.0")
     logger.info("=" * 60)
     logger.info(f"Host: {host}:{port}")
     logger.info(f"Model: {model_path}")
+    logger.info(f"VLM rules: {len(cfg.vlm_rules)} loaded")
     logger.info("")
 
-    orchestrator = CentralOrchestrator(model_path)
+    vlm_rules = [
+        VLMTriggerRule(
+            class_name=r.class_name,
+            min_confidence=r.min_confidence,
+            prompt_template=r.prompt_template,
+        )
+        for r in cfg.vlm_rules
+    ]
+    orchestrator = CentralOrchestrator(model_path, vlm_rules=vlm_rules)
     await orchestrator.initialize()
 
     server = NeuroPipelineServer(host, port, orchestrator)

@@ -42,7 +42,16 @@ V4L2 Camera ──► MPP Decoder ──► RGA Processor ──► RKNN NPU
 
 ## Project Status
 
-**Current Version**: v0.3.5 (Week 3 Complete + P1/P2 Fixes)
+**Current Version**: v0.4.0 (Week 4 Complete — Production Hardening + Dashboard)
+
+### Week 4 Achievements ✅
+- ✅ VLM trigger rules wired from config.yaml (no more hardcoded defaults)
+- ✅ MLX model converted to 4-bit quantized (6.4GB → 1.7GB, ~100 tok/s)
+- ✅ MLX real inference verified (5 tests passing, load 755ms, gen 326-1872ms)
+- ✅ KPI performance report (docs/performance/kpi-report.md)
+- ✅ Web dashboard (extensions/dashboard/ — FastAPI + htmx + WebSocket)
+- ✅ TROUBLESHOOTING.md updated with Week 3/4 content
+- ✅ Architecture doc synced to v0.4.0 status
 
 ### Week 3 Achievements ✅
 - ✅ gRPC C++ client with persistent streaming + bidirectional event stream
