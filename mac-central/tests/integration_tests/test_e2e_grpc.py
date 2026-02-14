@@ -2,6 +2,7 @@
 
 import asyncio
 import pytest
+import pytest_asyncio
 import grpc
 
 from src.generated import neuro_pipeline_pb2, neuro_pipeline_pb2_grpc
@@ -11,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from pathlib import Path
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def grpc_server_and_channel():
     """Start a real gRPC server and return (server, channel)."""
     orchestrator = CentralOrchestrator(Path("models/test"))
@@ -49,7 +50,7 @@ async def test_e2e_health_check(grpc_server_and_channel):
         neuro_pipeline_pb2.HealthCheckRequest(client_id="test")
     )
     assert response.status == neuro_pipeline_pb2.HealthCheckResponse.SERVING
-    assert response.version == "0.3.5"
+    assert response.version == "0.4.0"
 
 
 @pytest.mark.asyncio

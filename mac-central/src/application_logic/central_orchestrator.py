@@ -4,9 +4,11 @@ Central orchestrator for coordinating edge events and VLM inference.
 
 import asyncio
 import logging
+import time
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 try:
     import structlog
@@ -40,6 +42,8 @@ class CentralOrchestrator:
         self._event_count = 0
         self._command_queue: asyncio.Queue = asyncio.Queue()
         self.vlm_rules = vlm_rules or [VLMTriggerRule()]
+        self._recent_events: deque = deque(maxlen=100)
+        self._event_listeners: List[asyncio.Queue] = []
 
     async def initialize(self) -> None:
         """Initialize orchestrator and load models."""
@@ -79,8 +83,24 @@ class CentralOrchestrator:
                 result.frame_data, prompt
             )
             logger.info(f"VLM analysis result: {vlm_result[:100]}...")
+            self._record_event({
+                "type": "vlm_analysis",
+                "frame_id": result.frame_id,
+                "trace_id": trace_id,
+                "detections": detections,
+                "vlm_result": vlm_result[:200],
+                "rule": matched_rule.class_name,
+                "timestamp": time.time(),
+            })
             return vlm_result
 
+        self._record_event({
+            "type": "detection",
+            "frame_id": result.frame_id,
+            "trace_id": trace_id,
+            "detections": detections,
+            "timestamp": time.time(),
+        })
         return None
 
     def _match_vlm_rule(self, detections: list) -> Optional[VLMTriggerRule]:
@@ -113,3 +133,27 @@ class CentralOrchestrator:
         if self.inference_engine:
             await self.inference_engine.unload_model()
         logger.info("CentralOrchestrator shutdown complete")
+
+    def get_recent_events(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """Return recent detection events for dashboard consumption."""
+        return list(self._recent_events)[-limit:]
+
+    def subscribe(self) -> asyncio.Queue:
+        """Subscribe to real-time event stream. Returns a queue that receives events."""
+        q: asyncio.Queue = asyncio.Queue(maxsize=50)
+        self._event_listeners.append(q)
+        return q
+
+    def unsubscribe(self, q: asyncio.Queue) -> None:
+        """Unsubscribe from event stream."""
+        if q in self._event_listeners:
+            self._event_listeners.remove(q)
+
+    def _record_event(self, event: Dict[str, Any]) -> None:
+        """Record event and notify listeners."""
+        self._recent_events.append(event)
+        for q in self._event_listeners:
+            try:
+                q.put_nowait(event)
+            except asyncio.QueueFull:
+                pass

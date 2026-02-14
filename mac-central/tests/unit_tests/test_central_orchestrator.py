@@ -9,6 +9,7 @@ from src.application_logic.central_orchestrator import (
     CentralOrchestrator,
     VLMTriggerRule,
 )
+from src.config import AppConfig, VLMRuleConfig
 
 
 @pytest.fixture
@@ -82,3 +83,67 @@ async def test_handle_edge_event(orchestrator):
     event.type = 3
     event.description = "health"
     await orchestrator.handle_edge_event(event)
+
+
+class TestVLMConfigIntegration:
+    """Tests for VLM rules loaded from config.yaml."""
+
+    def test_config_loads_vlm_rules(self, tmp_path):
+        """VLM rules are parsed from YAML config."""
+        cfg_file = tmp_path / "config.yaml"
+        cfg_file.write_text(
+            "vlm_rules:\n"
+            "  - class_name: fire\n"
+            "    min_confidence: 0.6\n"
+            "    prompt_template: anomaly_detection\n"
+            "  - class_name: person\n"
+            "    min_confidence: 0.75\n"
+            "    prompt_template: person_behavior\n"
+        )
+        cfg = AppConfig.from_yaml(cfg_file)
+        assert len(cfg.vlm_rules) == 2
+        assert cfg.vlm_rules[0].class_name == "fire"
+        assert cfg.vlm_rules[0].min_confidence == 0.6
+        assert cfg.vlm_rules[1].prompt_template == "person_behavior"
+
+    def test_config_default_vlm_rules(self):
+        """Default config has one person rule."""
+        cfg = AppConfig()
+        assert len(cfg.vlm_rules) == 1
+        assert cfg.vlm_rules[0].class_name == "person"
+
+    def test_config_rules_to_orchestrator(self, tmp_path):
+        """Config VLM rules wire through to orchestrator."""
+        cfg_file = tmp_path / "config.yaml"
+        cfg_file.write_text(
+            "vlm_rules:\n"
+            "  - class_name: car\n"
+            "    min_confidence: 0.9\n"
+            "    prompt_template: scene_analysis\n"
+        )
+        cfg = AppConfig.from_yaml(cfg_file)
+        rules = [
+            VLMTriggerRule(
+                class_name=r.class_name,
+                min_confidence=r.min_confidence,
+                prompt_template=r.prompt_template,
+            )
+            for r in cfg.vlm_rules
+        ]
+        orch = CentralOrchestrator(Path("models/test"), vlm_rules=rules)
+        assert len(orch.vlm_rules) == 1
+        assert orch.vlm_rules[0].class_name == "car"
+
+    def test_recent_events_tracking(self):
+        """Orchestrator tracks recent events."""
+        orch = CentralOrchestrator(Path("models/test"))
+        assert orch.get_recent_events() == []
+
+    @pytest.mark.asyncio
+    async def test_subscribe_unsubscribe(self):
+        """Event subscription works."""
+        orch = CentralOrchestrator(Path("models/test"))
+        q = orch.subscribe()
+        assert q in orch._event_listeners
+        orch.unsubscribe(q)
+        assert q not in orch._event_listeners

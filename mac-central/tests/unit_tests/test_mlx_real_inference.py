@@ -1,6 +1,7 @@
 """Unit tests for MLX real inference (skipped when mlx_lm unavailable)."""
 
 import pytest
+import pytest_asyncio
 from pathlib import Path
 from src.llm_vlm.mlx_llm_inference import MLXInferenceEngine
 
@@ -12,23 +13,25 @@ except ImportError:
 
 skip_no_mlx = pytest.mark.skipif(not HAS_MLX_LM, reason="mlx_lm not installed")
 
+MODEL_PATH = Path("models/Llama-3.2-3B-Instruct-4bit-mlx")
+
 
 @pytest.fixture
 def model_path():
-    return Path("models/Llama-3.2-3B-Instruct")
+    return MODEL_PATH
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def engine(model_path):
     if not model_path.exists():
         pytest.skip("Model not downloaded")
     if not HAS_MLX_LM:
         pytest.skip("mlx_lm not installed")
 
-    engine = MLXInferenceEngine(model_path)
-    await engine.load_model()
-    yield engine
-    await engine.unload_model()
+    eng = MLXInferenceEngine(model_path)
+    await eng.load_model()
+    yield eng
+    await eng.unload_model()
 
 
 @skip_no_mlx
@@ -38,12 +41,12 @@ async def test_load_model(model_path):
     if not model_path.exists():
         pytest.skip("Model not downloaded")
 
-    engine = MLXInferenceEngine(model_path)
-    await engine.load_model()
+    eng = MLXInferenceEngine(model_path)
+    await eng.load_model()
 
-    assert engine.model is not None
-    assert engine.tokenizer is not None
-    assert engine.use_stub is False
+    assert eng.model is not None
+    assert eng.tokenizer is not None
+    assert eng.use_stub is False
 
 
 @skip_no_mlx
@@ -83,16 +86,16 @@ async def test_analyze_image_text_only(engine):
 @pytest.mark.asyncio
 async def test_model_not_loaded_error():
     """Test error when model not loaded."""
-    engine = MLXInferenceEngine(Path("models/Llama-3.2-3B-Instruct"))
+    eng = MLXInferenceEngine(MODEL_PATH)
 
     with pytest.raises(RuntimeError, match="Model not loaded"):
-        await engine.generate("test")
+        await eng.generate("test")
 
 
 @pytest.mark.asyncio
 async def test_model_path_not_found():
     """Test error when model path doesn't exist."""
-    engine = MLXInferenceEngine(Path("models/nonexistent"))
+    eng = MLXInferenceEngine(Path("models/nonexistent"))
 
     with pytest.raises(FileNotFoundError):
-        await engine.load_model()
+        await eng.load_model()

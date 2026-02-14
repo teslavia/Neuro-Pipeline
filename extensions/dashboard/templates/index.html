@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Neuro-Pipeline Dashboard</title>
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; padding: 1rem; }
+    h1 { font-size: 1.4rem; margin-bottom: 1rem; color: #38bdf8; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+    .card { background: #1e293b; border-radius: 8px; padding: 1rem; border: 1px solid #334155; }
+    .card h2 { font-size: 1rem; color: #94a3b8; margin-bottom: 0.5rem; }
+    .stat { font-size: 1.8rem; font-weight: 700; color: #22d3ee; }
+    .stat-label { font-size: 0.75rem; color: #64748b; }
+    .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+    .status-dot.ok { background: #22c55e; }
+    .status-dot.off { background: #ef4444; }
+    .stats-row { display: flex; gap: 1.5rem; margin-top: 0.5rem; }
+    .events { background: #1e293b; border-radius: 8px; padding: 1rem; border: 1px solid #334155; max-height: 400px; overflow-y: auto; }
+    .events h2 { font-size: 1rem; color: #94a3b8; margin-bottom: 0.5rem; }
+    .event-item { padding: 0.4rem 0; border-bottom: 1px solid #334155; font-size: 0.85rem; font-family: monospace; }
+    .event-item .time { color: #64748b; }
+    .event-item .type { color: #f59e0b; font-weight: 600; }
+    .event-item .detail { color: #cbd5e1; }
+    #event-list { display: flex; flex-direction: column-reverse; }
+  </style>
+</head>
+<body>
+  <h1>Neuro-Pipeline Dashboard</h1>
+
+  <div class="grid">
+    <div class="card">
+      <h2><span class="status-dot ok"></span>Edge Device (RK3588)</h2>
+      <div class="stats-row">
+        <div><div class="stat">{{ status.edge.fps }}</div><div class="stat-label">FPS</div></div>
+        <div><div class="stat">{{ status.edge.npu_usage }}%</div><div class="stat-label">NPU</div></div>
+        <div><div class="stat">{{ status.edge.temperature }}&deg;C</div><div class="stat-label">Temp</div></div>
+      </div>
+      <div style="margin-top:0.5rem;font-size:0.8rem;color:#64748b">Model: {{ status.edge.model }}</div>
+    </div>
+    <div class="card">
+      <h2><span class="status-dot ok"></span>Central Server (Mac Mini)</h2>
+      <div class="stats-row">
+        <div><div class="stat">{{ status.central.uptime_s }}s</div><div class="stat-label">Uptime</div></div>
+        <div><div class="stat">{{ status.central.events_processed }}</div><div class="stat-label">Events</div></div>
+      </div>
+      <div style="margin-top:0.5rem;font-size:0.8rem;color:#64748b">Model: {{ status.central.model }}</div>
+    </div>
+  </div>
+
+  <div class="events">
+    <h2>Live Events</h2>
+    <div id="event-list">
+      {% for e in events %}
+      <div class="event-item">
+        <span class="type">{{ e.get("type", "unknown") }}</span>
+        <span class="detail">{{ e.get("detections", e)|string|truncate(80) }}</span>
+      </div>
+      {% endfor %}
+      <div id="no-events" {% if events %}style="display:none"{% endif %}>
+        <span style="color:#64748b">Waiting for events...</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const ws = new WebSocket(`ws://${location.host}/ws`);
+    const list = document.getElementById('event-list');
+    const noEvents = document.getElementById('no-events');
+    ws.onmessage = (msg) => {
+      noEvents.style.display = 'none';
+      const e = JSON.parse(msg.data);
+      const div = document.createElement('div');
+      div.className = 'event-item';
+      const detail = e.detections ? JSON.stringify(e.detections).slice(0, 80) : JSON.stringify(e).slice(0, 80);
+      div.innerHTML = `<span class="type">${e.type || 'event'}</span> <span class="detail">${detail}</span>`;
+      list.prepend(div);
+      if (list.children.length > 100) list.lastChild.remove();
+    };
+    ws.onclose = () => {
+      const div = document.createElement('div');
+      div.className = 'event-item';
+      div.innerHTML = '<span class="type" style="color:#ef4444">disconnected</span>';
+      list.prepend(div);
+    };
+    // Auto-refresh status every 5s
+    setInterval(() => {
+      fetch('/api/status').then(r => r.json()).then(s => {
+        document.querySelectorAll('.stat')[3].textContent = s.central.uptime_s + 's';
+        document.querySelectorAll('.stat')[4].textContent = s.central.events_processed;
+      }).catch(() => {});
+    }, 5000);
+  </script>
+</body>
+</html>

@@ -584,15 +584,77 @@ bash tools/collect_diagnostics.sh > diagnostics.txt
 
 ---
 
-## 九、参考资料
+## 九、Week 3/4 新增问题
+
+### 9.1 gRPC 连接失败
+
+**症状**: `grpc._channel._InactiveRpcError: StatusCode.UNAVAILABLE`
+
+**排查**:
+1. 确认 central server 已启动: `python -m src.main --config config.yaml`
+2. 检查端口占用: `lsof -i :50051`
+3. 检查防火墙: `sudo pfctl -sr | grep 50051`
+4. 验证网络连通: `nc -zv <central_ip> 50051`
+
+**常见原因**:
+- Central server 未启动或崩溃
+- 端口被其他进程占用
+- Edge 设备 `grpc_server` 配置 IP 错误
+
+### 9.2 MLX 模型加载失败
+
+**症状**: `FileNotFoundError: Model not found` 或 `ImportError: mlx_lm`
+
+**排查**:
+1. 确认模型目录存在: `ls mac-central/models/Llama-3.2-3B-Instruct-4bit-mlx/`
+2. 确认 mlx_lm 已安装: `pip show mlx-lm`
+3. 确认 config.yaml 中 `central.model_path` 指向正确目录
+
+**模型转换**:
+```bash
+bash tools/convert_mlx_model.sh
+```
+
+### 9.3 4-bit 量化精度问题
+
+**症状**: MLX 推理结果质量下降或出现乱码
+
+**排查**:
+1. 验证模型完整性: `ls -la models/Llama-3.2-3B-Instruct-4bit-mlx/`（应有 config.json, model.safetensors, tokenizer.json 等）
+2. 测试推理: `python3 -c "from mlx_lm import load, generate; m, t = load('models/Llama-3.2-3B-Instruct-4bit-mlx'); print(generate(m, t, prompt='Hello', max_tokens=20))"`
+3. 如果质量不可接受，可重新转换为 8-bit: 修改 `tools/convert_mlx_model.sh` 中 `--q-bits 4` 为 `--q-bits 8`
+
+### 9.4 VLM 规则不触发
+
+**症状**: 检测到目标但未触发 VLM 分析
+
+**排查**:
+1. 检查 `config.yaml` 中 `vlm_rules` 配置
+2. 确认检测置信度超过规则阈值（`min_confidence`）
+3. 确认 `class_name` 与 YOLO 输出类名一致
+4. 确认 `frame_data` 非空（需要图像数据才能触发 VLM）
+
+### 9.5 Dashboard 无法访问
+
+**症状**: 浏览器无法打开 http://localhost:8080
+
+**排查**:
+1. 确认 dashboard 已启动: `cd extensions/dashboard && uvicorn app:app --port 8080`
+2. 安装依赖: `pip install -r extensions/dashboard/requirements.txt`
+3. 检查端口: `lsof -i :8080`
+
+---
+
+## 十、参考资料
 
 - [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) — 部署指南
 - [ARCHITECTURE.md](ARCHITECTURE.md) — 架构设计
+- [KPI Report](performance/kpi-report.md) — 性能基准报告
 - [Week 2 Retrospective](devlog/week2-retro.md) — Week 2 复盘
 - [RKNN API 文档](https://github.com/airockchip/rknn-toolkit2/tree/master/doc)
 - [MPP 文档](https://github.com/rockchip-linux/mpp/wiki)
 
 ---
 
-**文档版本**: v1.0.0
-**最后更新**: 2026-02-13 23:55
+**文档版本**: v1.1.0
+**最后更新**: 2026-02-14
