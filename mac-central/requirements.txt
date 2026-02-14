@@ -5,6 +5,7 @@ protobuf>=4.25.0
 
 # MLX Framework (Apple Silicon only)
 mlx>=0.5.0
+mlx-vlm>=0.1.0
 
 # Data Processing
 numpy>=1.24.0

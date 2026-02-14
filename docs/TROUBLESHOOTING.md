@@ -656,5 +656,36 @@ bash tools/convert_mlx_model.sh
 
 ---
 
-**文档版本**: v1.1.0
+**文档版本**: v1.2.0
 **最后更新**: 2026-02-14
+
+---
+
+## Week 5 Issues
+
+### SQLite "database is locked"
+- Cause: multiple processes accessing the same DB file
+- Fix: ensure only one central server instance runs; check `storage.db_path` is unique
+- The DetectionStore uses `threading.Lock` for thread safety within a single process
+
+### TLS certificate errors
+- "certificate verify failed": CA cert mismatch — regenerate with `bash tools/certs/generate_certs.sh`
+- "handshake failed": client cert not signed by same CA
+- Check SAN (Subject Alternative Name) includes the server IP/hostname
+- Verify file permissions: private keys should be 600
+
+### VLM model loading fails
+- "mlx_vlm not installed": `pip install mlx-vlm>=0.1.0`
+- "VLM model path not found": check `central.vlm_model_path` in config.yaml
+- Convert model first: `bash tools/convert_mlx_model.sh --vlm`
+- Falls back to text-only LLM mode gracefully (no crash)
+
+### VLM queue full warning
+- "VLM queue full, dropping analysis request": inference is slower than detection rate
+- Increase `edge.frame_skip_interval` to reduce load
+- Or use a faster/smaller VLM model
+
+### Log rotation not working
+- Check `logging.file_path` is set in config.yaml
+- Ensure the directory exists and is writable
+- Logs rotate at `max_bytes` (default 10MB), keeping `backup_count` (default 5) files

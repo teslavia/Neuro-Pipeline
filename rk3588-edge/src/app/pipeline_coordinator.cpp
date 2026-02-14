@@ -183,36 +183,40 @@ class PipelineCoordinator::Impl {
                       det.x_min, det.y_min, det.x_max, det.y_max);
         }
 
-        // Send to central server if gRPC enabled
+        // Send to central server if gRPC enabled (with frame skip)
         if (grpc_client_ && grpc_client_->IsConnected()) {
-          auto t_grpc_start = Clock::now();
+          bool should_send = (config_.frame_skip_interval == 0) ||
+                             (frame_count % config_.frame_skip_interval == 0);
+          if (should_send) {
+            auto t_grpc_start = Clock::now();
 
-          neuro_pipeline::DetectionResult result;
-          result.set_frame_id(frame_count);
-          result.set_trace_id("edge-" + std::to_string(frame_count));
-          result.set_timestamp_us(
-              std::chrono::duration_cast<std::chrono::microseconds>(
-                  t0.time_since_epoch()).count());
+            neuro_pipeline::DetectionResult result;
+            result.set_frame_id(frame_count);
+            result.set_trace_id("edge-" + std::to_string(frame_count));
+            result.set_timestamp_us(
+                std::chrono::duration_cast<std::chrono::microseconds>(
+                    t0.time_since_epoch()).count());
 
-          for (const auto& det : detections) {
-            auto* box = result.add_boxes();
-            box->set_class_id(0);
-            box->set_class_name(det.class_name);
-            box->set_confidence(det.confidence);
-            box->set_x_min(det.x_min);
-            box->set_y_min(det.y_min);
-            box->set_x_max(det.x_max);
-            box->set_y_max(det.y_max);
-          }
+            for (const auto& det : detections) {
+              auto* box = result.add_boxes();
+              box->set_class_id(0);
+              box->set_class_name(det.class_name);
+              box->set_confidence(det.confidence);
+              box->set_x_min(det.x_min);
+              box->set_y_min(det.y_min);
+              box->set_x_max(det.x_max);
+              box->set_y_max(det.y_max);
+            }
 
-          if (!grpc_client_->StreamDetection(result)) {
-            LOG_ERROR("Pipeline", "Failed to send detection to server");
-          }
+            if (!grpc_client_->StreamDetection(result)) {
+              LOG_ERROR("Pipeline", "Failed to send detection to server");
+            }
 
-          auto t_grpc_end = Clock::now();
-          double grpc_ms = std::chrono::duration<double, std::milli>(
-              t_grpc_end - t_grpc_start).count();
-          std::printf("[Perf] gRPC send: %.1fms\n", grpc_ms);
+            auto t_grpc_end = Clock::now();
+            double grpc_ms = std::chrono::duration<double, std::milli>(
+                t_grpc_end - t_grpc_start).count();
+            std::printf("[Perf] gRPC send: %.1fms\n", grpc_ms);
+          }  // should_send
         }
       }
 

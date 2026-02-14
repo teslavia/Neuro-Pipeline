@@ -5,17 +5,37 @@ import asyncio
 import logging
 import signal
 import sys
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from communication.grpc_server import NeuroPipelineServer
 from application_logic.central_orchestrator import CentralOrchestrator, VLMTriggerRule
 from config import AppConfig
+from storage.detection_store import DetectionStore
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
+
+def setup_logging(cfg) -> None:
+    """Configure logging with optional file rotation."""
+    level = getattr(logging, cfg.logging.level.upper(), logging.INFO)
+    fmt = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    datefmt = "%Y-%m-%d %H:%M:%S"
+
+    handlers: list[logging.Handler] = [logging.StreamHandler()]
+
+    if cfg.logging.file_path:
+        log_path = Path(cfg.logging.file_path)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        file_handler = RotatingFileHandler(
+            str(log_path),
+            maxBytes=cfg.logging.max_bytes,
+            backupCount=cfg.logging.backup_count,
+        )
+        file_handler.setFormatter(logging.Formatter(fmt, datefmt=datefmt))
+        handlers.append(file_handler)
+
+    logging.basicConfig(level=level, format=fmt, datefmt=datefmt, handlers=handlers)
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -34,17 +54,27 @@ async def main():
 
     # Load config: file defaults → CLI overrides
     cfg = AppConfig.from_yaml(args.config) if args.config else AppConfig()
+
+    # Setup logging (must be before any log calls)
+    setup_logging(cfg)
+
     host = args.host or cfg.central.host
     port = args.port or cfg.central.port
     model_path = Path(args.model_path or cfg.central.model_path)
 
     logger.info("=" * 60)
-    logger.info("  Neuro-Pipeline Central Server v0.4.0")
+    logger.info("  Neuro-Pipeline Central Server v0.5.0")
     logger.info("=" * 60)
     logger.info(f"Host: {host}:{port}")
     logger.info(f"Model: {model_path}")
     logger.info(f"VLM rules: {len(cfg.vlm_rules)} loaded")
+    logger.info(f"Storage: {cfg.storage.db_path}")
     logger.info("")
+
+    # Initialize detection store
+    db_path = Path(cfg.storage.db_path)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    store = DetectionStore(db_path, retention_days=cfg.storage.retention_days)
 
     vlm_rules = [
         VLMTriggerRule(
@@ -54,7 +84,7 @@ async def main():
         )
         for r in cfg.vlm_rules
     ]
-    orchestrator = CentralOrchestrator(model_path, vlm_rules=vlm_rules)
+    orchestrator = CentralOrchestrator(model_path, vlm_rules=vlm_rules, detection_store=store)
     await orchestrator.initialize()
 
     server = NeuroPipelineServer(host, port, orchestrator)
@@ -75,6 +105,7 @@ async def main():
     logger.info("Shutting down...")
     await server.stop()
     await orchestrator.shutdown()
+    store.close()
     logger.info("Shutdown complete")
 
 

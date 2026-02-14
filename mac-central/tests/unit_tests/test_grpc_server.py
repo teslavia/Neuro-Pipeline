@@ -63,7 +63,7 @@ async def test_health_check(servicer):
     response = await servicer.HealthCheck(request, None)
 
     assert response.status == neuro_pipeline_pb2.HealthCheckResponse.SERVING
-    assert response.version == "0.4.0"
+    assert response.version == "0.5.0"
 
 
 @pytest.mark.asyncio
@@ -118,4 +118,17 @@ async def test_server_start_stop():
     await server.start()
     assert server.server is not None
 
+    await server.stop(grace=0.1)
+
+
+@pytest.mark.asyncio
+async def test_server_accepts_tls_config():
+    """Test server accepts TLS config without error (insecure fallback)."""
+    orchestrator = MagicMock()
+    tls = MagicMock()
+    tls.enabled = False
+    server = NeuroPipelineServer("localhost", 50052, orchestrator, tls_config=tls)
+
+    await server.start()
+    assert server.server is not None
     await server.stop(grace=0.1)

@@ -656,3 +656,53 @@ tar -xzf mac-central-backup.tar.gz -C ~/
 
 **文档版本**: v2.0.0
 **最后更新**: 2026-02-14
+
+---
+
+## mTLS Deployment
+
+```bash
+# Generate certificates
+bash tools/certs/generate_certs.sh certs/
+
+# Copy to edge device
+scp certs/ca.pem certs/client.pem certs/client-key.pem rock@192.168.1.70:/opt/neuro-pipeline/certs/
+
+# Enable in config.yaml
+# tls:
+#   enabled: true
+#   ca_cert: "certs/ca.pem"
+#   server_cert: "certs/server.pem"
+#   server_key: "certs/server-key.pem"
+```
+
+## systemd / launchd Service Installation
+
+### Edge (RK3588 — systemd)
+```bash
+sudo cp tools/services/neuro-pipeline-edge.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now neuro-pipeline-edge
+journalctl -u neuro-pipeline-edge -f
+```
+
+### Central (Mac — launchd)
+```bash
+cp tools/services/com.neuro-pipeline.central.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.neuro-pipeline.central.plist
+```
+
+## SQLite Detection Storage
+
+Detection events are persisted to SQLite at `data/detections.db` (configurable via `storage.db_path`).
+
+- Auto-cleanup: events older than `retention_days` (default 7) are purged
+- Query API: `GET /api/events/history?hours=24&limit=100`
+- Thread-safe: uses threading.Lock for concurrent access
+
+## Log Rotation
+
+Configured via `logging` section in config.yaml:
+- `file_path`: log file location (e.g., `logs/central.log`)
+- `max_bytes`: max file size before rotation (default 10MB)
+- `backup_count`: number of rotated files to keep (default 5)

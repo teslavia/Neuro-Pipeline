@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
@@ -18,6 +18,15 @@ templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 _events: list[dict] = []
 _ws_clients: list[WebSocket] = []
 _start_time = time.time()
+
+# Optional: injected DetectionStore for persistent history
+_detection_store = None
+
+
+def set_detection_store(store) -> None:
+    """Inject a DetectionStore instance for history queries."""
+    global _detection_store
+    _detection_store = store
 
 
 def _demo_status() -> dict:
@@ -73,6 +82,19 @@ async def post_event(event: dict):
         except Exception:
             _ws_clients.remove(ws)
     return {"ok": True}
+
+
+@app.get("/api/events/history")
+async def api_events_history(
+    hours: float = Query(24, ge=0.1, le=720),
+    limit: int = Query(100, ge=1, le=1000),
+):
+    """Query historical events from SQLite store."""
+    if _detection_store is None:
+        return {"error": "No persistent store configured", "events": []}
+    since = time.time() - hours * 3600
+    events = _detection_store.query(since=since, limit=limit)
+    return {"count": len(events), "hours": hours, "events": events}
 
 
 @app.websocket("/ws")

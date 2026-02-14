@@ -38,6 +38,7 @@ class PipelineCoordinator {
     uint32_t max_frames = 0;        // 0=unlimited
     bool enable_grpc = false;       // Enable gRPC communication
     std::string grpc_server = "192.168.1.100:50051";
+    uint32_t frame_skip_interval = 0;  // 0=send every frame, N=send every Nth
   };
 
   explicit PipelineCoordinator(const Config& config);

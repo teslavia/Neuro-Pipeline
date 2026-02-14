@@ -20,6 +20,10 @@ class GRPCClient {
     int keepalive_timeout_ms = 10000;
     int max_reconnect_attempts = 10;
     int initial_backoff_ms = 1000;
+    // TLS (empty = insecure)
+    std::string ca_cert_path;
+    std::string client_cert_path;
+    std::string client_key_path;
   };
 
   using CommandCallback = std::function<void(const neuro_pipeline::ControlCommand&)>;

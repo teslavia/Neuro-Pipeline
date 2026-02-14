@@ -147,3 +147,58 @@ class TestVLMConfigIntegration:
         assert q in orch._event_listeners
         orch.unsubscribe(q)
         assert q not in orch._event_listeners
+
+
+@pytest.mark.asyncio
+async def test_vlm_queue_enqueue():
+    """VLM analysis is enqueued (not awaited inline)."""
+    orch = CentralOrchestrator(Path("models/test"))
+    orch.inference_engine = MagicMock()
+
+    result = MagicMock()
+    result.frame_id = 1
+    result.trace_id = "edge-1"
+    result.frame_data = b"\xff\xd8" + b"\x00" * 100
+    box = MagicMock()
+    box.class_name = "person"
+    box.confidence = 0.95
+    box.x_min = box.y_min = 0.1
+    box.x_max = box.y_max = 0.9
+    result.boxes = [box]
+
+    # process_detection should return None (async queue, no inline VLM)
+    out = await orch.process_detection(result)
+    assert out is None
+    # VLM item should be in the queue
+    assert orch._vlm_queue.qsize() == 1
+
+
+@pytest.mark.asyncio
+async def test_vlm_worker_processes_queue():
+    """VLM worker consumes queue and records events."""
+    orch = CentralOrchestrator(Path("models/test"))
+    orch.inference_engine = MagicMock()
+    orch.inference_engine.analyze_image = AsyncMock(return_value="Person detected walking")
+
+    # Manually put an item
+    await orch._vlm_queue.put({
+        "frame_data": b"\xff",
+        "prompt": "Describe",
+        "frame_id": 42,
+        "trace_id": "edge-42",
+        "detections": [{"class_name": "person", "confidence": 0.9}],
+        "rule": "person",
+    })
+
+    # Start worker, let it process one item, then cancel
+    task = asyncio.create_task(orch._vlm_worker())
+    await asyncio.sleep(0.1)
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+    # Should have recorded a vlm_analysis event
+    events = orch.get_recent_events()
+    assert any(e["type"] == "vlm_analysis" for e in events)

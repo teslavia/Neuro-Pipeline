@@ -1,7 +1,19 @@
 #include "communication/grpc_client.hpp"
 #include "common/logger.hpp"
+#include <fstream>
+#include <sstream>
 #include <thread>
 #include <chrono>
+
+namespace {
+std::string ReadFile(const std::string& path) {
+  std::ifstream f(path);
+  if (!f.is_open()) return "";
+  std::ostringstream ss;
+  ss << f.rdbuf();
+  return ss.str();
+}
+}  // namespace
 
 namespace communication {
 
@@ -20,10 +32,19 @@ bool GRPCClient::CreateChannel() {
   args.SetInt(GRPC_ARG_HTTP2_MAX_PINGS_WITHOUT_DATA, 0);
   args.SetInt(GRPC_ARG_MAX_RECONNECT_BACKOFF_MS, 30000);
 
-  channel_ = grpc::CreateCustomChannel(
-      config_.server_address,
-      grpc::InsecureChannelCredentials(),
-      args);
+  std::shared_ptr<grpc::ChannelCredentials> creds;
+  if (!config_.ca_cert_path.empty()) {
+    grpc::SslCredentialsOptions ssl_opts;
+    ssl_opts.pem_root_certs = ReadFile(config_.ca_cert_path);
+    ssl_opts.pem_cert_chain = ReadFile(config_.client_cert_path);
+    ssl_opts.pem_private_key = ReadFile(config_.client_key_path);
+    creds = grpc::SslCredentials(ssl_opts);
+    LOG_INFO("GRPCClient", "Using mTLS credentials");
+  } else {
+    creds = grpc::InsecureChannelCredentials();
+  }
+
+  channel_ = grpc::CreateCustomChannel(config_.server_address, creds, args);
 
   if (!channel_) {
     LOG_ERROR("GRPCClient", "Failed to create channel");
