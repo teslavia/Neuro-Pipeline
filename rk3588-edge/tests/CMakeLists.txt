@@ -30,6 +30,7 @@ set(UNIT_TEST_SOURCES
   unit_tests/test_thread_pool.cpp
   unit_tests/test_zero_copy_buffer.cpp
   unit_tests/test_yolo_postprocess.cpp
+  unit_tests/test_grpc_client.cpp
   unit_tests/test_mmap_ipc.cpp
   unit_tests/test_npu_scheduler.cpp
   unit_tests/test_cache_analysis.cpp
@@ -44,6 +45,7 @@ add_executable(run_unit_tests ${UNIT_TEST_SOURCES})
 target_include_directories(run_unit_tests PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/../include
   ${CMAKE_CURRENT_SOURCE_DIR}/../src
+  ${CMAKE_CURRENT_SOURCE_DIR}/../src/generated
 )
 
 target_link_libraries(run_unit_tests

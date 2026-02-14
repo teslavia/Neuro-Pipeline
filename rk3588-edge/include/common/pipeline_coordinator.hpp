@@ -51,6 +51,9 @@ class PipelineCoordinator {
   void Stop();
   bool IsRunning() const { return running_.load(); }
 
+  /// Apply a control command from central server.
+  void ApplyCommand(int command_type, const std::string& param_value);
+
   /// Get performance stats.
   double GetAvgLatencyMs() const { return avg_latency_ms_; }
   uint32_t GetFPS() const { return measured_fps_; }
@@ -61,6 +64,7 @@ class PipelineCoordinator {
   std::unique_ptr<Impl> impl_;
   Config config_;
   std::atomic<bool> running_{false};
+  std::thread pipeline_thread_;
   double avg_latency_ms_ = 0;
   uint32_t measured_fps_ = 0;
   uint64_t frame_count_ = 0;

@@ -42,20 +42,29 @@ V4L2 Camera ──► MPP Decoder ──► RGA Processor ──► RKNN NPU
 
 ## Project Status
 
-**Current Version**: v0.2.0 (Week 2 Complete)
+**Current Version**: v0.3.5 (Week 3 Complete + P1/P2 Fixes)
+
+### Week 3 Achievements ✅
+- ✅ gRPC C++ client with persistent streaming + bidirectional event stream
+- ✅ gRPC Python async server with keepalive, compression, 16MB message limit
+- ✅ MLX inference engine (stub + real mode) on Apple Silicon
+- ✅ Pipeline coordinator integrated with gRPC + health updates
+- ✅ Bidirectional control commands (SET_FPS, SET_THRESHOLD, SHUTDOWN)
+
+### P1/P2 Defect Fixes (v0.3.5) ✅
+- ✅ Unified config system (config.yaml + C++/Python loaders)
+- ✅ Structured logging (C++ LOG macros + Python structlog)
+- ✅ Error handling (C++ ErrorCode/Result<T> + Python exception hierarchy)
+- ✅ VLM trigger rules configurable (replacing hardcoded logic)
+- ✅ Memory pool alignment + stats, thread pool queue limits
+- ✅ CI: native C++ test job + Python E2E integration tests
+- ✅ Proto: trace_id, ErrorReport, CONTROL_COMMAND event type
 
 ### Week 2 Achievements ✅
 - ✅ HAL Layer: V4L2, MPP, RGA, DRM/DMA-BUF real implementation
 - ✅ AI Inference: RKNN NPU engine + YOLO postprocessor (NCHW fixed)
 - ✅ Zero-Copy Pipeline: DMA-BUF fd sharing across hardware units
-- ✅ Device Integration: End-to-end pipeline running on RK3588
 - ✅ Performance: 28.5 FPS @ 1080p, 20.3ms latency, 72% NPU utilization
-
-### Week 3 Roadmap 🚧
-- 🔲 Protobuf definition for edge-central communication
-- 🔲 gRPC C++ client (RK3588) + Python server (Mac Mini)
-- 🔲 MLX VLM inference on Apple Silicon
-- 🔲 Event-driven architecture (edge trigger → central analysis)
 
 ---
 
@@ -211,9 +220,7 @@ neuro-pipeline/
 - [API Reference](docs/API_REFERENCE.md) — gRPC 服务接口 + HAL 层 API
 - [Deployment Guide](docs/DEPLOYMENT_GUIDE.md) — 交叉编译、设备部署、运行指南
 - [Troubleshooting](docs/TROUBLESHOOTING.md) — 常见问题排查
-- [Week 2 Retrospective](docs/devlog/week2-retro.md) — Week 2 复盘总结
-- [Week 2 Implementation](docs/devlog/week2-implementation.md) — Week 2 实现细节
-- [Week 3 Plan](docs/devlog/week3-plan.md) — Week 3 执行计划
+- [Technical Decisions](docs/TECHNICAL_DECISIONS.md) — 架构决策记录 (TD-001 ~ TD-007)
 
 ## Performance Targets
 

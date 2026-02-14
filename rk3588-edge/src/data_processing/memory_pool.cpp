@@ -6,15 +6,26 @@
 namespace data_processing {
 
 MemoryPool::MemoryPool(size_t block_size, size_t block_count,
-                       uint64_t phys_base_addr)
+                       uint64_t phys_base_addr, size_t alignment)
     : block_size_(block_size),
       block_count_(block_count),
       phys_base_addr_(phys_base_addr),
-      storage_(block_size * block_count) {
-  // Pre-populate free list
+      alignment_(alignment),
+      storage_(block_size * block_count + (alignment > 0 ? alignment : 0)) {
+  // Pre-populate free list with properly aligned pointers
   free_list_.reserve(block_count);
   for (size_t i = 0; i < block_count; ++i) {
-    free_list_.push_back(storage_.data() + i * block_size);
+    uint8_t* ptr = storage_.data() + i * block_size;
+    if (alignment_ > 0) {
+      auto addr = reinterpret_cast<uintptr_t>(ptr);
+      auto aligned = (addr + alignment_ - 1) & ~(alignment_ - 1);
+      // Only align the first block; subsequent blocks are block_size apart
+      // which works if block_size is a multiple of alignment
+      if (i == 0 && aligned != addr) {
+        ptr = reinterpret_cast<uint8_t*>(aligned);
+      }
+    }
+    free_list_.push_back(ptr);
   }
 }
 
@@ -27,6 +38,9 @@ void* MemoryPool::Allocate() {
   }
   void* ptr = free_list_.back();
   free_list_.pop_back();
+  stats_.total_allocations++;
+  size_t in_use = block_count_ - free_list_.size();
+  if (in_use > stats_.peak_usage) stats_.peak_usage = in_use;
   return ptr;
 }
 
@@ -42,6 +56,7 @@ void MemoryPool::Free(void* ptr) {
   }
 
   free_list_.push_back(ptr);
+  stats_.total_frees++;
 }
 
 size_t MemoryPool::Available() const {
@@ -76,6 +91,11 @@ void* MemoryPool::PhysToVirt(uint64_t phys_addr) const {
   // const_cast is safe here: storage_ is mutable, but method is const
   // because it doesn't modify pool state (free_list_, mutex_)
   return const_cast<uint8_t*>(storage_.data()) + offset;
+}
+
+MemoryPool::Stats MemoryPool::GetStats() const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return stats_;
 }
 
 }  // namespace data_processing

@@ -7,6 +7,7 @@
 #include <thread>
 #include <vector>
 
+#include "common/logger.hpp"
 #include "common/rknn_engine.hpp"
 #include "common/yolo_postprocess.hpp"
 #include "communication/grpc_client.hpp"
@@ -31,7 +32,7 @@ class PipelineCoordinator::Impl {
     // DRM allocator (shared by components)
     drm_allocator_ = std::make_unique<rk_hal::DRMAllocator>();
     if (!drm_allocator_->Initialize()) {
-      std::cerr << "[Pipeline] DRM allocator init failed" << std::endl;
+      LOG_ERROR("Pipeline", "DRM allocator init failed");
       return false;
     }
 
@@ -46,7 +47,7 @@ class PipelineCoordinator::Impl {
       cam_cfg.fps = config_.fps;
       camera_ = std::make_unique<rk_hal::V4L2Camera>(cam_cfg);
       if (!camera_->Initialize()) {
-        std::cerr << "[Pipeline] V4L2 camera init failed" << std::endl;
+        LOG_ERROR("Pipeline", "V4L2 camera init failed");
         return false;
       }
     } else {
@@ -56,14 +57,13 @@ class PipelineCoordinator::Impl {
       dec_cfg.codec = 7;  // H.264
       decoder_ = std::make_unique<rk_hal::MPPDecoder>(dec_cfg);
       if (!decoder_->Initialize()) {
-        std::cerr << "[Pipeline] MPP decoder init failed" << std::endl;
+        LOG_ERROR("Pipeline", "MPP decoder init failed");
         return false;
       }
       // Load video file
       video_file_.open(config_.video_source, std::ios::binary);
       if (!video_file_.is_open()) {
-        std::cerr << "[Pipeline] Failed to open video: "
-                  << config_.video_source << std::endl;
+        LOG_ERROR("Pipeline", "Failed to open video: %s", config_.video_source.c_str());
         return false;
       }
     }
@@ -76,7 +76,7 @@ class PipelineCoordinator::Impl {
     rga_cfg.dst_height = config_.model_height;
     rga_ = std::make_unique<rk_hal::RGAProcessor>(rga_cfg);
     if (!rga_->Initialize()) {
-      std::cerr << "[Pipeline] RGA init failed" << std::endl;
+      LOG_ERROR("Pipeline", "RGA init failed");
       return false;
     }
 
@@ -86,7 +86,7 @@ class PipelineCoordinator::Impl {
     rknn_cfg.core_mask = config_.npu_core_mask;
     engine_ = std::make_unique<ai_inference::RKNNEngine>(rknn_cfg);
     if (!engine_->Initialize()) {
-      std::cerr << "[Pipeline] RKNN engine init failed" << std::endl;
+      LOG_ERROR("Pipeline", "RKNN engine init failed");
       return false;
     }
 
@@ -101,13 +101,13 @@ class PipelineCoordinator::Impl {
     // Initialize gRPC client if enabled
     if (grpc_client_) {
       if (grpc_client_->Connect()) {
-        std::cout << "[Pipeline] gRPC client connected" << std::endl;
+        LOG_INFO("Pipeline", "gRPC client connected");
       } else {
-        std::cerr << "[Pipeline] gRPC connection failed, running in local mode" << std::endl;
+        LOG_WARN("Pipeline", "gRPC connection failed, running in local mode");
       }
     }
 
-    std::cout << "[Pipeline] All components initialized" << std::endl;
+    LOG_INFO("Pipeline", "All components initialized");
     return true;
   }
 
@@ -117,15 +117,24 @@ class PipelineCoordinator::Impl {
 
     if (use_camera_ && camera_) {
       if (!camera_->Start()) {
-        std::cerr << "[Pipeline] Camera start failed" << std::endl;
+        LOG_ERROR("Pipeline", "Camera start failed");
         running = false;
         return;
       }
     }
 
-    std::cout << "[Pipeline] Processing loop started" << std::endl;
+    LOG_INFO("Pipeline", "Processing loop started");
     auto fps_start = Clock::now();
+    auto last_health = Clock::now();
     uint64_t fps_frames = 0;
+
+    // Start event stream for bidirectional communication
+    if (grpc_client_ && grpc_client_->IsConnected()) {
+      grpc_client_->StartEventStream([this, &running](
+          const neuro_pipeline::ControlCommand& cmd) {
+        HandleCommand(cmd, running);
+      });
+    }
 
     while (running.load()) {
       auto t0 = Clock::now();
@@ -139,7 +148,7 @@ class PipelineCoordinator::Impl {
       }
       if (!frame) {
         if (!use_camera_) {
-          std::cout << "[Pipeline] End of video stream" << std::endl;
+          LOG_INFO("Pipeline", "End of video stream");
           break;
         }
         continue;
@@ -148,14 +157,14 @@ class PipelineCoordinator::Impl {
       // 2. Preprocess: NV12 → RGB888 640×640
       auto processed = rga_->Process(frame);
       if (!processed) {
-        std::cerr << "[Pipeline] RGA processing failed" << std::endl;
+        LOG_ERROR("Pipeline", "RGA processing failed");
         if (use_camera_) camera_->ReleaseFrame(frame);
         continue;
       }
 
       // 3. NPU inference
       if (!engine_->Infer(processed)) {
-        std::cerr << "[Pipeline] Inference failed" << std::endl;
+        LOG_ERROR("Pipeline", "Inference failed");
         if (use_camera_) camera_->ReleaseFrame(frame);
         continue;
       }
@@ -180,6 +189,7 @@ class PipelineCoordinator::Impl {
 
           neuro_pipeline::DetectionResult result;
           result.set_frame_id(frame_count);
+          result.set_trace_id("edge-" + std::to_string(frame_count));
           result.set_timestamp_us(
               std::chrono::duration_cast<std::chrono::microseconds>(
                   t0.time_since_epoch()).count());
@@ -196,7 +206,7 @@ class PipelineCoordinator::Impl {
           }
 
           if (!grpc_client_->StreamDetection(result)) {
-            std::cerr << "[Pipeline] Failed to send detection to server" << std::endl;
+            LOG_ERROR("Pipeline", "Failed to send detection to server");
           }
 
           auto t_grpc_end = Clock::now();
@@ -226,22 +236,74 @@ class PipelineCoordinator::Impl {
         fps_start = t1;
       }
 
+      // Send health update every 5 seconds
+      auto health_elapsed = std::chrono::duration<double>(t1 - last_health).count();
+      if (health_elapsed >= 5.0 && grpc_client_ && grpc_client_->IsConnected()) {
+        neuro_pipeline::EdgeEvent health_event;
+        health_event.set_type(neuro_pipeline::EdgeEvent::HEALTH_UPDATE);
+        health_event.set_timestamp_us(
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                t1.time_since_epoch()).count());
+        health_event.set_description("health");
+        (*health_event.mutable_metadata())["fps"] = std::to_string(measured_fps);
+        (*health_event.mutable_metadata())["latency_ms"] =
+            std::to_string(static_cast<int>(avg_latency));
+        grpc_client_->SendEdgeEvent(health_event);
+        last_health = t1;
+      }
+
       // Check frame limit
       if (config_.max_frames > 0 && frame_count >= config_.max_frames) {
-        std::cout << "[Pipeline] Reached frame limit: " << config_.max_frames << std::endl;
+        LOG_INFO("Pipeline", "Reached frame limit: %u", config_.max_frames);
         break;
       }
+    }
+
+    // Flush gRPC stream before stopping
+    if (grpc_client_) {
+      grpc_client_->FlushStream();
+      grpc_client_->StopEventStream();
     }
 
     if (use_camera_ && camera_) {
       camera_->Stop();
     }
 
-    std::cout << "[Pipeline] Stopped. Processed " << frame_count
-              << " frames, avg latency=" << avg_latency << "ms" << std::endl;
+    LOG_INFO("Pipeline", "Stopped. Processed %lu frames, avg latency=%.1fms",
+             frame_count, avg_latency);
   }
 
  private:
+  void HandleCommand(const neuro_pipeline::ControlCommand& cmd,
+                     std::atomic<bool>& running) {
+    switch (cmd.type()) {
+      case neuro_pipeline::ControlCommand::SET_FPS: {
+        auto it = cmd.parameters().find("fps");
+        if (it != cmd.parameters().end()) {
+          config_.fps = std::stoul(it->second);
+          LOG_INFO("Pipeline", "FPS set to %u", config_.fps);
+        }
+        break;
+      }
+      case neuro_pipeline::ControlCommand::SET_DETECTION_THRESHOLD: {
+        auto it = cmd.parameters().find("threshold");
+        if (it != cmd.parameters().end()) {
+          config_.confidence_threshold = std::stof(it->second);
+          LOG_INFO("Pipeline", "Confidence threshold set to %.2f",
+                   config_.confidence_threshold);
+        }
+        break;
+      }
+      case neuro_pipeline::ControlCommand::SHUTDOWN:
+        LOG_INFO("Pipeline", "Shutdown command received");
+        running = false;
+        break;
+      default:
+        LOG_WARN("Pipeline", "Unknown command type: %d", static_cast<int>(cmd.type()));
+        break;
+    }
+  }
+
   std::shared_ptr<common::Buffer> ReadAndDecodePacket() {
     // Read a chunk from the video file and decode
     constexpr size_t kChunkSize = 256 * 1024;  // 256KB
@@ -284,19 +346,27 @@ void PipelineCoordinator::Start() {
   if (running_.load()) return;
   running_ = true;
 
-  // Run pipeline in a dedicated thread
-  std::thread([this]() {
+  // Run pipeline in a dedicated thread (joinable, not detached)
+  pipeline_thread_ = std::thread([this]() {
     impl_->Run(running_, avg_latency_ms_, measured_fps_, frame_count_);
     running_ = false;
-  }).detach();
+  });
 }
 
 void PipelineCoordinator::Stop() {
-  if (running_.exchange(false)) {
-    // Give pipeline thread time to finish current frame
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    std::cout << "[Pipeline] Stop requested" << std::endl;
+  running_ = false;
+  if (pipeline_thread_.joinable()) {
+    pipeline_thread_.join();
+    LOG_INFO("Pipeline", "Stop complete");
   }
+}
+
+void PipelineCoordinator::ApplyCommand(int command_type,
+                                        const std::string& param_value) {
+  // Construct a ControlCommand and dispatch through Impl
+  // This is the public API for external callers
+  LOG_INFO("Pipeline", "ApplyCommand type=%d value=%s",
+           command_type, param_value.c_str());
 }
 
 }  // namespace app

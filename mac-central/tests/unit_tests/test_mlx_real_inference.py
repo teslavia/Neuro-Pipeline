@@ -1,8 +1,16 @@
-"""Unit tests for MLX real inference."""
+"""Unit tests for MLX real inference (skipped when mlx_lm unavailable)."""
 
 import pytest
 from pathlib import Path
 from src.llm_vlm.mlx_llm_inference import MLXInferenceEngine
+
+try:
+    import mlx_lm  # noqa: F401
+    HAS_MLX_LM = True
+except ImportError:
+    HAS_MLX_LM = False
+
+skip_no_mlx = pytest.mark.skipif(not HAS_MLX_LM, reason="mlx_lm not installed")
 
 
 @pytest.fixture
@@ -14,6 +22,8 @@ def model_path():
 async def engine(model_path):
     if not model_path.exists():
         pytest.skip("Model not downloaded")
+    if not HAS_MLX_LM:
+        pytest.skip("mlx_lm not installed")
 
     engine = MLXInferenceEngine(model_path)
     await engine.load_model()
@@ -21,6 +31,7 @@ async def engine(model_path):
     await engine.unload_model()
 
 
+@skip_no_mlx
 @pytest.mark.asyncio
 async def test_load_model(model_path):
     """Test model loading."""
@@ -35,6 +46,7 @@ async def test_load_model(model_path):
     assert engine.use_stub is False
 
 
+@skip_no_mlx
 @pytest.mark.asyncio
 async def test_generate_text(engine):
     """Test text generation."""
@@ -45,6 +57,7 @@ async def test_generate_text(engine):
     assert len(response) > 0
 
 
+@skip_no_mlx
 @pytest.mark.asyncio
 async def test_generate_with_temperature(engine):
     """Test generation with different temperature."""
@@ -54,6 +67,7 @@ async def test_generate_with_temperature(engine):
     assert isinstance(response, str)
 
 
+@skip_no_mlx
 @pytest.mark.asyncio
 async def test_analyze_image_text_only(engine):
     """Test image analysis with text-only model."""

@@ -2,8 +2,11 @@
 #define COMMUNICATION_GRPC_CLIENT_HPP_
 
 #include <atomic>
+#include <functional>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <grpcpp/grpcpp.h>
 #include "neuro_pipeline.grpc.pb.h"
 
@@ -19,25 +22,58 @@ class GRPCClient {
     int initial_backoff_ms = 1000;
   };
 
+  using CommandCallback = std::function<void(const neuro_pipeline::ControlCommand&)>;
+
   explicit GRPCClient(const Config& config);
   ~GRPCClient();
+
+  GRPCClient(const GRPCClient&) = delete;
+  GRPCClient& operator=(const GRPCClient&) = delete;
 
   bool Connect();
   void Disconnect();
   bool IsConnected() const { return connected_.load(); }
 
+  // Client-streaming: persistent detection stream
   bool StreamDetection(const neuro_pipeline::DetectionResult& result);
+  bool FlushStream();
+
   bool HealthCheck();
+
+  // Bidirectional event stream
+  bool StartEventStream(CommandCallback callback);
+  bool SendEdgeEvent(const neuro_pipeline::EdgeEvent& event);
+  void StopEventStream();
+
+  int GetBackoffMs(int attempt);
 
  private:
   bool CreateChannel();
-  int GetBackoffMs(int attempt);
+  bool HealthCheckLocked();
+  bool OpenStream();
+  void CloseStream();
 
   Config config_;
   std::atomic<bool> connected_{false};
+  mutable std::mutex mu_;
+
   std::shared_ptr<grpc::Channel> channel_;
   std::unique_ptr<neuro_pipeline::NeuroPipelineService::Stub> stub_;
   int reconnect_attempts_ = 0;
+
+  // Persistent detection stream state
+  std::unique_ptr<grpc::ClientContext> stream_context_;
+  std::unique_ptr<grpc::ClientWriter<neuro_pipeline::DetectionResult>> stream_;
+  neuro_pipeline::StreamResponse stream_response_;
+  bool stream_open_ = false;
+
+  // Bidirectional event stream state
+  std::unique_ptr<grpc::ClientContext> event_context_;
+  std::unique_ptr<grpc::ClientReaderWriter<
+      neuro_pipeline::EdgeEvent, neuro_pipeline::CentralEvent>> event_stream_;
+  std::thread event_reader_thread_;
+  std::atomic<bool> event_stream_active_{false};
+  CommandCallback command_callback_;
 };
 
 }  // namespace communication

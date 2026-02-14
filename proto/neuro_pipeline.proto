@@ -35,6 +35,7 @@ message DetectionResult {
   repeated BoundingBox boxes = 3;  // Detected objects
   bytes frame_data = 4;            // Optional JPEG-encoded frame (sent on events)
   DeviceMetrics metrics = 5;       // System performance metrics
+  string trace_id = 6;             // Distributed trace identifier
 }
 
 // Single detected object bounding box.
@@ -117,11 +118,13 @@ message CentralEvent {
     COMMAND_ACK = 0;         // Acknowledge received command
     INFERENCE_RESULT = 1;    // VLM inference result
     ALERT = 2;               // Alert from central analysis
+    CONTROL_COMMAND = 3;     // Control command forwarded via event stream
   }
 
   EventType type = 1;
   uint64 timestamp_us = 2;
   string payload = 3;       // JSON or plain text payload
+  ControlCommand command = 5;  // Populated when type == CONTROL_COMMAND
 }
 
 // =============================================================================
@@ -162,4 +165,17 @@ message VideoFrame {
 
   PixelFormat format = 5;
   bytes data = 6;            // Raw or compressed frame data
+}
+
+// =============================================================================
+// Error Reporting
+// =============================================================================
+
+// Structured error report for diagnostics.
+message ErrorReport {
+  string error_code = 1;     // Machine-readable error code (e.g., "INFERENCE_FAILED")
+  string message = 2;        // Human-readable description
+  string component = 3;      // Source component (e.g., "rknn_engine", "grpc_client")
+  uint64 timestamp_us = 4;   // When the error occurred
+  string trace_id = 5;       // Correlation with detection trace
 }

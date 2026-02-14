@@ -9,6 +9,7 @@ from pathlib import Path
 
 from communication.grpc_server import NeuroPipelineServer
 from application_logic.central_orchestrator import CentralOrchestrator
+from config import AppConfig
 
 logging.basicConfig(
     level=logging.INFO,
@@ -20,27 +21,34 @@ logger = logging.getLogger(__name__)
 
 async def main():
     parser = argparse.ArgumentParser(description="Neuro-Pipeline Central Server")
-    parser.add_argument("--host", default="0.0.0.0", help="Server host")
-    parser.add_argument("--port", type=int, default=50051, help="Server port")
+    parser.add_argument("--config", type=Path, default=None, help="Config YAML file")
+    parser.add_argument("--host", default=None, help="Server host")
+    parser.add_argument("--port", type=int, default=None, help="Server port")
     parser.add_argument(
         "--model-path",
         type=Path,
-        default=Path("models/Llama-3.2-3B-Instruct"),
+        default=None,
         help="MLX model path",
     )
     args = parser.parse_args()
 
+    # Load config: file defaults → CLI overrides
+    cfg = AppConfig.from_yaml(args.config) if args.config else AppConfig()
+    host = args.host or cfg.central.host
+    port = args.port or cfg.central.port
+    model_path = Path(args.model_path or cfg.central.model_path)
+
     logger.info("=" * 60)
-    logger.info("  Neuro-Pipeline Central Server v0.3.0")
+    logger.info("  Neuro-Pipeline Central Server v0.3.5")
     logger.info("=" * 60)
-    logger.info(f"Host: {args.host}:{args.port}")
-    logger.info(f"Model: {args.model_path}")
+    logger.info(f"Host: {host}:{port}")
+    logger.info(f"Model: {model_path}")
     logger.info("")
 
-    orchestrator = CentralOrchestrator(args.model_path)
+    orchestrator = CentralOrchestrator(model_path)
     await orchestrator.initialize()
 
-    server = NeuroPipelineServer(args.host, args.port, orchestrator)
+    server = NeuroPipelineServer(host, port, orchestrator)
     await server.start()
 
     stop_event = asyncio.Event()

@@ -68,6 +68,37 @@ jobs:
           file rk3588-edge/build/neuro_pipeline_edge | grep -q "ARM aarch64"
 
   # ==========================================================================
+  # C++ Unit Tests (Native x86, Mock HAL)
+  # ==========================================================================
+  test-cpp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y \
+            cmake protobuf-compiler libprotobuf-dev \
+            libgrpc++-dev libgrpc-dev protobuf-compiler-grpc
+
+      - name: Generate protobuf code
+        run: python3 tools/generate_proto.py
+
+      - name: CMake configure (native, mock HAL, tests ON)
+        run: |
+          mkdir -p rk3588-edge/build && cd rk3588-edge/build
+          cmake .. \
+            -DUSE_MOCK_HAL=ON \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DBUILD_TESTING=ON
+
+      - name: Build
+        run: cd rk3588-edge/build && make -j$(nproc)
+
+      - name: Run tests
+        run: cd rk3588-edge/build && ctest --output-on-failure
+
+  # ==========================================================================
   # Python Tests (Mac Central)
   # ==========================================================================
   test-python:

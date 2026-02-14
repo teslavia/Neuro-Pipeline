@@ -21,13 +21,21 @@ namespace data_processing {
  */
 class MemoryPool {
  public:
+  struct Stats {
+    size_t total_allocations = 0;
+    size_t total_frees = 0;
+    size_t peak_usage = 0;  // max blocks in use at once
+  };
+
   /**
    * @param block_size Size of each block in bytes.
    * @param block_count Number of pre-allocated blocks.
    * @param phys_base_addr Simulated physical base address (default 0x10000000).
+   * @param alignment Memory alignment in bytes (0 = no special alignment).
    */
   MemoryPool(size_t block_size, size_t block_count,
-             uint64_t phys_base_addr = 0x10000000);
+             uint64_t phys_base_addr = 0x10000000,
+             size_t alignment = 0);
   ~MemoryPool();
 
   MemoryPool(const MemoryPool&) = delete;
@@ -72,13 +80,21 @@ class MemoryPool {
   /// Check if a physical address belongs to this pool.
   bool ContainsPhys(uint64_t phys_addr) const;
 
+  /// Get allocation statistics.
+  Stats GetStats() const;
+
+  /// Get alignment setting.
+  size_t Alignment() const { return alignment_; }
+
  private:
   size_t block_size_;
   size_t block_count_;
   uint64_t phys_base_addr_;
+  size_t alignment_;
   std::vector<uint8_t> storage_;
   std::vector<void*> free_list_;
   mutable std::mutex mutex_;
+  Stats stats_;
 };
 
 }  // namespace data_processing
