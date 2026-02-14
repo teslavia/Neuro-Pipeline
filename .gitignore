@@ -93,6 +93,9 @@ tools/cross_compile_env/sysroot/
 # Device logs
 tmp/device_logs/
 
+# Generated certificates
+certs/
+
 # plan & notes
 工程架构设计与任务拆解.md
 **/docs/notes/**
