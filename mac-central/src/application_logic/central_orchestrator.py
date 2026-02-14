@@ -50,6 +50,8 @@ class CentralOrchestrator:
         self._detection_store = detection_store
         self._inference_mode = inference_mode
         self._vlm_model_path = vlm_model_path
+        self._vlm_queue: asyncio.Queue = asyncio.Queue(maxsize=32)
+        self._vlm_worker_task: Optional[asyncio.Task] = None
 
     async def initialize(self) -> None:
         """Initialize orchestrator and load models."""
@@ -60,10 +62,11 @@ class CentralOrchestrator:
             vlm_model_path=self._vlm_model_path,
         )
         await self.inference_engine.load_model()
+        self._vlm_worker_task = asyncio.create_task(self._vlm_worker())
         logger.info("CentralOrchestrator initialized successfully")
 
     async def process_detection(self, result: Any) -> Optional[str]:
-        """Process detection result from edge device."""
+        """Process detection result from edge device. VLM analysis is async-queued."""
         self._event_count += 1
         trace_id = getattr(result, "trace_id", f"unknown-{self._event_count}")
         log = logger.bind(trace_id=trace_id) if hasattr(logger, "bind") else logger
@@ -89,20 +92,18 @@ class CentralOrchestrator:
             prompt = self.prompt_generator.generate(
                 detections, template=matched_rule.prompt_template
             )
-            vlm_result = await self.inference_engine.analyze_image(
-                result.frame_data, prompt
-            )
-            logger.info(f"VLM analysis result: {vlm_result[:100]}...")
-            self._record_event({
-                "type": "vlm_analysis",
-                "frame_id": result.frame_id,
-                "trace_id": trace_id,
-                "detections": detections,
-                "vlm_result": vlm_result[:200],
-                "rule": matched_rule.class_name,
-                "timestamp": time.time(),
-            })
-            return vlm_result
+            # Enqueue for async VLM processing (non-blocking)
+            try:
+                self._vlm_queue.put_nowait({
+                    "frame_data": result.frame_data,
+                    "prompt": prompt,
+                    "frame_id": result.frame_id,
+                    "trace_id": trace_id,
+                    "detections": detections,
+                    "rule": matched_rule.class_name,
+                })
+            except asyncio.QueueFull:
+                logger.warning("VLM queue full, dropping analysis request")
 
         self._record_event({
             "type": "detection",
@@ -112,6 +113,33 @@ class CentralOrchestrator:
             "timestamp": time.time(),
         })
         return None
+
+    async def _vlm_worker(self) -> None:
+        """Background worker that processes VLM analysis requests serially."""
+        logger.info("VLM worker started")
+        while True:
+            try:
+                item = await self._vlm_queue.get()
+            except asyncio.CancelledError:
+                break
+            try:
+                vlm_result = await self.inference_engine.analyze_image(
+                    item["frame_data"], item["prompt"]
+                )
+                logger.info(f"VLM result (frame {item['frame_id']}): {vlm_result[:100]}...")
+                self._record_event({
+                    "type": "vlm_analysis",
+                    "frame_id": item["frame_id"],
+                    "trace_id": item["trace_id"],
+                    "detections": item["detections"],
+                    "vlm_result": vlm_result[:200],
+                    "rule": item["rule"],
+                    "timestamp": time.time(),
+                })
+            except Exception as e:
+                logger.error(f"VLM inference failed: {e}")
+            finally:
+                self._vlm_queue.task_done()
 
     def _match_vlm_rule(self, detections: list) -> Optional[VLMTriggerRule]:
         """Check if any detection matches a VLM trigger rule."""
@@ -140,6 +168,12 @@ class CentralOrchestrator:
     async def shutdown(self) -> None:
         """Graceful shutdown."""
         logger.info(f"Shutting down (processed {self._event_count} events)...")
+        if self._vlm_worker_task:
+            self._vlm_worker_task.cancel()
+            try:
+                await self._vlm_worker_task
+            except asyncio.CancelledError:
+                pass
         if self.inference_engine:
             await self.inference_engine.unload_model()
         logger.info("CentralOrchestrator shutdown complete")
