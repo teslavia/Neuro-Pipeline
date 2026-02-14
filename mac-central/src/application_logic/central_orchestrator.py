@@ -35,6 +35,9 @@ class CentralOrchestrator:
         self,
         model_path: Path,
         vlm_rules: Optional[List[VLMTriggerRule]] = None,
+        detection_store=None,
+        inference_mode: str = "llm",
+        vlm_model_path: Optional[Path] = None,
     ) -> None:
         self.model_path = model_path
         self.inference_engine: Optional[MLXInferenceEngine] = None
@@ -44,6 +47,9 @@ class CentralOrchestrator:
         self.vlm_rules = vlm_rules or [VLMTriggerRule()]
         self._recent_events: deque = deque(maxlen=100)
         self._event_listeners: List[asyncio.Queue] = []
+        self._detection_store = detection_store
+        self._inference_mode = inference_mode
+        self._vlm_model_path = vlm_model_path
 
     async def initialize(self) -> None:
         """Initialize orchestrator and load models."""
@@ -150,8 +156,13 @@ class CentralOrchestrator:
             self._event_listeners.remove(q)
 
     def _record_event(self, event: Dict[str, Any]) -> None:
-        """Record event and notify listeners."""
+        """Record event to in-memory buffer, DB, and notify listeners."""
         self._recent_events.append(event)
+        if self._detection_store:
+            try:
+                self._detection_store.record(event)
+            except Exception as e:
+                logger.error(f"Failed to persist event: {e}")
         for q in self._event_listeners:
             try:
                 q.put_nowait(event)

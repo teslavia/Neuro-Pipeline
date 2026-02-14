@@ -11,6 +11,7 @@ from pathlib import Path
 from communication.grpc_server import NeuroPipelineServer
 from application_logic.central_orchestrator import CentralOrchestrator, VLMTriggerRule
 from config import AppConfig
+from storage.detection_store import DetectionStore
 
 
 def setup_logging(cfg) -> None:
@@ -67,7 +68,13 @@ async def main():
     logger.info(f"Host: {host}:{port}")
     logger.info(f"Model: {model_path}")
     logger.info(f"VLM rules: {len(cfg.vlm_rules)} loaded")
+    logger.info(f"Storage: {cfg.storage.db_path}")
     logger.info("")
+
+    # Initialize detection store
+    db_path = Path(cfg.storage.db_path)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    store = DetectionStore(db_path, retention_days=cfg.storage.retention_days)
 
     vlm_rules = [
         VLMTriggerRule(
@@ -77,7 +84,7 @@ async def main():
         )
         for r in cfg.vlm_rules
     ]
-    orchestrator = CentralOrchestrator(model_path, vlm_rules=vlm_rules)
+    orchestrator = CentralOrchestrator(model_path, vlm_rules=vlm_rules, detection_store=store)
     await orchestrator.initialize()
 
     server = NeuroPipelineServer(host, port, orchestrator)
@@ -98,6 +105,7 @@ async def main():
     logger.info("Shutting down...")
     await server.stop()
     await orchestrator.shutdown()
+    store.close()
     logger.info("Shutdown complete")
 
 
