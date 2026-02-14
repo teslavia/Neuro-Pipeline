@@ -233,6 +233,11 @@ class PipelineCoordinator::Impl {
       }
     }
 
+    // Flush gRPC stream before stopping
+    if (grpc_client_) {
+      grpc_client_->FlushStream();
+    }
+
     if (use_camera_ && camera_) {
       camera_->Stop();
     }
@@ -284,18 +289,18 @@ void PipelineCoordinator::Start() {
   if (running_.load()) return;
   running_ = true;
 
-  // Run pipeline in a dedicated thread
-  std::thread([this]() {
+  // Run pipeline in a dedicated thread (joinable, not detached)
+  pipeline_thread_ = std::thread([this]() {
     impl_->Run(running_, avg_latency_ms_, measured_fps_, frame_count_);
     running_ = false;
-  }).detach();
+  });
 }
 
 void PipelineCoordinator::Stop() {
-  if (running_.exchange(false)) {
-    // Give pipeline thread time to finish current frame
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    std::cout << "[Pipeline] Stop requested" << std::endl;
+  running_ = false;
+  if (pipeline_thread_.joinable()) {
+    pipeline_thread_.join();
+    std::cout << "[Pipeline] Stop complete" << std::endl;
   }
 }
 

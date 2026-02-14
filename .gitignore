@@ -60,6 +60,7 @@ rk3588-edge/models/*
 # IDE & Editors
 .vscode/
 .idea/
+.cache/
 *.swp
 *.swo
 *~

@@ -25,10 +25,11 @@ class MLXInferenceEngine:
         self.model = None
         self.tokenizer = None
         self.use_stub = True
+        self._loaded = False
         logger.info(f"MLXInferenceEngine created: path={model_path}, quant={quantization}")
 
     async def load_model(self) -> None:
-        """Load model into unified memory."""
+        """Load model into unified memory. Falls back to stub mode if mlx_lm unavailable."""
         if not self.model_path.exists():
             logger.error(f"Model path not found: {self.model_path}")
             raise FileNotFoundError(f"Model not found: {self.model_path}")
@@ -41,12 +42,16 @@ class MLXInferenceEngine:
             self.model, self.tokenizer = load(str(self.model_path))
             self.use_stub = False
             logger.info(f"Model loaded successfully (MLX device: {mx.default_device()})")
-        except ImportError as e:
-            logger.error(f"mlx_lm not installed: {e}")
-            raise ImportError("Install mlx_lm: pip install mlx mlx-lm")
+        except ImportError:
+            logger.warning("mlx_lm not installed, running in stub mode")
+            self.model = None
+            self.tokenizer = None
+            self.use_stub = True
         except Exception as e:
             logger.error(f"Failed to load model: {e}")
             raise
+
+        self._loaded = True
 
     async def generate(
         self,
@@ -66,6 +71,13 @@ class MLXInferenceEngine:
             Generated text response.
         """
         import time
+
+        if not self._loaded:
+            raise RuntimeError("Model not loaded. Call load_model() first.")
+
+        if self.use_stub:
+            logger.debug(f"[STUB] Generating response for prompt ({len(prompt)} chars)")
+            return f"[STUB] Analysis of: {prompt[:80]}"
 
         if not self.model:
             raise RuntimeError("Model not loaded. Call load_model() first.")
@@ -106,10 +118,12 @@ class MLXInferenceEngine:
         Returns:
             VLM analysis result.
         """
-        if not self.model:
+        if not self._loaded:
             raise RuntimeError("Model not loaded. Call load_model() first.")
 
-        # Llama-3.2-3B is text-only, use text prompt
+        if self.use_stub:
+            return await self.generate(prompt, max_tokens=max_tokens)
+
         logger.info(f"Text-only model, using prompt without image ({len(image_data)} bytes)")
         return await self.generate(prompt, max_tokens=max_tokens)
 
