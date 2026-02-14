@@ -1,7 +1,7 @@
 # Neuro-Pipeline Architecture Design
 
-**Version**: 1.0.0
-**Date**: 2026-02-11
+**Version**: 2.0.0
+**Date**: 2026-02-14
 **Author**: Teslavia
 
 ---
@@ -88,7 +88,7 @@
 ```
 ┌─────────────────────────────────────────────────────┐
 │              Layer 5: Application Logic              │
-│      central_orchestrator.py / event_processor.py     │
+│  central_orchestrator.py / dashboard (FastAPI+htmx)  │
 ├─────────────────────────────────────────────────────┤
 │              Layer 4: Communication                  │
 │         grpc_server.py / stream_handler.py            │
@@ -171,11 +171,12 @@ RK3588 Edge                                    Mac Mini Central
 | **Video Decode** | MPP (Hardware) | — |
 | **Image Processing** | RGA (Hardware) | OpenCV / Pillow |
 | **AI Framework** | RKNN NPU (6 TOPS) | MLX (Apple Silicon) |
-| **Model Format** | .rknn (INT8 quantized) | MLX quantized (4-bit) |
+| **Model Format** | .rknn (INT8 quantized) | MLX native (4-bit quantized) |
 | **Communication** | gRPC C++ | gRPC Python (asyncio) |
 | **Serialization** | Protobuf 3 | Protobuf 3 |
 | **Testing** | GoogleTest | pytest |
 | **Logging** | spdlog (planned) | Python logging / structlog |
+| **Dashboard** | — | FastAPI + htmx + WebSocket |
 
 ---
 
@@ -215,9 +216,10 @@ RK3588 Edge                                    Mac Mini Central
 | Edge Inference Latency | < 20ms | RKNN profiler |
 | Video Frame Rate | 30 FPS (1080p) | Frame counter |
 | Network Round-Trip | < 100ms | gRPC timestamps |
-| Central VLM Inference | < 2s | MLX profiler |
+| Central VLM Inference | < 2s (achieved: 326ms-1.9s) | MLX profiler |
 | Edge Memory Footprint | < 512MB | /proc/meminfo |
 | NPU Utilization | > 70% | /sys/kernel/debug/rknpu/load |
+| MLX Model Load | < 3s | mlx_lm.load() timer |
 
 ---
 
@@ -234,9 +236,9 @@ RK3588 Edge                                    Mac Mini Central
 ## 9. Future Extensions
 
 - 多摄像头支持
-- 模型热替换（无需重启更新 YOLO）
 - 云存储集成（S3 / GCS）
-- Web Dashboard 实时监控
+- SQLite 检测历史存储
+- 模型热替换（无需重启更新 YOLO）
 - 多边缘节点聚合到单中心服务器
 - Kubernetes 边缘部署 (KubeEdge)
 

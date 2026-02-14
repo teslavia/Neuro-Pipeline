@@ -1,6 +1,6 @@
 # Neuro-Pipeline API Reference
 
-**Version**: 1.0.0
+**Version**: 2.0.0
 **Protocol**: gRPC with Protocol Buffers 3
 **Generated From**: `proto/neuro_pipeline.proto`
 
@@ -180,7 +180,7 @@ message VideoFrame {
 - **批量检测**: 最大 30 results/sec，含视频帧时最大 1 FPS
 - **压缩**: `frame_data` 使用 JPEG quality 85
 - **Keepalive**: 30s interval, 10s timeout
-- **Max Message Size**: 4 MB
+- **Max Message Size**: 16 MB
 
 ---
 
@@ -312,4 +312,92 @@ public:
 
 ---
 
-_Generated from `proto/neuro_pipeline.proto` and HAL headers. Last updated: 2026-02-13_
+## Central Python API
+
+### AppConfig
+
+**文件**: `mac-central/src/config.py`
+
+```python
+@dataclass
+class VLMRuleConfig:
+    class_name: str = "person"
+    min_confidence: float = 0.8
+    prompt_template: str = "person_behavior"
+
+@dataclass
+class AppConfig:
+    central: CentralConfig
+    logging: LoggingConfig
+    vlm_rules: List[VLMRuleConfig]
+
+    @classmethod
+    def from_yaml(cls, path: Path) -> "AppConfig":
+        """Load config from YAML file."""
+```
+
+### CentralOrchestrator
+
+**文件**: `mac-central/src/application_logic/central_orchestrator.py`
+
+```python
+class CentralOrchestrator:
+    async def initialize(self) -> None: ...
+    async def process_detection(self, result) -> Optional[str]: ...
+    async def send_command(self, command) -> None: ...
+    async def shutdown(self) -> None: ...
+    def get_recent_events(self, limit: int = 50) -> List[Dict]: ...
+    def subscribe(self) -> asyncio.Queue: ...
+    def unsubscribe(self, q: asyncio.Queue) -> None: ...
+```
+
+### MLXInferenceEngine
+
+**文件**: `mac-central/src/llm_vlm/mlx_llm_inference.py`
+
+```python
+class MLXInferenceEngine:
+    async def load_model(self) -> None: ...
+    async def generate(self, prompt: str, max_tokens: int = 512, temperature: float = 0.7) -> str: ...
+    async def analyze_image(self, image_data: bytes, prompt: str, max_tokens: int = 256) -> str: ...
+    async def unload_model(self) -> None: ...
+```
+
+---
+
+## Dashboard REST API
+
+**位置**: `extensions/dashboard/app.py`
+**技术**: FastAPI + htmx + WebSocket
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | 仪表盘页面 (HTML) |
+| `/api/status` | GET | 系统状态 JSON |
+| `/api/events` | GET | 最近事件列表 (`?limit=50`) |
+| `/api/events` | POST | 推送事件（供 orchestrator 调用） |
+| `/ws` | WebSocket | 实时事件流 |
+
+### GET /api/status 响应示例
+
+```json
+{
+  "edge": {
+    "status": "connected",
+    "fps": 28.5,
+    "npu_usage": 72.0,
+    "temperature": 55.0,
+    "model": "yolov5s-640-640.rknn"
+  },
+  "central": {
+    "status": "running",
+    "model": "Llama-3.2-3B-Instruct-4bit-mlx",
+    "uptime_s": 3600,
+    "events_processed": 142
+  }
+}
+```
+
+---
+
+_Generated from `proto/neuro_pipeline.proto` and source code. Last updated: 2026-02-14_

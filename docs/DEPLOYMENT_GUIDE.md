@@ -1,7 +1,7 @@
 # Neuro-Pipeline 部署指南 (Deployment Guide)
 
-**版本**: v0.2.0
-**更新日期**: 2026-02-13
+**版本**: v0.4.0
+**更新日期**: 2026-02-14
 
 ---
 
@@ -12,6 +12,7 @@
 - Mac Mini 中心服务器环境配置
 - 设备部署与运行
 - 常见问题排查
+- Web 仪表盘部署
 
 ---
 
@@ -243,8 +244,8 @@ rknn.export_rknn('yolov5s-640-640.rknn')
 cd mac-central
 
 # 创建虚拟环境
-python3 -m venv venv
-source venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 
 # 安装依赖
 pip install -r requirements.txt
@@ -294,12 +295,33 @@ huggingface-cli download mlx-community/Qwen2-VL-2B-Instruct \
 
 ---
 
-### 4.4 启动中心服务器
+### 4.4 MLX 模型 4-bit 量化（推荐）
+
+将 HuggingFace 格式模型转换为 MLX 原生 4-bit 量化格式，大幅减少内存占用：
+
+```bash
+bash tools/convert_mlx_model.sh
+```
+
+**效果**:
+- 模型大小: 6.4GB → 1.7GB
+- 推理速度: ~100 tok/s
+- 加载时间: ~755ms
+
+**验证**:
+```bash
+source .venv/bin/activate
+python3 -c "from mlx_lm import load, generate; m, t = load('models/Llama-3.2-3B-Instruct-4bit-mlx'); print(generate(m, t, prompt='Hello', max_tokens=20))"
+```
+
+---
+
+### 4.5 启动中心服务器
 
 ```bash
 cd mac-central
-source venv/bin/activate
-python main.py --port 50051 --model models/qwen2-vl-2b
+source .venv/bin/activate
+python -m src.main --config ../config.yaml
 ```
 
 **输出**:
@@ -318,7 +340,7 @@ python main.py --port 50051 --model models/qwen2-vl-2b
 **终端 1 (Mac Mini)**:
 ```bash
 cd mac-central
-source venv/bin/activate
+source .venv/bin/activate
 python main.py --port 50051
 ```
 
@@ -362,9 +384,34 @@ export LD_LIBRARY_PATH=/opt/neuro-pipeline/lib:$LD_LIBRARY_PATH
 
 ---
 
-## 六、性能调优
+## 六、Web 仪表盘
 
-### 6.1 边缘侧优化
+### 6.1 安装依赖
+
+```bash
+cd extensions/dashboard
+pip install -r requirements.txt
+```
+
+### 6.2 启动仪表盘
+
+```bash
+uvicorn app:app --host 0.0.0.0 --port 8080
+```
+
+浏览器访问 http://localhost:8080 查看实时监控面板。
+
+### 6.3 功能
+
+- 设备状态卡片（Edge RK3588 + Central Mac Mini）
+- WebSocket 实时事件推送
+- REST API: `/api/status`, `/api/events`
+
+---
+
+## 七、性能调优
+
+### 7.1 边缘侧优化
 
 **降低分辨率**:
 ```bash
@@ -383,7 +430,7 @@ export LD_LIBRARY_PATH=/opt/neuro-pipeline/lib:$LD_LIBRARY_PATH
 
 ---
 
-### 6.2 中心侧优化
+### 7.2 中心侧优化
 
 **使用量化模型**:
 ```bash
@@ -398,9 +445,9 @@ results = model.infer_batch(prompts, batch_size=4)
 
 ---
 
-## 七、系统服务配置（可选）
+## 八、系统服务配置（可选）
 
-### 7.1 边缘侧 systemd 服务
+### 8.1 边缘侧 systemd 服务
 
 创建 `/etc/systemd/system/neuro-pipeline.service`:
 
@@ -435,7 +482,7 @@ sudo systemctl status neuro-pipeline
 
 ---
 
-### 7.2 中心侧 launchd 服务（macOS）
+### 8.2 中心侧 launchd 服务（macOS）
 
 创建 `~/Library/LaunchAgents/com.neuro-pipeline.central.plist`:
 
@@ -469,9 +516,9 @@ launchctl start com.neuro-pipeline.central
 
 ---
 
-## 八、安全配置
+## 九、安全配置
 
-### 8.1 mTLS 双向认证（推荐）
+### 9.1 mTLS 双向认证（推荐）
 
 **生成证书**:
 ```bash
@@ -499,7 +546,7 @@ python main.py \
 
 ---
 
-### 8.2 防火墙配置
+### 9.2 防火墙配置
 
 **RK3588 设备**:
 ```bash
@@ -515,9 +562,9 @@ sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add /path/to/python
 
 ---
 
-## 九、监控与日志
+## 十、监控与日志
 
-### 9.1 边缘侧日志
+### 10.1 边缘侧日志
 
 **实时查看**:
 ```bash
@@ -532,7 +579,7 @@ tail -f /opt/neuro-pipeline/logs/edge.log
 
 ---
 
-### 9.2 中心侧日志
+### 10.2 中心侧日志
 
 **实时查看**:
 ```bash
@@ -548,7 +595,7 @@ logger.info("detection_received", frame_id=12345, boxes=1)
 
 ---
 
-### 9.3 性能监控
+### 10.3 性能监控
 
 **边缘侧 NPU 利用率**:
 ```bash
@@ -562,9 +609,9 @@ sudo powermetrics --samplers gpu_power -i 1000
 
 ---
 
-## 十、备份与恢复
+## 十一、备份与恢复
 
-### 10.1 备份配置
+### 11.1 备份配置
 
 ```bash
 # 边缘侧
@@ -577,7 +624,7 @@ tar -czf mac-central-backup.tar.gz mac-central/models mac-central/config
 
 ---
 
-### 10.2 恢复配置
+### 11.2 恢复配置
 
 ```bash
 # 边缘侧
@@ -591,20 +638,21 @@ tar -xzf mac-central-backup.tar.gz -C ~/
 
 ---
 
-## 十一、故障排查
+## 十二、故障排查
 
 详见 [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
 ---
 
-## 十二、参考资料
+## 十三、参考资料
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — 系统架构设计
 - [API_REFERENCE.md](API_REFERENCE.md) — gRPC API 文档
 - [TROUBLESHOOTING.md](TROUBLESHOOTING.md) — 常见问题排查
+- [KPI Report](performance/kpi-report.md) — 性能基准报告
 - [Week 2 Retrospective](devlog/week2-retro.md) — Week 2 复盘总结
 
 ---
 
-**文档版本**: v1.0.0
-**最后更新**: 2026-02-13 23:50
+**文档版本**: v2.0.0
+**最后更新**: 2026-02-14
