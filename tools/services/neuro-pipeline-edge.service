@@ -1,0 +1,32 @@
+[Unit]
+Description=Neuro-Pipeline Edge (RK3588 NPU inference)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rock
+Group=rock
+WorkingDirectory=/opt/neuro-pipeline
+ExecStart=/opt/neuro-pipeline/bin/neuro_pipeline_edge --config /opt/neuro-pipeline/config.yaml
+Restart=on-failure
+RestartSec=5
+WatchdogSec=30
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=neuro-pipeline-edge
+
+# Resource limits
+LimitNOFILE=65536
+LimitMEMLOCK=infinity
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/neuro-pipeline/logs /opt/neuro-pipeline/data
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
