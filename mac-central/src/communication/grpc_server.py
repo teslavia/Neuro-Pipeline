@@ -121,7 +121,7 @@ class NeuroPipelineServicer(neuro_pipeline_pb2_grpc.NeuroPipelineServiceServicer
         logger.debug(f"Health check from client: {request.client_id}")
         return neuro_pipeline_pb2.HealthCheckResponse(
             status=neuro_pipeline_pb2.HealthCheckResponse.SERVING,
-            version="0.4.0"
+            version="0.3.5"
         )
 
 

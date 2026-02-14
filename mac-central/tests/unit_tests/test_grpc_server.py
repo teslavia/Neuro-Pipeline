@@ -63,7 +63,7 @@ async def test_health_check(servicer):
     response = await servicer.HealthCheck(request, None)
 
     assert response.status == neuro_pipeline_pb2.HealthCheckResponse.SERVING
-    assert response.version == "0.4.0"
+    assert response.version == "0.3.5"
 
 
 @pytest.mark.asyncio
