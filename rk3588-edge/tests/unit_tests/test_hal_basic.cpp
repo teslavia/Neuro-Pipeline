@@ -32,6 +32,6 @@ TEST(HALBasic, DRMAllocatorMock) {
 
   auto buf = alloc.Allocate(640 * 480 * 3);
   EXPECT_NE(buf, nullptr);
-  EXPECT_GT(buf->size, 0u);
+  EXPECT_GT(buf->Size(), 0u);
 }
 #endif

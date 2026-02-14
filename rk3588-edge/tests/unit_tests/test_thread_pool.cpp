@@ -1,7 +1,9 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <chrono>
 #include <numeric>
+#include <thread>
 #include <vector>
 
 #include "common/thread_pool.hpp"
@@ -83,6 +85,9 @@ TEST(ThreadPoolTest, MaxQueueSizeRejectsOverflow) {
 
   // Block the worker
   pool.Submit([&block_future]() { block_future.wait(); });
+
+  // Give worker time to dequeue the blocking task
+  std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
   // Fill the queue
   pool.Submit([]() {});
