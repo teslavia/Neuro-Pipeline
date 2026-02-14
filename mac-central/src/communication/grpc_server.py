@@ -121,18 +121,20 @@ class NeuroPipelineServicer(neuro_pipeline_pb2_grpc.NeuroPipelineServiceServicer
         logger.debug(f"Health check from client: {request.client_id}")
         return neuro_pipeline_pb2.HealthCheckResponse(
             status=neuro_pipeline_pb2.HealthCheckResponse.SERVING,
-            version="0.4.0"
+            version="0.5.0"
         )
 
 
 class NeuroPipelineServer:
-    """Async gRPC server wrapper."""
+    """Async gRPC server wrapper with optional mTLS."""
 
-    def __init__(self, host: str, port: int, orchestrator, max_message_size_mb: int = 16) -> None:
+    def __init__(self, host: str, port: int, orchestrator,
+                 max_message_size_mb: int = 16, tls_config=None) -> None:
         self.host = host
         self.port = port
         self.orchestrator = orchestrator
         self.max_message_size_mb = max_message_size_mb
+        self.tls_config = tls_config
         self.server = None
 
     async def start(self) -> None:
@@ -153,10 +155,24 @@ class NeuroPipelineServer:
         )
 
         listen_addr = f"{self.host}:{self.port}"
-        self.server.add_insecure_port(listen_addr)
+
+        if self.tls_config and self.tls_config.enabled:
+            with open(self.tls_config.server_key, 'rb') as f:
+                key = f.read()
+            with open(self.tls_config.server_cert, 'rb') as f:
+                cert = f.read()
+            with open(self.tls_config.ca_cert, 'rb') as f:
+                ca = f.read()
+            creds = grpc.ssl_server_credentials(
+                [(key, cert)], ca, require_client_auth=True
+            )
+            self.server.add_secure_port(listen_addr, creds)
+            logger.info(f"gRPC server listening on {listen_addr} (mTLS)")
+        else:
+            self.server.add_insecure_port(listen_addr)
+            logger.info(f"gRPC server listening on {listen_addr} (insecure)")
 
         await self.server.start()
-        logger.info(f"gRPC server listening on {listen_addr}")
 
     async def stop(self, grace: float = 5.0) -> None:
         """Stop gRPC server gracefully."""
