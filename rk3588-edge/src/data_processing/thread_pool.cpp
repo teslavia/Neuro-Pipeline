@@ -2,7 +2,8 @@
 
 namespace data_processing {
 
-ThreadPool::ThreadPool(size_t num_threads) {
+ThreadPool::ThreadPool(size_t num_threads, size_t max_queue_size)
+    : max_queue_size_(max_queue_size) {
   for (size_t i = 0; i < num_threads; ++i) {
     workers_.emplace_back([this] {
       while (true) {
@@ -41,6 +42,11 @@ void ThreadPool::Shutdown() {
       worker.join();
     }
   }
+}
+
+size_t ThreadPool::PendingTasks() const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return tasks_.size();
 }
 
 }  // namespace data_processing

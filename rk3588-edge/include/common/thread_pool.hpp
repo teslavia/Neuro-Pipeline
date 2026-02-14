@@ -19,7 +19,7 @@ namespace data_processing {
  */
 class ThreadPool {
  public:
-  explicit ThreadPool(size_t num_threads);
+  explicit ThreadPool(size_t num_threads, size_t max_queue_size = 0);
   ~ThreadPool();
 
   ThreadPool(const ThreadPool&) = delete;
@@ -33,15 +33,19 @@ class ThreadPool {
   /// Number of worker threads.
   size_t Size() const { return workers_.size(); }
 
+  /// Number of pending tasks in the queue.
+  size_t PendingTasks() const;
+
   /// Shutdown the pool (waits for pending tasks).
   void Shutdown();
 
  private:
   std::vector<std::thread> workers_;
   std::queue<std::function<void()>> tasks_;
-  std::mutex mutex_;
+  mutable std::mutex mutex_;
   std::condition_variable cv_;
   bool stop_ = false;
+  size_t max_queue_size_ = 0;  // 0 = unlimited
 };
 
 // Template implementation must be in header
@@ -59,6 +63,9 @@ auto ThreadPool::Submit(F&& f, Args&&... args)
     std::lock_guard<std::mutex> lock(mutex_);
     if (stop_) {
       throw std::runtime_error("Submit on stopped ThreadPool");
+    }
+    if (max_queue_size_ > 0 && tasks_.size() >= max_queue_size_) {
+      throw std::runtime_error("ThreadPool queue full");
     }
     tasks_.emplace([task]() { (*task)(); });
   }

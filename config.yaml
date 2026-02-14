@@ -1,0 +1,30 @@
+# Neuro-Pipeline Configuration
+# =============================
+
+edge:
+  video_source: ""
+  camera_device: "/dev/video0"
+  model_path: "/opt/neuro-pipeline/models/yolov5s-640-640.rknn"
+  width: 1920
+  height: 1080
+  model_width: 640
+  model_height: 640
+  fps: 30
+  npu_core_mask: 0
+  confidence_threshold: 0.5
+  nms_threshold: 0.45
+  max_frames: 0
+  enable_grpc: true
+  grpc_server: "192.168.1.100:50051"
+  class_names_file: ""
+
+central:
+  host: "0.0.0.0"
+  port: 50051
+  model_path: "models/Llama-3.2-3B-Instruct"
+  max_message_size_mb: 16
+
+logging:
+  level: "info"
+  format: "text"
+  trace_enabled: true

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <fstream>
 #include <numeric>
 
 namespace ai_inference {
@@ -160,7 +161,24 @@ std::vector<common::DetectionBox> YOLOPostProcessor::NMS(
 }
 
 void YOLOPostProcessor::LoadClassNames() {
-  // COCO 80 class names
+  // Try loading from external file first
+  if (!config_.class_names_file.empty()) {
+    std::ifstream file(config_.class_names_file);
+    if (file.is_open()) {
+      class_names_.clear();
+      std::string line;
+      while (std::getline(file, line)) {
+        // Trim whitespace
+        auto start = line.find_first_not_of(" \t\r\n");
+        if (start == std::string::npos) continue;
+        auto end = line.find_last_not_of(" \t\r\n");
+        class_names_.push_back(line.substr(start, end - start + 1));
+      }
+      if (!class_names_.empty()) return;
+    }
+  }
+
+  // Fallback: hardcoded COCO 80 class names
   class_names_ = {
       "person",        "bicycle",      "car",           "motorcycle",
       "airplane",      "bus",          "train",         "truck",

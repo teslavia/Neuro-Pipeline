@@ -59,6 +59,18 @@ def generate_python() -> bool:
         if not init_file.exists():
             init_file.write_text('"""Generated protobuf code."""\n')
 
+        # Fix absolute imports to relative (grpc codegen bug)
+        grpc_file = PYTHON_OUT / "neuro_pipeline_pb2_grpc.py"
+        if grpc_file.exists():
+            text = grpc_file.read_text()
+            fixed = text.replace(
+                "import neuro_pipeline_pb2 as neuro__pipeline__pb2",
+                "from . import neuro_pipeline_pb2 as neuro__pipeline__pb2",
+            )
+            if fixed != text:
+                grpc_file.write_text(fixed)
+                print("[FIX]  Patched grpc stub to use relative import")
+
     return success
 
 

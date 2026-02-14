@@ -223,4 +223,44 @@ TEST_F(MemoryPoolTest, WriteViaVirtReadViaPhys) {
   pool.Free(ptr);
 }
 
+// ---- Stats Tests ----
+
+TEST_F(MemoryPoolTest, StatsTrackAllocationsAndFrees) {
+  data_processing::MemoryPool pool(kBlockSize, kBlockCount);
+  void* p1 = pool.Allocate();
+  void* p2 = pool.Allocate();
+  pool.Free(p1);
+
+  auto stats = pool.GetStats();
+  EXPECT_EQ(stats.total_allocations, 2u);
+  EXPECT_EQ(stats.total_frees, 1u);
+  EXPECT_EQ(stats.peak_usage, 2u);
+
+  pool.Free(p2);
+}
+
+TEST_F(MemoryPoolTest, StatsPeakUsage) {
+  data_processing::MemoryPool pool(kBlockSize, kBlockCount);
+  std::vector<void*> ptrs;
+  for (size_t i = 0; i < 5; ++i) {
+    ptrs.push_back(pool.Allocate());
+  }
+  for (auto* p : ptrs) pool.Free(p);
+
+  // Allocate 2 more
+  pool.Allocate();
+  pool.Allocate();
+
+  auto stats = pool.GetStats();
+  EXPECT_EQ(stats.peak_usage, 5u);  // Peak was 5
+}
+
+TEST_F(MemoryPoolTest, AlignmentParameter) {
+  data_processing::MemoryPool pool(kBlockSize, kBlockCount, 0x10000000, 64);
+  EXPECT_EQ(pool.Alignment(), 64u);
+  void* ptr = pool.Allocate();
+  ASSERT_NE(ptr, nullptr);
+  pool.Free(ptr);
+}
+
 }  // namespace

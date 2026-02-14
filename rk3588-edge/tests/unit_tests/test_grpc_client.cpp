@@ -168,3 +168,27 @@ TEST_F(GRPCClientTest, ConcurrentStreamAndDisconnect) {
     disconnector.join();
     EXPECT_FALSE(client.IsConnected());
 }
+
+// ---------------------------------------------------------------------------
+// Event stream tests (no server — expect graceful failure)
+// ---------------------------------------------------------------------------
+
+TEST_F(GRPCClientTest, StartEventStreamWithoutConnection) {
+    GRPCClient client(config);
+    bool called = false;
+    EXPECT_FALSE(client.StartEventStream(
+        [&called](const neuro_pipeline::ControlCommand&) { called = true; }));
+    EXPECT_FALSE(called);
+}
+
+TEST_F(GRPCClientTest, SendEdgeEventWithoutStream) {
+    GRPCClient client(config);
+    neuro_pipeline::EdgeEvent event;
+    event.set_type(neuro_pipeline::EdgeEvent::HEALTH_UPDATE);
+    EXPECT_FALSE(client.SendEdgeEvent(event));
+}
+
+TEST_F(GRPCClientTest, StopEventStreamWhenNotStarted) {
+    GRPCClient client(config);
+    client.StopEventStream();  // Should not crash
+}

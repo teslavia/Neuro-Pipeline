@@ -20,6 +20,8 @@ class YOLOPostProcessor {
     uint32_t num_classes = 80;  // COCO dataset
     uint32_t input_width = 640;
     uint32_t input_height = 640;
+    std::string class_names_file;  // External file, fallback to hardcoded
+    std::string anchors_file;      // Reserved for future use
   };
 
   explicit YOLOPostProcessor(const Config& config);

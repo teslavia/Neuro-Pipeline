@@ -51,6 +51,9 @@ class PipelineCoordinator {
   void Stop();
   bool IsRunning() const { return running_.load(); }
 
+  /// Apply a control command from central server.
+  void ApplyCommand(int command_type, const std::string& param_value);
+
   /// Get performance stats.
   double GetAvgLatencyMs() const { return avg_latency_ms_; }
   uint32_t GetFPS() const { return measured_fps_; }

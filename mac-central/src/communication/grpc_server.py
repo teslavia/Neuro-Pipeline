@@ -7,9 +7,14 @@ import logging
 from typing import AsyncIterator
 
 import grpc
-from src.generated import neuro_pipeline_pb2, neuro_pipeline_pb2_grpc
 
-logger = logging.getLogger(__name__)
+try:
+    import structlog
+    logger = structlog.get_logger(__name__)
+except ImportError:
+    logger = logging.getLogger(__name__)
+
+from src.generated import neuro_pipeline_pb2, neuro_pipeline_pb2_grpc
 
 
 class NeuroPipelineServicer(neuro_pipeline_pb2_grpc.NeuroPipelineServiceServicer):
@@ -62,12 +67,13 @@ class NeuroPipelineServicer(neuro_pipeline_pb2_grpc.NeuroPipelineServiceServicer
         )
 
     async def SendControlCommand(self, request, context: grpc.aio.ServicerContext):
-        """Send control command to edge device."""
-        logger.info(f"Received control command: type={request.type}")
+        """Send control command to edge device via command queue."""
+        logger.info(f"Received control command: type={request.type}, id={request.command_id}")
+        await self.orchestrator.send_command(request)
         return neuro_pipeline_pb2.CommandResponse(
             success=True,
-            message="Command received",
-            command_id=request.command_id
+            message="Command queued",
+            command_id=request.command_id,
         )
 
     async def BidirectionalEventStream(
@@ -75,36 +81,72 @@ class NeuroPipelineServicer(neuro_pipeline_pb2_grpc.NeuroPipelineServiceServicer
         request_iterator: AsyncIterator,
         context: grpc.aio.ServicerContext,
     ):
-        """Bidirectional event streaming."""
-        async for event in request_iterator:
-            logger.debug(f"Received edge event: type={event.type}")
-            yield neuro_pipeline_pb2.CentralEvent(
-                type=neuro_pipeline_pb2.CentralEvent.COMMAND_ACK,
-                timestamp_us=event.timestamp_us,
-                payload="Event acknowledged"
-            )
+        """Bidirectional event streaming with command forwarding."""
+
+        async def read_events():
+            try:
+                async for event in request_iterator:
+                    logger.debug(f"Received edge event: type={event.type}")
+                    await self.orchestrator.handle_edge_event(event)
+            except asyncio.CancelledError:
+                pass
+
+        reader_task = asyncio.create_task(read_events())
+
+        try:
+            while not context.cancelled():
+                try:
+                    cmd = await asyncio.wait_for(
+                        self.orchestrator.get_pending_command(), timeout=1.0
+                    )
+                    yield neuro_pipeline_pb2.CentralEvent(
+                        type=neuro_pipeline_pb2.CentralEvent.CONTROL_COMMAND,
+                        timestamp_us=0,
+                        payload=f"command_id={cmd.command_id}",
+                        command=cmd,
+                    )
+                except asyncio.TimeoutError:
+                    continue
+        except asyncio.CancelledError:
+            pass
+        finally:
+            reader_task.cancel()
+            try:
+                await reader_task
+            except asyncio.CancelledError:
+                pass
 
     async def HealthCheck(self, request, context: grpc.aio.ServicerContext):
         """Health check endpoint."""
         logger.debug(f"Health check from client: {request.client_id}")
         return neuro_pipeline_pb2.HealthCheckResponse(
             status=neuro_pipeline_pb2.HealthCheckResponse.SERVING,
-            version="0.3.0"
+            version="0.4.0"
         )
 
 
 class NeuroPipelineServer:
     """Async gRPC server wrapper."""
 
-    def __init__(self, host: str, port: int, orchestrator) -> None:
+    def __init__(self, host: str, port: int, orchestrator, max_message_size_mb: int = 16) -> None:
         self.host = host
         self.port = port
         self.orchestrator = orchestrator
+        self.max_message_size_mb = max_message_size_mb
         self.server = None
 
     async def start(self) -> None:
-        """Start gRPC server."""
-        self.server = grpc.aio.server()
+        """Start gRPC server with production-grade options."""
+        max_bytes = self.max_message_size_mb * 1024 * 1024
+        options = [
+            ("grpc.max_receive_message_length", max_bytes),
+            ("grpc.max_send_message_length", max_bytes),
+            ("grpc.keepalive_time_ms", 30000),
+            ("grpc.keepalive_timeout_ms", 10000),
+            ("grpc.keepalive_permit_without_calls", 1),
+            ("grpc.http2.max_pings_without_data", 0),
+        ]
+        self.server = grpc.aio.server(options=options, compression=grpc.Compression.Gzip)
 
         neuro_pipeline_pb2_grpc.add_NeuroPipelineServiceServicer_to_server(
             NeuroPipelineServicer(self.orchestrator), self.server
