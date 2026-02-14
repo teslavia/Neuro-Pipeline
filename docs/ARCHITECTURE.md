@@ -253,3 +253,34 @@ RK3588 Edge                                    Mac Mini Central
 | [kaylorchen/rk3588-yolo-demo](https://github.com/kaylorchen/rk3588-yolo-demo) | 多线程 YOLO 100FPS |
 | [ml-explore/mlx](https://github.com/ml-explore/mlx) | Apple Silicon ML 框架 |
 | [ScorcaF/Edge-Cloud-Collaborative-Inference](https://github.com/ScorcaF/Edge-Cloud-Collaborative-Inference) | 边缘-云协同推理 |
+
+---
+
+## v0.5.0 Additions (Week 5)
+
+### Storage Layer
+- SQLite-based DetectionStore (`mac-central/src/storage/detection_store.py`)
+- Thread-safe with threading.Lock, WAL mode
+- Schema: detections table with timestamp index
+- Injected into CentralOrchestrator via constructor
+
+### Dual-Mode Inference Engine
+- `mode="llm"`: text-only via mlx_lm (existing)
+- `mode="vlm"`: vision-language via mlx_vlm (Qwen2-VL)
+- `analyze_image()` uses real VLM when available, falls back to LLM
+- Configured via `central.inference_mode` and `central.vlm_model_path`
+
+### Async VLM Queue
+- `process_detection()` enqueues VLM work to `_vlm_queue` (non-blocking)
+- `_vlm_worker()` background task consumes queue serially
+- Prevents VLM latency (326ms-1.9s) from blocking gRPC stream processing
+
+### mTLS Security
+- Optional mTLS for gRPC (config-driven `tls.enabled`)
+- Certificate generation: `tools/certs/generate_certs.sh`
+- Server: `grpc.ssl_server_credentials` with client auth
+- Client: `grpc::SslCredentials` with mutual authentication
+
+### Edge Frame Skip
+- `edge.frame_skip_interval` config: send every Nth frame to central
+- Reduces central server load for high-FPS edge streams
