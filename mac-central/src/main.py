@@ -63,7 +63,7 @@ async def main():
     model_path = Path(args.model_path or cfg.central.model_path)
 
     logger.info("=" * 60)
-    logger.info("  Neuro-Pipeline Central Server v0.5.0")
+    logger.info("  Neuro-Pipeline Central Server v1.0.0")
     logger.info("=" * 60)
     logger.info(f"Host: {host}:{port}")
     logger.info(f"Model: {model_path}")
