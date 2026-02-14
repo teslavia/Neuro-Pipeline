@@ -1,6 +1,6 @@
 # Neuro-Pipeline Architecture Design
 
-**Version**: 2.0.0
+**Version**: 1.0.0
 **Date**: 2026-02-14
 **Author**: Teslavia
 
@@ -97,7 +97,7 @@
 │   mlx_llm_inference.py / prompt_generator.py          │
 ├─────────────────────────────────────────────────────┤
 │              Layer 2: Data Processing                │
-│            data_converter.py                          │
+│         data_converter.py / SQLite + Metrics         │
 ├─────────────────────────────────────────────────────┤
 │       Layer 1: OS / Hardware (Apple Silicon)          │
 │          UMA / Neural Engine / GPU                    │
@@ -237,7 +237,6 @@ RK3588 Edge                                    Mac Mini Central
 
 - 多摄像头支持
 - 云存储集成（S3 / GCS）
-- SQLite 检测历史存储
 - 模型热替换（无需重启更新 YOLO）
 - 多边缘节点聚合到单中心服务器
 - Kubernetes 边缘部署 (KubeEdge)
@@ -256,9 +255,49 @@ RK3588 Edge                                    Mac Mini Central
 
 ---
 
-## v0.5.0 Additions (Week 5)
+## 11. Observability (v1.0.0)
 
-### Storage Layer
+### Prometheus Metrics
+- **Counters**:
+  - `detections_total` — 累计检测次数
+  - `grpc_calls_total` — gRPC 调用次数（按方法和状态分类）
+  - `vlm_inferences_total` — VLM 推理次数
+- **Histograms**:
+  - `inference_latency_seconds` — 推理延迟分布（YOLO/VLM）
+  - `grpc_request_duration_seconds` — gRPC 请求耗时
+- **Gauges**:
+  - `npu_utilization_percent` — NPU 利用率（边缘侧）
+  - `vlm_queue_depth` — VLM 队列深度（中心侧）
+  - `active_connections` — 活跃 gRPC 连接数
+- **Endpoint**: `/metrics` (Prometheus 文本格式)
+
+### Health Probes
+- **Liveness Probe** (`/healthz`): 进程存活检查，返回 200 OK
+- **Readiness Probe** (`/readyz`): 服务就绪检查（模型加载、gRPC 监听、数据库连接）
+
+### Circuit Breaker
+- **States**: Closed (正常) → Open (熔断) → Half-Open (试探)
+- **Trigger**: VLM 推理连续失败 N 次后进入 Open 状态
+- **Recovery**: Half-Open 状态下成功 M 次后恢复 Closed
+- **Fallback**: Open 状态下直接返回降级响应，避免级联故障
+
+### Retry Patterns
+- **Async Retry**: VLM 推理失败时指数退避重试（最多 3 次）
+- **Sync Retry**: SQLite 锁冲突时短延迟重试（最多 5 次）
+- **Backoff**: 初始 100ms，每次翻倍，最大 3.2s
+
+### Alerting
+- **CRITICAL Log**: 关键错误自动记录到日志（VLM 熔断、数据库故障）
+- **Webhook POST**: 可选 HTTP POST 通知外部系统（配置 `alerting.webhook_url`）
+- **Cooldown**: 同类告警 5 分钟内最多发送 1 次，防止告警风暴
+
+---
+
+## v0.5.0–v1.0.0 Additions
+
+### Week 5 (v0.5.0)
+
+#### Storage Layer
 - SQLite-based DetectionStore (`mac-central/src/storage/detection_store.py`)
 - Thread-safe with threading.Lock, WAL mode
 - Schema: detections table with timestamp index
@@ -284,3 +323,30 @@ RK3588 Edge                                    Mac Mini Central
 ### Edge Frame Skip
 - `edge.frame_skip_interval` config: send every Nth frame to central
 - Reduces central server load for high-FPS edge streams
+
+### Week 6 (v1.0.0)
+
+#### Prometheus Metrics Export
+- Counters: `detections_total`, `grpc_calls_total`, `vlm_inferences_total`
+- Histograms: `inference_latency_seconds`, `grpc_request_duration_seconds`
+- Gauges: `npu_utilization_percent`, `vlm_queue_depth`, `active_connections`
+- `/metrics` endpoint for Prometheus scraping
+
+#### Health Probes
+- `/healthz`: Liveness probe (进程存活)
+- `/readyz`: Readiness probe (服务就绪，含模型加载、gRPC、数据库检查)
+
+#### Circuit Breaker
+- 3-state (Closed/Open/Half-Open) for VLM inference
+- Prevents cascade failures when VLM service degrades
+- Configurable failure threshold and recovery attempts
+
+#### Retry Patterns
+- Async retry with exponential backoff for VLM inference (max 3 attempts)
+- Sync retry for SQLite lock conflicts (max 5 attempts)
+- Backoff: 100ms → 200ms → 400ms → ... (max 3.2s)
+
+#### Alerting
+- CRITICAL log for key failures (VLM circuit open, DB errors)
+- Optional webhook POST to external systems (configurable URL)
+- Cooldown mechanism: max 1 alert per type per 5 minutes

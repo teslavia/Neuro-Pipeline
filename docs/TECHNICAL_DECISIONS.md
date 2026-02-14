@@ -1,7 +1,7 @@
 # Technical Decisions Record
 
 **Project**: Neuro-Pipeline
-**Version**: v0.5.0
+**Version**: v1.0.0
 **Last Updated**: 2026-02-14
 
 ---
@@ -255,6 +255,12 @@ void* vaddr = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, dma_fd, 0)
 | TD-010 | Test Coverage 80% | ✅ | 4 | High (181 tests) | None |
 | TD-011 | Config-Driven VLM Rules | ✅ | 4 | Medium (no-code config) | None |
 | TD-012 | FastAPI + htmx Dashboard | ✅ | 4 | Medium (monitoring) | Low |
+| TD-013 | SQLite Persistence | ✅ | 5 | Medium (restart survival) | None |
+| TD-014 | mTLS gRPC Security | ✅ | 5 | High (production security) | Low |
+| TD-015 | mlx-vlm Multimodal | ✅ | 5 | High (image understanding) | Low |
+| TD-016 | Async VLM Queue | ✅ | 5 | Medium (non-blocking) | Low |
+| TD-017 | Prometheus Metrics | ✅ | 6 | High (observability) | None |
+| TD-018 | Circuit Breaker | ✅ | 6 | High (reliability) | Low |
 
 ---
 
@@ -409,6 +415,44 @@ void* vaddr = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, dma_fd, 0)
 **Rationale**: Bounded queue (maxsize=32) provides backpressure, serial worker avoids MLX contention
 
 **Implementation**: `mac-central/src/application_logic/central_orchestrator.py`
+
+---
+
+### TD-017: Prometheus Metrics Export
+
+**Date**: 2026-02-14 (Week 6)
+**Status**: ✅ Implemented
+**Context**: No runtime observability — can't monitor inference latency, error rates, or resource usage in production
+
+**Decision**: Prometheus-compatible /metrics endpoint with counters, histograms, and gauges
+
+**Alternatives Considered**:
+1. StatsD (push model, extra infra)
+2. Custom JSON endpoint (no ecosystem)
+3. OpenTelemetry (overkill for single-node)
+
+**Rationale**: Pull-based, zero external deps, Grafana-compatible, Python prometheus_client library
+
+**Implementation**: `mac-central/src/observability/metrics.py`
+
+---
+
+### TD-018: Circuit Breaker for VLM Inference
+
+**Date**: 2026-02-14 (Week 6)
+**Status**: ✅ Implemented
+**Context**: VLM inference failures (OOM, timeout) could cascade and block all detection processing
+
+**Decision**: 3-state circuit breaker (closed → open → half_open) wrapping VLM calls
+
+**Alternatives Considered**:
+1. Simple retry (no backoff, hammers failing service)
+2. Bulkhead (process isolation, IPC overhead)
+3. Rate limiter (doesn't handle failures)
+
+**Rationale**: Prevents cascade failures, auto-recovers after cooldown (30s), minimal code (~60 lines)
+
+**Implementation**: `mac-central/src/observability/circuit_breaker.py`
 
 ---
 

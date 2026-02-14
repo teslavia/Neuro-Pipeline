@@ -1,6 +1,6 @@
 # Neuro-Pipeline 部署指南 (Deployment Guide)
 
-**版本**: v0.4.0
+**版本**: v1.0.0
 **更新日期**: 2026-02-14
 
 ---
@@ -644,7 +644,74 @@ tar -xzf mac-central-backup.tar.gz -C ~/
 
 ---
 
-## 十三、参考资料
+## 十三、可观测性 (Observability)
+
+### 13.1 Prometheus 指标
+
+中心服务器暴露 Prometheus 格式的指标端点：
+
+```bash
+curl http://localhost:9090/metrics
+```
+
+**核心指标**:
+- `neuro_pipeline_detections_total` — 检测事件计数器
+- `neuro_pipeline_inference_duration_seconds` — VLM 推理延迟直方图
+- `neuro_pipeline_grpc_requests_total` — gRPC 请求计数器
+- `neuro_pipeline_circuit_breaker_state` — 熔断器状态 (0=closed, 1=open, 2=half_open)
+
+---
+
+### 13.2 健康探针
+
+**存活探针 (Liveness)**:
+```bash
+curl http://localhost:9090/healthz
+# 返回 200 OK 表示服务运行中
+```
+
+**就绪探针 (Readiness)**:
+```bash
+curl http://localhost:9090/readyz
+# 返回 200 OK 表示服务可接受请求（MLX 模型已加载）
+```
+
+---
+
+### 13.3 熔断器 (Circuit Breaker)
+
+VLM 推理自动熔断保护：
+
+- **触发条件**: 连续 5 次推理失败
+- **熔断时长**: 30 秒
+- **恢复策略**: 半开状态尝试 1 次请求，成功则关闭熔断器
+
+**监控熔断状态**:
+```bash
+curl http://localhost:9090/metrics | grep circuit_breaker_state
+```
+
+---
+
+### 13.4 告警 (Alerting)
+
+关键事件触发 webhook POST 通知：
+
+**配置** (config.yaml):
+```yaml
+alerting:
+  webhook_url: "https://your-webhook.example.com/alerts"
+  cooldown_seconds: 300  # 同一告警 5 分钟内不重复发送
+```
+
+**告警事件**:
+- VLM 推理失败超过阈值
+- 熔断器打开
+- 存储写入失败
+
+---
+
+## 十四、参考资料
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — 系统架构设计
 - [API_REFERENCE.md](API_REFERENCE.md) — gRPC API 文档
@@ -654,55 +721,5 @@ tar -xzf mac-central-backup.tar.gz -C ~/
 
 ---
 
-**文档版本**: v2.0.0
+**文档版本**: v1.0.0
 **最后更新**: 2026-02-14
-
----
-
-## mTLS Deployment
-
-```bash
-# Generate certificates
-bash tools/certs/generate_certs.sh certs/
-
-# Copy to edge device
-scp certs/ca.pem certs/client.pem certs/client-key.pem rock@192.168.1.70:/opt/neuro-pipeline/certs/
-
-# Enable in config.yaml
-# tls:
-#   enabled: true
-#   ca_cert: "certs/ca.pem"
-#   server_cert: "certs/server.pem"
-#   server_key: "certs/server-key.pem"
-```
-
-## systemd / launchd Service Installation
-
-### Edge (RK3588 — systemd)
-```bash
-sudo cp tools/services/neuro-pipeline-edge.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now neuro-pipeline-edge
-journalctl -u neuro-pipeline-edge -f
-```
-
-### Central (Mac — launchd)
-```bash
-cp tools/services/com.neuro-pipeline.central.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.neuro-pipeline.central.plist
-```
-
-## SQLite Detection Storage
-
-Detection events are persisted to SQLite at `data/detections.db` (configurable via `storage.db_path`).
-
-- Auto-cleanup: events older than `retention_days` (default 7) are purged
-- Query API: `GET /api/events/history?hours=24&limit=100`
-- Thread-safe: uses threading.Lock for concurrent access
-
-## Log Rotation
-
-Configured via `logging` section in config.yaml:
-- `file_path`: log file location (e.g., `logs/central.log`)
-- `max_bytes`: max file size before rotation (default 10MB)
-- `backup_count`: number of rotated files to keep (default 5)

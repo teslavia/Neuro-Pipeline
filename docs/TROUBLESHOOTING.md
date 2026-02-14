@@ -1,6 +1,6 @@
 # Neuro-Pipeline 故障排查指南 (Troubleshooting Guide)
 
-**版本**: v1.1.0
+**版本**: v1.0.0
 **更新日期**: 2026-02-14
 
 ---
@@ -584,7 +584,7 @@ bash tools/collect_diagnostics.sh > diagnostics.txt
 
 ---
 
-## 九、Week 3/4 新增问题
+## 九、gRPC / MLX / Dashboard 问题
 
 ### 9.1 gRPC 连接失败
 
@@ -645,7 +645,7 @@ bash tools/convert_mlx_model.sh
 
 ---
 
-## 十、参考资料
+## 十一、参考资料
 
 - [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) — 部署指南
 - [ARCHITECTURE.md](ARCHITECTURE.md) — 架构设计
@@ -656,36 +656,97 @@ bash tools/convert_mlx_model.sh
 
 ---
 
-**文档版本**: v1.2.0
-**最后更新**: 2026-02-14
+**文档版本**: v1.0.0
 
 ---
 
-## Week 5 Issues
+## 十、安全与存储问题
 
-### SQLite "database is locked"
-- Cause: multiple processes accessing the same DB file
-- Fix: ensure only one central server instance runs; check `storage.db_path` is unique
-- The DetectionStore uses `threading.Lock` for thread safety within a single process
+### 10.1 SQLite "database is locked"
 
-### TLS certificate errors
-- "certificate verify failed": CA cert mismatch — regenerate with `bash tools/certs/generate_certs.sh`
-- "handshake failed": client cert not signed by same CA
-- Check SAN (Subject Alternative Name) includes the server IP/hostname
-- Verify file permissions: private keys should be 600
+**症状**: 数据库访问时出现 "database is locked" 错误
 
-### VLM model loading fails
-- "mlx_vlm not installed": `pip install mlx-vlm>=0.1.0`
-- "VLM model path not found": check `central.vlm_model_path` in config.yaml
-- Convert model first: `bash tools/convert_mlx_model.sh --vlm`
-- Falls back to text-only LLM mode gracefully (no crash)
+**原因**: 多个进程同时访问同一数据库文件
 
-### VLM queue full warning
-- "VLM queue full, dropping analysis request": inference is slower than detection rate
-- Increase `edge.frame_skip_interval` to reduce load
-- Or use a faster/smaller VLM model
+**解决方案**:
+- 确保只有一个 central server 实例运行
+- 检查 `storage.db_path` 配置是否唯一
+- DetectionStore 使用 `threading.Lock` 保证单进程内线程安全
 
-### Log rotation not working
-- Check `logging.file_path` is set in config.yaml
-- Ensure the directory exists and is writable
-- Logs rotate at `max_bytes` (default 10MB), keeping `backup_count` (default 5) files
+---
+
+### 10.2 TLS 证书错误
+
+**症状**:
+- "certificate verify failed": CA 证书不匹配
+- "handshake failed": 客户端证书未被同一 CA 签名
+
+**原因**: 证书配置错误或过期
+
+**解决方案**:
+```bash
+# 重新生成证书
+bash tools/certs/generate_certs.sh
+
+# 检查 SAN (Subject Alternative Name) 包含服务器 IP/hostname
+openssl x509 -in certs/server.crt -text -noout | grep "Subject Alternative Name"
+
+# 验证文件权限（私钥应为 600）
+chmod 600 certs/*.key
+```
+
+---
+
+### 10.3 VLM 模型加载失败
+
+**症状**:
+- "mlx_vlm not installed"
+- "VLM model path not found"
+
+**原因**: VLM 依赖未安装或模型路径配置错误
+
+**解决方案**:
+```bash
+# 安装 mlx-vlm
+pip install mlx-vlm>=0.1.0
+
+# 检查模型路径
+ls mac-central/models/qwen2-vl-2b/
+
+# 转换模型
+bash tools/convert_mlx_model.sh --vlm
+
+# 确认 config.yaml 中 central.vlm_model_path 配置正确
+```
+
+**注意**: 如果 VLM 模型加载失败，系统会优雅降级到纯文本 LLM 模式，不会崩溃
+
+---
+
+### 10.4 VLM 队列满警告
+
+**症状**: "VLM queue full, dropping analysis request"
+
+**原因**: VLM 推理速度慢于检测速率
+
+**解决方案**:
+- 增加 `edge.frame_skip_interval` 减少负载
+- 使用更快/更小的 VLM 模型
+- 调整 VLM 队列大小（默认 32）
+
+---
+
+### 10.5 日志轮转不工作
+
+**症状**: 日志文件持续增长不轮转
+
+**原因**: 日志配置错误或目录权限不足
+
+**解决方案**:
+- 检查 `logging.file_path` 在 config.yaml 中已设置
+- 确保目录存在且可写
+- 日志在达到 `max_bytes`（默认 10MB）时轮转，保留 `backup_count`（默认 5）个文件
+
+---
+
+## 十一、参考资料

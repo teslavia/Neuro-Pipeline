@@ -1,6 +1,6 @@
 # Neuro-Pipeline API Reference
 
-**Version**: 2.0.0
+**Version**: 1.0.0
 **Protocol**: gRPC with Protocol Buffers 3
 **Generated From**: `proto/neuro_pipeline.proto`
 
@@ -397,6 +397,34 @@ class MLXInferenceEngine:
   }
 }
 ```
+
+---
+
+## Observability Endpoints
+
+### Prometheus Metrics
+**Endpoint**: `GET /metrics` (port 9090)
+**Format**: Prometheus text exposition
+
+Key metrics:
+| Metric | Type | Description |
+|--------|------|-------------|
+| `neuro_detections_total` | Counter | Total detections processed |
+| `neuro_grpc_requests_total` | Counter | gRPC calls by method |
+| `neuro_inference_duration_seconds` | Histogram | VLM inference latency |
+| `neuro_npu_utilization` | Gauge | Edge NPU usage [0-100] |
+| `neuro_vlm_queue_depth` | Gauge | Pending VLM analysis requests |
+
+### Health Probes
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/healthz` | GET | Liveness probe — returns 200 if process is alive |
+| `/readyz` | GET | Readiness probe — returns 200 if model loaded and gRPC connected |
+
+### Detection History
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/events/history` | GET | Query SQLite detection history (`?hours=24&limit=100`) |
 
 ---
 
