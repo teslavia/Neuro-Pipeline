@@ -18,6 +18,15 @@ except ImportError:
 
 from src.llm_vlm.mlx_llm_inference import MLXInferenceEngine
 from src.llm_vlm.prompt_generator import PromptGenerator
+from src.observability.metrics import (
+    detections_total,
+    vlm_requests_total,
+    vlm_latency,
+    vlm_queue_depth,
+    events_stored,
+)
+from src.observability.circuit_breaker import CircuitBreaker
+from src.observability.alerting import AlertManager
 
 
 @dataclass
@@ -38,6 +47,8 @@ class CentralOrchestrator:
         detection_store=None,
         inference_mode: str = "llm",
         vlm_model_path: Optional[Path] = None,
+        circuit_breaker: Optional[CircuitBreaker] = None,
+        alert_manager: Optional[AlertManager] = None,
     ) -> None:
         self.model_path = model_path
         self.inference_engine: Optional[MLXInferenceEngine] = None
@@ -52,6 +63,8 @@ class CentralOrchestrator:
         self._vlm_model_path = vlm_model_path
         self._vlm_queue: asyncio.Queue = asyncio.Queue(maxsize=32)
         self._vlm_worker_task: Optional[asyncio.Task] = None
+        self._circuit_breaker = circuit_breaker or CircuitBreaker()
+        self._alert_manager = alert_manager
 
     async def initialize(self) -> None:
         """Initialize orchestrator and load models."""
@@ -77,6 +90,7 @@ class CentralOrchestrator:
 
         detections = []
         for box in result.boxes:
+            detections_total.labels(class_name=box.class_name).inc()
             detections.append({
                 "class_name": box.class_name,
                 "confidence": box.confidence,
@@ -103,7 +117,13 @@ class CentralOrchestrator:
                     "rule": matched_rule.class_name,
                 })
             except asyncio.QueueFull:
+                vlm_requests_total.labels(status="dropped").inc()
                 logger.warning("VLM queue full, dropping analysis request")
+                if self._alert_manager:
+                    asyncio.create_task(
+                        self._alert_manager.check_and_fire("vlm_queue_full", {"frame_id": result.frame_id})
+                    )
+            vlm_queue_depth.set(self._vlm_queue.qsize())
 
         self._record_event({
             "type": "detection",
@@ -122,10 +142,26 @@ class CentralOrchestrator:
                 item = await self._vlm_queue.get()
             except asyncio.CancelledError:
                 break
+            vlm_queue_depth.set(self._vlm_queue.qsize())
+
+            if not self._circuit_breaker.allow_request():
+                vlm_requests_total.labels(status="circuit_open").inc()
+                logger.warning("Circuit breaker open, skipping VLM request")
+                self._vlm_queue.task_done()
+                continue
+
             try:
-                vlm_result = await self.inference_engine.analyze_image(
-                    item["frame_data"], item["prompt"]
+                t0 = time.perf_counter()
+                vlm_result = await asyncio.wait_for(
+                    self.inference_engine.analyze_image(
+                        item["frame_data"], item["prompt"]
+                    ),
+                    timeout=30.0,
                 )
+                elapsed = time.perf_counter() - t0
+                vlm_latency.observe(elapsed)
+                self._circuit_breaker.record_success()
+                vlm_requests_total.labels(status="success").inc()
                 logger.info(f"VLM result (frame {item['frame_id']}): {vlm_result[:100]}...")
                 self._record_event({
                     "type": "vlm_analysis",
@@ -136,8 +172,16 @@ class CentralOrchestrator:
                     "rule": item["rule"],
                     "timestamp": time.time(),
                 })
-            except Exception as e:
+            except (asyncio.TimeoutError, Exception) as e:
+                self._circuit_breaker.record_failure()
+                vlm_requests_total.labels(status="error").inc()
                 logger.error(f"VLM inference failed: {e}")
+                if self._circuit_breaker.state == "open" and self._alert_manager:
+                    asyncio.create_task(
+                        self._alert_manager.check_and_fire(
+                            "circuit_breaker_open", {"error": str(e)}
+                        )
+                    )
             finally:
                 self._vlm_queue.task_done()
 
@@ -164,6 +208,13 @@ class CentralOrchestrator:
     async def handle_edge_event(self, event: Any) -> None:
         """Process an edge event received via bidirectional stream."""
         logger.info(f"Edge event: type={event.type}, desc={event.description}")
+
+    def is_ready(self) -> bool:
+        """Check if orchestrator is ready to process requests."""
+        return (
+            self.inference_engine is not None
+            and getattr(self.inference_engine, "_loaded", False)
+        )
 
     async def shutdown(self) -> None:
         """Graceful shutdown."""
@@ -199,6 +250,7 @@ class CentralOrchestrator:
         if self._detection_store:
             try:
                 self._detection_store.record(event)
+                events_stored.inc()
             except Exception as e:
                 logger.error(f"Failed to persist event: {e}")
         for q in self._event_listeners:

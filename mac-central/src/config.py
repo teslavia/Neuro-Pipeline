@@ -49,11 +49,40 @@ class StorageConfig:
 
 
 @dataclass
+class MetricsConfig:
+    enabled: bool = True
+    port: int = 9090
+
+
+@dataclass
+class AlertingConfig:
+    enabled: bool = True
+    webhook_url: str = ""
+    rules: List["AlertRuleConfig"] = field(default_factory=list)
+
+
+@dataclass
+class AlertRuleConfig:
+    name: str = ""
+    cooldown_seconds: float = 300.0
+
+
+@dataclass
+class CircuitBreakerConfig:
+    failure_threshold: int = 5
+    recovery_timeout: float = 30.0
+    half_open_max: int = 1
+
+
+@dataclass
 class AppConfig:
     central: CentralConfig = field(default_factory=CentralConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     tls: TLSConfig = field(default_factory=TLSConfig)
     storage: StorageConfig = field(default_factory=StorageConfig)
+    metrics: MetricsConfig = field(default_factory=MetricsConfig)
+    alerting: AlertingConfig = field(default_factory=AlertingConfig)
+    circuit_breaker: CircuitBreakerConfig = field(default_factory=CircuitBreakerConfig)
     vlm_rules: List[VLMRuleConfig] = field(default_factory=lambda: [VLMRuleConfig()])
 
     @classmethod
@@ -104,4 +133,27 @@ class AppConfig:
                 )
                 for r in rules_data
             ]
+        mt = data.get("metrics", {})
+        cfg.metrics = MetricsConfig(
+            enabled=bool(mt.get("enabled", cfg.metrics.enabled)),
+            port=int(mt.get("port", cfg.metrics.port)),
+        )
+        al = data.get("alerting", {})
+        cfg.alerting = AlertingConfig(
+            enabled=bool(al.get("enabled", cfg.alerting.enabled)),
+            webhook_url=al.get("webhook_url", cfg.alerting.webhook_url),
+            rules=[
+                AlertRuleConfig(
+                    name=r.get("name", ""),
+                    cooldown_seconds=float(r.get("cooldown_seconds", 300)),
+                )
+                for r in al.get("rules", [])
+            ],
+        )
+        cb = data.get("circuit_breaker", {})
+        cfg.circuit_breaker = CircuitBreakerConfig(
+            failure_threshold=int(cb.get("failure_threshold", cfg.circuit_breaker.failure_threshold)),
+            recovery_timeout=float(cb.get("recovery_timeout", cfg.circuit_breaker.recovery_timeout)),
+            half_open_max=int(cb.get("half_open_max", cfg.circuit_breaker.half_open_max)),
+        )
         return cfg

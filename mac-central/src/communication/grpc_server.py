@@ -15,6 +15,7 @@ except ImportError:
     logger = logging.getLogger(__name__)
 
 from src.generated import neuro_pipeline_pb2, neuro_pipeline_pb2_grpc
+from src.observability.metrics import grpc_requests_total, grpc_latency, edge_connections
 
 
 class NeuroPipelineServicer(neuro_pipeline_pb2_grpc.NeuroPipelineServiceServicer):
@@ -41,6 +42,7 @@ class NeuroPipelineServicer(neuro_pipeline_pb2_grpc.NeuroPipelineServiceServicer
         """
         import time
         frames_received = 0
+        edge_connections.inc()
 
         try:
             async for result in request_iterator:
@@ -51,14 +53,19 @@ class NeuroPipelineServicer(neuro_pipeline_pb2_grpc.NeuroPipelineServiceServicer
                 )
                 await self.orchestrator.process_detection(result)
                 frames_received += 1
-                t1 = time.perf_counter()
-                logger.info(f"[Perf] Processing latency: {(t1-t0)*1000:.1f}ms")
+                elapsed = time.perf_counter() - t0
+                grpc_latency.labels(method="StreamDetectionResults").observe(elapsed)
+                grpc_requests_total.labels(method="StreamDetectionResults", status="ok").inc()
+                logger.info(f"[Perf] Processing latency: {elapsed*1000:.1f}ms")
 
         except Exception as e:
+            grpc_requests_total.labels(method="StreamDetectionResults", status="error").inc()
             logger.error(f"Error during streaming: {e}")
             return neuro_pipeline_pb2.StreamResponse(
                 success=False, message=str(e), frames_received=frames_received
             )
+        finally:
+            edge_connections.dec()
 
         return neuro_pipeline_pb2.StreamResponse(
             success=True,
@@ -117,11 +124,17 @@ class NeuroPipelineServicer(neuro_pipeline_pb2_grpc.NeuroPipelineServiceServicer
                 pass
 
     async def HealthCheck(self, request, context: grpc.aio.ServicerContext):
-        """Health check endpoint."""
+        """Health check endpoint with readiness awareness."""
         logger.debug(f"Health check from client: {request.client_id}")
+        grpc_requests_total.labels(method="HealthCheck", status="ok").inc()
+        ready = getattr(self.orchestrator, "is_ready", lambda: True)()
+        status = (
+            neuro_pipeline_pb2.HealthCheckResponse.SERVING
+            if ready
+            else neuro_pipeline_pb2.HealthCheckResponse.NOT_SERVING
+        )
         return neuro_pipeline_pb2.HealthCheckResponse(
-            status=neuro_pipeline_pb2.HealthCheckResponse.SERVING,
-            version="0.5.0"
+            status=status, version="1.0.0"
         )
 
 

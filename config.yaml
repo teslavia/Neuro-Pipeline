@@ -55,3 +55,25 @@ logging:
   file_path: "logs/central.log"
   max_bytes: 10485760  # 10MB
   backup_count: 5
+
+metrics:
+  enabled: true
+  port: 9090
+
+circuit_breaker:
+  failure_threshold: 5
+  recovery_timeout: 30.0
+  half_open_max: 1
+
+alerting:
+  enabled: true
+  webhook_url: ""
+  rules:
+    - name: "circuit_breaker_open"
+      cooldown_seconds: 300
+    - name: "edge_disconnect"
+      cooldown_seconds: 60
+    - name: "anomaly_detection"
+      cooldown_seconds: 30
+    - name: "vlm_queue_full"
+      cooldown_seconds: 60
