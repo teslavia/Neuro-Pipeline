@@ -22,6 +22,9 @@ service NeuroPipelineService {
 
   // Health check
   rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+
+  // Edge device registration
+  rpc RegisterDevice(DeviceRegistration) returns (DeviceRegistrationResponse);
 }
 
 // =============================================================================
@@ -36,6 +39,8 @@ message DetectionResult {
   bytes frame_data = 4;            // Optional JPEG-encoded frame (sent on events)
   DeviceMetrics metrics = 5;       // System performance metrics
   string trace_id = 6;             // Distributed trace identifier
+  string device_id = 7;            // Source edge device identifier
+  string span_id = 8;              // Distributed tracing span identifier
 }
 
 // Single detected object bounding box.
@@ -79,6 +84,7 @@ message ControlCommand {
     ENABLE_DEBUG = 2;              // Toggle debug logging
     SET_DETECTION_THRESHOLD = 3;   // Adjust confidence threshold
     SHUTDOWN = 4;                  // Graceful shutdown
+    RELOAD_MODEL = 5;              // Hot-reload current model
   }
 
   CommandType type = 1;
@@ -178,4 +184,24 @@ message ErrorReport {
   string component = 3;      // Source component (e.g., "rknn_engine", "grpc_client")
   uint64 timestamp_us = 4;   // When the error occurred
   string trace_id = 5;       // Correlation with detection trace
+}
+
+// =============================================================================
+// Device Registration
+// =============================================================================
+
+// Edge device registration request.
+message DeviceRegistration {
+  string device_id = 1;          // Unique device identifier
+  string device_name = 2;        // Human-readable name
+  string firmware_version = 3;   // Edge software version
+  repeated string capabilities = 4;  // e.g. ["npu", "camera", "gpu"]
+  DeviceMetrics initial_metrics = 5; // Metrics at registration time
+}
+
+// Response to device registration.
+message DeviceRegistrationResponse {
+  bool success = 1;
+  string message = 2;
+  string assigned_id = 3;        // Server-assigned ID (or echo back device_id)
 }

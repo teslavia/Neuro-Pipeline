@@ -21,7 +21,8 @@ CREATE TABLE IF NOT EXISTS detections (
     event_type TEXT NOT NULL,
     detections_json TEXT,
     vlm_result TEXT,
-    rule_matched TEXT
+    rule_matched TEXT,
+    device_id TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_detections_ts ON detections(timestamp);
 """
@@ -41,7 +42,25 @@ class DetectionStore:
         self._conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(_SCHEMA)
+        self._migrate()
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_detections_device ON detections(device_id)"
+        )
+        self._conn.commit()
         logger.info(f"DetectionStore opened: {self.db_path}")
+
+    def _migrate(self) -> None:
+        """Add device_id column to legacy databases that lack it."""
+        cols = {
+            row[1]
+            for row in self._conn.execute("PRAGMA table_info(detections)").fetchall()
+        }
+        if "device_id" not in cols:
+            self._conn.execute(
+                "ALTER TABLE detections ADD COLUMN device_id TEXT DEFAULT ''"
+            )
+            self._conn.commit()
+            logger.info("Migrated: added device_id column")
 
     def record(self, event: dict) -> None:
         """Insert a detection event (retries on SQLite lock)."""
@@ -49,8 +68,8 @@ class DetectionStore:
             with self._lock:
                 self._conn.execute(
                     "INSERT INTO detections "
-                    "(timestamp, frame_id, trace_id, event_type, detections_json, vlm_result, rule_matched) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    "(timestamp, frame_id, trace_id, event_type, detections_json, vlm_result, rule_matched, device_id) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         event.get("timestamp", time.time()),
                         event.get("frame_id"),
@@ -59,24 +78,32 @@ class DetectionStore:
                         json.dumps(event.get("detections", [])),
                         event.get("vlm_result"),
                         event.get("rule"),
+                        event.get("device_id", ""),
                     ),
                 )
                 self._conn.commit()
         retry_sync(_do_insert, max_retries=3, backoff=0.1, exceptions=(sqlite3.OperationalError,))
 
     def query(
-        self, since: float, until: float = 0, limit: int = 100
+        self, since: float, until: float = 0, limit: int = 100, device_id: str = ""
     ) -> list[dict]:
-        """Query events in a time range (retries on SQLite lock)."""
+        """Query events in a time range, optionally filtered by device_id."""
         if until <= 0:
             until = time.time()
         def _do_query():
             with self._lock:
-                rows = self._conn.execute(
-                    "SELECT * FROM detections WHERE timestamp >= ? AND timestamp <= ? "
-                    "ORDER BY timestamp DESC LIMIT ?",
-                    (since, until, limit),
-                ).fetchall()
+                if device_id:
+                    rows = self._conn.execute(
+                        "SELECT * FROM detections WHERE timestamp >= ? AND timestamp <= ? "
+                        "AND device_id = ? ORDER BY timestamp DESC LIMIT ?",
+                        (since, until, device_id, limit),
+                    ).fetchall()
+                else:
+                    rows = self._conn.execute(
+                        "SELECT * FROM detections WHERE timestamp >= ? AND timestamp <= ? "
+                        "ORDER BY timestamp DESC LIMIT ?",
+                        (since, until, limit),
+                    ).fetchall()
             return [self._row_to_dict(r) for r in rows]
         return retry_sync(_do_query, max_retries=3, backoff=0.1, exceptions=(sqlite3.OperationalError,))
 

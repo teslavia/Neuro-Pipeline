@@ -71,3 +71,58 @@ class TestDetectionStore:
         s2 = DetectionStore(db_path)
         assert s2.count() == 1
         s2.close()
+
+    def test_record_with_device_id(self, store):
+        now = time.time()
+        store.record({"type": "detection", "frame_id": 1, "timestamp": now, "device_id": "edge-001"})
+        store.record({"type": "detection", "frame_id": 2, "timestamp": now, "device_id": "edge-002"})
+        store.record({"type": "detection", "frame_id": 3, "timestamp": now, "device_id": "edge-001"})
+        assert store.count() == 3
+
+    def test_query_filter_by_device_id(self, store):
+        now = time.time()
+        store.record({"type": "detection", "frame_id": 1, "timestamp": now, "device_id": "edge-001"})
+        store.record({"type": "detection", "frame_id": 2, "timestamp": now, "device_id": "edge-002"})
+        store.record({"type": "detection", "frame_id": 3, "timestamp": now, "device_id": "edge-001"})
+
+        results = store.query(since=0, device_id="edge-001")
+        assert len(results) == 2
+        assert all(r["device_id"] == "edge-001" for r in results)
+
+        results_all = store.query(since=0)
+        assert len(results_all) == 3
+
+    def test_migration_adds_device_id(self, tmp_path):
+        """Legacy DB without device_id column should be migrated."""
+        db_path = tmp_path / "legacy.db"
+        import sqlite3
+        conn = sqlite3.connect(str(db_path))
+        conn.executescript("""
+            CREATE TABLE detections (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp REAL NOT NULL,
+                frame_id INTEGER,
+                trace_id TEXT,
+                event_type TEXT NOT NULL,
+                detections_json TEXT,
+                vlm_result TEXT,
+                rule_matched TEXT
+            );
+        """)
+        conn.execute(
+            "INSERT INTO detections (timestamp, frame_id, event_type) VALUES (?, ?, ?)",
+            (time.time(), 1, "detection"),
+        )
+        conn.commit()
+        conn.close()
+
+        # Open with new DetectionStore — should migrate
+        s = DetectionStore(db_path)
+        assert s.count() == 1
+        results = s.query(since=0)
+        assert results[0]["device_id"] == ""
+        # New records should work with device_id
+        s.record({"type": "detection", "frame_id": 2, "timestamp": time.time(), "device_id": "edge-001"})
+        results = s.query(since=0, device_id="edge-001")
+        assert len(results) == 1
+        s.close()

@@ -75,6 +75,38 @@ class CircuitBreakerConfig:
 
 
 @dataclass
+class TracingConfig:
+    enabled: bool = False
+    endpoint: str = "http://localhost:4317"
+    service_name: str = "neuro-pipeline-central"
+    sample_rate: float = 1.0
+
+
+@dataclass
+class BatchConfig:
+    max_size: int = 8
+    timeout_seconds: float = 2.0
+    enabled: bool = True
+
+
+@dataclass
+class SessionConfig:
+    heartbeat_interval: float = 10.0
+    expiry_timeout: float = 30.0
+    max_devices: int = 16
+
+
+@dataclass
+class CloudStorageConfig:
+    enabled: bool = False
+    provider: str = "s3"
+    bucket: str = ""
+    prefix: str = "neuro-pipeline/"
+    endpoint_url: str = ""
+    region: str = "us-east-1"
+
+
+@dataclass
 class AppConfig:
     central: CentralConfig = field(default_factory=CentralConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
@@ -84,6 +116,10 @@ class AppConfig:
     alerting: AlertingConfig = field(default_factory=AlertingConfig)
     circuit_breaker: CircuitBreakerConfig = field(default_factory=CircuitBreakerConfig)
     vlm_rules: List[VLMRuleConfig] = field(default_factory=lambda: [VLMRuleConfig()])
+    tracing: TracingConfig = field(default_factory=TracingConfig)
+    batch: BatchConfig = field(default_factory=BatchConfig)
+    sessions: SessionConfig = field(default_factory=SessionConfig)
+    cloud_storage: CloudStorageConfig = field(default_factory=CloudStorageConfig)
 
     @classmethod
     def from_yaml(cls, path: Path) -> "AppConfig":
@@ -155,5 +191,33 @@ class AppConfig:
             failure_threshold=int(cb.get("failure_threshold", cfg.circuit_breaker.failure_threshold)),
             recovery_timeout=float(cb.get("recovery_timeout", cfg.circuit_breaker.recovery_timeout)),
             half_open_max=int(cb.get("half_open_max", cfg.circuit_breaker.half_open_max)),
+        )
+        tr = data.get("tracing", {})
+        cfg.tracing = TracingConfig(
+            enabled=bool(tr.get("enabled", cfg.tracing.enabled)),
+            endpoint=tr.get("endpoint", cfg.tracing.endpoint),
+            service_name=tr.get("service_name", cfg.tracing.service_name),
+            sample_rate=float(tr.get("sample_rate", cfg.tracing.sample_rate)),
+        )
+        ba = data.get("batch", {})
+        cfg.batch = BatchConfig(
+            max_size=int(ba.get("max_size", cfg.batch.max_size)),
+            timeout_seconds=float(ba.get("timeout_seconds", cfg.batch.timeout_seconds)),
+            enabled=bool(ba.get("enabled", cfg.batch.enabled)),
+        )
+        se = data.get("sessions", {})
+        cfg.sessions = SessionConfig(
+            heartbeat_interval=float(se.get("heartbeat_interval", cfg.sessions.heartbeat_interval)),
+            expiry_timeout=float(se.get("expiry_timeout", cfg.sessions.expiry_timeout)),
+            max_devices=int(se.get("max_devices", cfg.sessions.max_devices)),
+        )
+        cs = data.get("cloud_storage", {})
+        cfg.cloud_storage = CloudStorageConfig(
+            enabled=bool(cs.get("enabled", cfg.cloud_storage.enabled)),
+            provider=cs.get("provider", cfg.cloud_storage.provider),
+            bucket=cs.get("bucket", cfg.cloud_storage.bucket),
+            prefix=cs.get("prefix", cfg.cloud_storage.prefix),
+            endpoint_url=cs.get("endpoint_url", cfg.cloud_storage.endpoint_url),
+            region=cs.get("region", cfg.cloud_storage.region),
         )
         return cfg

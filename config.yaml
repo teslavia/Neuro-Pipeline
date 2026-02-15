@@ -2,6 +2,7 @@
 # =============================
 
 edge:
+  device_id: "edge-001"
   video_source: ""
   camera_device: "/dev/video0"
   model_path: "/opt/neuro-pipeline/models/yolov5s-640-640.rknn"
@@ -77,3 +78,27 @@ alerting:
       cooldown_seconds: 30
     - name: "vlm_queue_full"
       cooldown_seconds: 60
+
+tracing:
+  enabled: false
+  endpoint: "http://localhost:4317"
+  service_name: "neuro-pipeline-central"
+  sample_rate: 1.0
+
+batch:
+  max_size: 8
+  timeout_seconds: 2.0
+  enabled: true
+
+sessions:
+  heartbeat_interval: 10.0
+  expiry_timeout: 30.0
+  max_devices: 16
+
+cloud_storage:
+  enabled: false
+  provider: "s3"
+  bucket: ""
+  prefix: "neuro-pipeline/"
+  endpoint_url: ""
+  region: "us-east-1"
