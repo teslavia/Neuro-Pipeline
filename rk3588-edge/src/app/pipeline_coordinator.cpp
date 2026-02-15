@@ -4,9 +4,11 @@
 #include <cstdio>
 #include <fstream>
 #include <iostream>
+#include <mutex>
 #include <thread>
 #include <vector>
 
+#include "common/detection_cache.hpp"
 #include "common/logger.hpp"
 #include "common/rknn_engine.hpp"
 #include "common/yolo_postprocess.hpp"
@@ -20,7 +22,8 @@ namespace app {
 
 class PipelineCoordinator::Impl {
  public:
-  explicit Impl(const Config& config) : config_(config) {
+  explicit Impl(const Config& config) : config_(config),
+      detection_cache_(config.dedup_iou_threshold, config.dedup_ttl_seconds) {
     if (config_.enable_grpc) {
       communication::GRPCClient::Config grpc_cfg;
       grpc_cfg.server_address = config_.grpc_server;
@@ -162,22 +165,33 @@ class PipelineCoordinator::Impl {
         continue;
       }
 
-      // 3. NPU inference
-      if (!engine_->Infer(processed)) {
-        LOG_ERROR("Pipeline", "Inference failed");
-        if (use_camera_) camera_->ReleaseFrame(frame);
-        continue;
+      // 3. NPU inference (mutex-protected for hot-reload safety)
+      {
+        std::lock_guard<std::mutex> lock(engine_mutex_);
+        if (!engine_->Infer(processed)) {
+          LOG_ERROR("Pipeline", "Inference failed");
+          if (use_camera_) camera_->ReleaseFrame(frame);
+          continue;
+        }
       }
 
       // 4. Postprocess
       auto detections = postprocessor_->Process(
           engine_->GetOutputs(), config_.width, config_.height);
 
-      // 5. Output results
-      if (!detections.empty()) {
-        std::printf("[Frame %lu] %zu detections:\n",
-                    frame_count, detections.size());
-        for (const auto& det : detections) {
+      // 5. Output results (filter through dedup cache)
+      std::vector<common::DetectionBox> novel_detections;
+      for (const auto& det : detections) {
+        if (detection_cache_.IsNovel(det.class_name, det.confidence,
+                                     det.x_min, det.y_min, det.x_max, det.y_max)) {
+          novel_detections.push_back(det);
+        }
+      }
+
+      if (!novel_detections.empty()) {
+        std::printf("[Frame %lu] %zu detections (%zu novel):\n",
+                    frame_count, detections.size(), novel_detections.size());
+        for (const auto& det : novel_detections) {
           std::printf("  [%s] %.1f%% at (%.3f,%.3f)-(%.3f,%.3f)\n",
                       det.class_name.c_str(), det.confidence * 100.0f,
                       det.x_min, det.y_min, det.x_max, det.y_max);
@@ -199,7 +213,7 @@ class PipelineCoordinator::Impl {
                 std::chrono::duration_cast<std::chrono::microseconds>(
                     t0.time_since_epoch()).count());
 
-            for (const auto& det : detections) {
+            for (const auto& det : novel_detections) {
               auto* box = result.add_boxes();
               box->set_class_id(0);
               box->set_class_name(det.class_name);
@@ -300,6 +314,19 @@ class PipelineCoordinator::Impl {
         }
         break;
       }
+      case neuro_pipeline::ControlCommand::RELOAD_MODEL: {
+        LOG_INFO("Pipeline", "Reloading model...");
+        std::lock_guard<std::mutex> lock(engine_mutex_);
+        if (engine_) {
+          engine_->Release();
+          if (engine_->Initialize()) {
+            LOG_INFO("Pipeline", "Model reloaded successfully");
+          } else {
+            LOG_ERROR("Pipeline", "Model reload failed");
+          }
+        }
+        break;
+      }
       case neuro_pipeline::ControlCommand::SHUTDOWN:
         LOG_INFO("Pipeline", "Shutdown command received");
         running = false;
@@ -331,6 +358,8 @@ class PipelineCoordinator::Impl {
   std::unique_ptr<ai_inference::RKNNEngine> engine_;
   std::unique_ptr<ai_inference::YOLOPostProcessor> postprocessor_;
   std::unique_ptr<communication::GRPCClient> grpc_client_;
+  std::mutex engine_mutex_;
+  data_processing::DetectionCache detection_cache_;
 
   std::ifstream video_file_;
 };

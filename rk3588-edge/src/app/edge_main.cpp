@@ -86,6 +86,21 @@ int main(int argc, char* argv[]) {
         config.enable_grpc = cfg.GetBool("edge.enable_grpc", config.enable_grpc);
         config.grpc_server = cfg.Get("edge.grpc_server", config.grpc_server);
         config.device_id = cfg.Get("edge.device_id", config.device_id);
+        config.dedup_iou_threshold = cfg.GetFloat("edge.dedup_iou_threshold", config.dedup_iou_threshold);
+        config.dedup_ttl_seconds = cfg.GetFloat("edge.dedup_ttl_seconds", static_cast<float>(config.dedup_ttl_seconds));
+
+        // Multi-camera config: cameras.0.device, cameras.0.width, etc.
+        for (int i = 0; i < 8; ++i) {
+          std::string prefix = "cameras." + std::to_string(i);
+          if (!cfg.Has(prefix + ".device")) break;
+          app::PipelineCoordinator::CameraConfig cam;
+          cam.device = cfg.Get(prefix + ".device", "/dev/video0");
+          cam.width = cfg.GetInt(prefix + ".width", config.width);
+          cam.height = cfg.GetInt(prefix + ".height", config.height);
+          cam.fps = cfg.GetInt(prefix + ".fps", config.fps);
+          cam.label = cfg.Get(prefix + ".label", "cam" + std::to_string(i));
+          config.cameras.push_back(cam);
+        }
       }
     }
 

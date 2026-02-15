@@ -146,6 +146,7 @@ set(DATA_PROCESSING_SOURCES
   src/data_processing/cache_analysis.cpp
   src/data_processing/neon_image_ops.cpp
   src/data_processing/virtual_device_io.cpp
+  src/data_processing/detection_cache.cpp
 )
 
 set(AI_INFERENCE_SOURCES

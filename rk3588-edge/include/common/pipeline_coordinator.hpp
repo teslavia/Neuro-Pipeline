@@ -4,8 +4,10 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace communication {
 class GRPCClient;
@@ -18,15 +20,23 @@ namespace app {
  *        V4L2/MPP → RGA → RKNN → YOLO PostProcess.
  *
  * Supports two input modes:
- *   - Camera: live V4L2 capture
+ *   - Camera: live V4L2 capture (single or multi-camera)
  *   - Video file: MPP hardware decode
  */
 class PipelineCoordinator {
  public:
+  struct CameraConfig {
+    std::string device = "/dev/video0";
+    uint32_t width = 1920;
+    uint32_t height = 1080;
+    uint32_t fps = 30;
+    std::string label;  // Optional human-readable label
+  };
+
   struct Config {
     std::string video_source;       // Video file path, or empty for camera
     std::string model_path;         // .rknn model file
-    std::string camera_device = "/dev/video0";  // V4L2 device
+    std::string camera_device = "/dev/video0";  // V4L2 device (single-cam compat)
     std::string device_id = "edge-001";  // Unique device identifier
     uint32_t width = 1920;
     uint32_t height = 1080;
@@ -40,6 +50,9 @@ class PipelineCoordinator {
     bool enable_grpc = false;       // Enable gRPC communication
     std::string grpc_server = "192.168.1.100:50051";
     uint32_t frame_skip_interval = 0;  // 0=send every frame, N=send every Nth
+    std::vector<CameraConfig> cameras;  // Multi-camera configs (empty = single-cam)
+    float dedup_iou_threshold = 0.5f;
+    double dedup_ttl_seconds = 2.0;
   };
 
   explicit PipelineCoordinator(const Config& config);
