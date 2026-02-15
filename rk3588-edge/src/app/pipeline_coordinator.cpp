@@ -192,7 +192,9 @@ class PipelineCoordinator::Impl {
 
             neuro_pipeline::DetectionResult result;
             result.set_frame_id(frame_count);
-            result.set_trace_id("edge-" + std::to_string(frame_count));
+            result.set_device_id(config_.device_id);
+            result.set_trace_id(
+                config_.device_id + "-" + std::to_string(frame_count));
             result.set_timestamp_us(
                 std::chrono::duration_cast<std::chrono::microseconds>(
                     t0.time_since_epoch()).count());

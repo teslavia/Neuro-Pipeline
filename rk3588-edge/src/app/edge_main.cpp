@@ -85,6 +85,7 @@ int main(int argc, char* argv[]) {
         config.max_frames = cfg.GetInt("edge.max_frames", config.max_frames);
         config.enable_grpc = cfg.GetBool("edge.enable_grpc", config.enable_grpc);
         config.grpc_server = cfg.Get("edge.grpc_server", config.grpc_server);
+        config.device_id = cfg.Get("edge.device_id", config.device_id);
       }
     }
 

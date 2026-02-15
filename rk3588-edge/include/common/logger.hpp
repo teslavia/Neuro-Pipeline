@@ -3,32 +3,49 @@
 
 #include <cstdio>
 #include <cstdarg>
+#include <ctime>
 #include <string>
 
 namespace common {
 
 /// Lightweight structured logger.
-/// Uses spdlog when available (via CMake), otherwise falls back to fprintf.
+/// Supports text (default) and JSON output formats.
 class Logger {
  public:
   enum class Level { kDebug, kInfo, kWarn, kError };
+  enum class Format { kText, kJson };
 
-  static void Init(const std::string& level = "info") {
+  static void Init(const std::string& level = "info",
+                   const std::string& format = "text") {
     if (level == "debug") min_level_ = Level::kDebug;
     else if (level == "warn") min_level_ = Level::kWarn;
     else if (level == "error") min_level_ = Level::kError;
     else min_level_ = Level::kInfo;
+
+    if (format == "json") format_ = Format::kJson;
+    else format_ = Format::kText;
   }
 
   static void Log(Level level, const char* component, const char* fmt, ...) {
     if (level < min_level_) return;
-    const char* tag = LevelTag(level);
-    std::fprintf(stderr, "[%s] [%s] ", tag, component);
+
+    // Format the message
+    char msg_buf[1024];
     va_list args;
     va_start(args, fmt);
-    std::vfprintf(stderr, fmt, args);
+    std::vsnprintf(msg_buf, sizeof(msg_buf), fmt, args);
     va_end(args);
-    std::fprintf(stderr, "\n");
+
+    if (format_ == Format::kJson) {
+      // JSON structured output
+      time_t now = std::time(nullptr);
+      std::fprintf(stderr,
+          "{\"ts\":%ld,\"level\":\"%s\",\"component\":\"%s\",\"msg\":\"%s\"}\n",
+          static_cast<long>(now), LevelTag(level), component, msg_buf);
+    } else {
+      // Text output (original format)
+      std::fprintf(stderr, "[%s] [%s] %s\n", LevelTag(level), component, msg_buf);
+    }
   }
 
  private:
@@ -43,6 +60,7 @@ class Logger {
   }
 
   static inline Level min_level_ = Level::kInfo;
+  static inline Format format_ = Format::kText;
 };
 
 }  // namespace common

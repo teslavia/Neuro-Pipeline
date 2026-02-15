@@ -82,10 +82,11 @@ class CentralOrchestrator:
         """Process detection result from edge device. VLM analysis is async-queued."""
         self._event_count += 1
         trace_id = getattr(result, "trace_id", f"unknown-{self._event_count}")
+        device_id = getattr(result, "device_id", "")
         log = logger.bind(trace_id=trace_id) if hasattr(logger, "bind") else logger
         log.info(
             f"Processing detection #{self._event_count}: "
-            f"frame_id={result.frame_id}, boxes={len(result.boxes)}"
+            f"frame_id={result.frame_id}, boxes={len(result.boxes)}, device={device_id}"
         )
 
         detections = []
@@ -113,6 +114,7 @@ class CentralOrchestrator:
                     "prompt": prompt,
                     "frame_id": result.frame_id,
                     "trace_id": trace_id,
+                    "device_id": device_id,
                     "detections": detections,
                     "rule": matched_rule.class_name,
                 })
@@ -129,6 +131,7 @@ class CentralOrchestrator:
             "type": "detection",
             "frame_id": result.frame_id,
             "trace_id": trace_id,
+            "device_id": device_id,
             "detections": detections,
             "timestamp": time.time(),
         })
@@ -167,6 +170,7 @@ class CentralOrchestrator:
                     "type": "vlm_analysis",
                     "frame_id": item["frame_id"],
                     "trace_id": item["trace_id"],
+                    "device_id": item.get("device_id", ""),
                     "detections": item["detections"],
                     "vlm_result": vlm_result[:200],
                     "rule": item["rule"],
@@ -229,9 +233,12 @@ class CentralOrchestrator:
             await self.inference_engine.unload_model()
         logger.info("CentralOrchestrator shutdown complete")
 
-    def get_recent_events(self, limit: int = 50) -> List[Dict[str, Any]]:
-        """Return recent detection events for dashboard consumption."""
-        return list(self._recent_events)[-limit:]
+    def get_recent_events(self, limit: int = 50, device_id: str = "") -> List[Dict[str, Any]]:
+        """Return recent detection events, optionally filtered by device_id."""
+        events = list(self._recent_events)
+        if device_id:
+            events = [e for e in events if e.get("device_id") == device_id]
+        return events[-limit:]
 
     def subscribe(self) -> asyncio.Queue:
         """Subscribe to real-time event stream. Returns a queue that receives events."""

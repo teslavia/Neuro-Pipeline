@@ -21,8 +21,9 @@ from src.observability.metrics import grpc_requests_total, grpc_latency, edge_co
 class NeuroPipelineServicer(neuro_pipeline_pb2_grpc.NeuroPipelineServiceServicer):
     """gRPC service implementation for Neuro-Pipeline."""
 
-    def __init__(self, orchestrator) -> None:
+    def __init__(self, orchestrator, session_manager=None) -> None:
         self.orchestrator = orchestrator
+        self.session_manager = session_manager
         logger.info("NeuroPipelineServicer initialized")
 
     async def StreamDetectionResults(
@@ -43,16 +44,25 @@ class NeuroPipelineServicer(neuro_pipeline_pb2_grpc.NeuroPipelineServiceServicer
         import time
         frames_received = 0
         edge_connections.inc()
+        device_id = ""
 
         try:
             async for result in request_iterator:
                 t0 = time.perf_counter()
+                # Extract device_id from first message and register session
+                if not device_id and result.device_id:
+                    device_id = result.device_id
+                    if self.session_manager:
+                        self.session_manager.register(device_id)
                 logger.debug(
                     f"Received detection result: frame_id={result.frame_id}, "
-                    f"boxes={len(result.boxes)}"
+                    f"boxes={len(result.boxes)}, device_id={device_id}"
                 )
                 await self.orchestrator.process_detection(result)
                 frames_received += 1
+                if self.session_manager and device_id:
+                    self.session_manager.heartbeat(device_id)
+                    self.session_manager.increment_frames(device_id)
                 elapsed = time.perf_counter() - t0
                 grpc_latency.labels(method="StreamDetectionResults").observe(elapsed)
                 grpc_requests_total.labels(method="StreamDetectionResults", status="ok").inc()
@@ -66,6 +76,8 @@ class NeuroPipelineServicer(neuro_pipeline_pb2_grpc.NeuroPipelineServiceServicer
             )
         finally:
             edge_connections.dec()
+            if self.session_manager and device_id:
+                self.session_manager.unregister(device_id)
 
         return neuro_pipeline_pb2.StreamResponse(
             success=True,
@@ -137,17 +149,42 @@ class NeuroPipelineServicer(neuro_pipeline_pb2_grpc.NeuroPipelineServiceServicer
             status=status, version="1.0.0"
         )
 
+    async def RegisterDevice(self, request, context: grpc.aio.ServicerContext):
+        """Register an edge device."""
+        logger.info(f"Device registration: {request.device_id} ({request.device_name})")
+        grpc_requests_total.labels(method="RegisterDevice", status="ok").inc()
+        if self.session_manager:
+            ok = self.session_manager.register(
+                device_id=request.device_id,
+                device_name=request.device_name,
+                firmware_version=request.firmware_version,
+                capabilities=list(request.capabilities),
+            )
+            if not ok:
+                return neuro_pipeline_pb2.DeviceRegistrationResponse(
+                    success=False,
+                    message="Max devices reached",
+                    assigned_id=request.device_id,
+                )
+        return neuro_pipeline_pb2.DeviceRegistrationResponse(
+            success=True,
+            message="Registered",
+            assigned_id=request.device_id,
+        )
+
 
 class NeuroPipelineServer:
     """Async gRPC server wrapper with optional mTLS."""
 
     def __init__(self, host: str, port: int, orchestrator,
-                 max_message_size_mb: int = 16, tls_config=None) -> None:
+                 max_message_size_mb: int = 16, tls_config=None,
+                 session_manager=None) -> None:
         self.host = host
         self.port = port
         self.orchestrator = orchestrator
         self.max_message_size_mb = max_message_size_mb
         self.tls_config = tls_config
+        self.session_manager = session_manager
         self.server = None
 
     async def start(self) -> None:
@@ -164,7 +201,8 @@ class NeuroPipelineServer:
         self.server = grpc.aio.server(options=options, compression=grpc.Compression.Gzip)
 
         neuro_pipeline_pb2_grpc.add_NeuroPipelineServiceServicer_to_server(
-            NeuroPipelineServicer(self.orchestrator), self.server
+            NeuroPipelineServicer(self.orchestrator, session_manager=self.session_manager),
+            self.server,
         )
 
         listen_addr = f"{self.host}:{self.port}"

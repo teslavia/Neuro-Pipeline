@@ -186,6 +186,7 @@ async def test_vlm_worker_processes_queue():
         "prompt": "Describe",
         "frame_id": 42,
         "trace_id": "edge-42",
+        "device_id": "edge-001",
         "detections": [{"class_name": "person", "confidence": 0.9}],
         "rule": "person",
     })
@@ -202,3 +203,45 @@ async def test_vlm_worker_processes_queue():
     # Should have recorded a vlm_analysis event
     events = orch.get_recent_events()
     assert any(e["type"] == "vlm_analysis" for e in events)
+
+
+@pytest.mark.asyncio
+async def test_device_id_propagation():
+    """device_id flows from detection result to recorded event."""
+    orch = CentralOrchestrator(Path("models/test"))
+    result = MagicMock()
+    result.frame_id = 1
+    result.trace_id = "edge-001-1"
+    result.device_id = "edge-001"
+    result.frame_data = b""
+    box = MagicMock()
+    box.class_name = "person"
+    box.confidence = 0.5
+    box.x_min = box.y_min = 0.1
+    box.x_max = box.y_max = 0.9
+    result.boxes = [box]
+
+    await orch.process_detection(result)
+    events = orch.get_recent_events()
+    assert len(events) == 1
+    assert events[0]["device_id"] == "edge-001"
+
+
+@pytest.mark.asyncio
+async def test_get_recent_events_filter_by_device():
+    """get_recent_events filters by device_id."""
+    orch = CentralOrchestrator(Path("models/test"))
+    for did in ["edge-001", "edge-002", "edge-001"]:
+        result = MagicMock()
+        result.frame_id = 1
+        result.trace_id = f"{did}-1"
+        result.device_id = did
+        result.frame_data = b""
+        result.boxes = []
+        await orch.process_detection(result)
+
+    all_events = orch.get_recent_events()
+    assert len(all_events) == 3
+    filtered = orch.get_recent_events(device_id="edge-001")
+    assert len(filtered) == 2
+    assert all(e["device_id"] == "edge-001" for e in filtered)

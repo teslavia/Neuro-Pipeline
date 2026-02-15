@@ -23,6 +23,9 @@ vlm_latency = Histogram("np_vlm_latency_seconds", "VLM inference latency")
 vlm_queue_depth = Gauge("np_vlm_queue_depth", "Current VLM queue size")
 edge_connections = Gauge("np_edge_connections", "Active edge connections")
 events_stored = Gauge("np_events_stored_total", "Total events in SQLite")
+edge_device_status = Gauge(
+    "np_edge_device_status", "Edge device status (1=connected, 0=disconnected)", ["device_id"]
+)
 
 # --- Info ---
 build_info = Info("np_build", "Build information")

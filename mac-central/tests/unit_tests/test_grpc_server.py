@@ -110,6 +110,55 @@ async def test_bidirectional_event_stream(servicer, mock_orchestrator):
 
 
 @pytest.mark.asyncio
+async def test_stream_detection_with_device_id(servicer, mock_orchestrator):
+    """Test that device_id is extracted from detection results."""
+    async def mock_iterator():
+        for i in range(2):
+            result = neuro_pipeline_pb2.DetectionResult()
+            result.frame_id = i
+            result.device_id = "edge-001"
+            yield result
+
+    response = await servicer.StreamDetectionResults(mock_iterator(), None)
+    assert response.success is True
+    assert response.frames_received == 2
+
+
+@pytest.mark.asyncio
+async def test_stream_detection_with_session_manager(mock_orchestrator):
+    """Test that session_manager is called during streaming."""
+    from unittest.mock import MagicMock
+    session_mgr = MagicMock()
+    session_mgr.register.return_value = True
+    svc = NeuroPipelineServicer(mock_orchestrator, session_manager=session_mgr)
+
+    async def mock_iterator():
+        result = neuro_pipeline_pb2.DetectionResult()
+        result.frame_id = 1
+        result.device_id = "edge-001"
+        yield result
+
+    await svc.StreamDetectionResults(mock_iterator(), None)
+    session_mgr.register.assert_called_once_with("edge-001")
+    session_mgr.heartbeat.assert_called_once_with("edge-001")
+    session_mgr.increment_frames.assert_called_once_with("edge-001")
+    session_mgr.unregister.assert_called_once_with("edge-001")
+
+
+@pytest.mark.asyncio
+async def test_register_device(servicer):
+    """Test RegisterDevice RPC."""
+    request = neuro_pipeline_pb2.DeviceRegistration()
+    request.device_id = "edge-001"
+    request.device_name = "Rock 5B"
+    request.firmware_version = "1.0.0"
+
+    response = await servicer.RegisterDevice(request, None)
+    assert response.success is True
+    assert response.assigned_id == "edge-001"
+
+
+@pytest.mark.asyncio
 async def test_server_start_stop():
     """Test server lifecycle."""
     orchestrator = MagicMock()
