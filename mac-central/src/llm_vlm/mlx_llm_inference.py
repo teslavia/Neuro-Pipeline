@@ -8,8 +8,40 @@ Supports two modes:
 
 import logging
 import time
+from collections import deque
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Optional
+
+logger = logging.getLogger(__name__)
+
+
+class ConversationContext:
+    """Multi-turn conversation history per device."""
+
+    def __init__(self, max_turns: int = 10) -> None:
+        self.max_turns = max_turns
+        self._history: List[Dict[str, str]] = []
+
+    def add_turn(self, role: str, content: str) -> None:
+        self._history.append({"role": role, "content": content})
+        if len(self._history) > self.max_turns * 2:
+            self._history = self._history[-self.max_turns * 2:]
+
+    def build_prompt(self, new_prompt: str) -> str:
+        """Build a multi-turn prompt string from history + new prompt."""
+        parts = []
+        for turn in self._history:
+            prefix = "User" if turn["role"] == "user" else "Assistant"
+            parts.append(f"{prefix}: {turn['content']}")
+        parts.append(f"User: {new_prompt}")
+        return "\n".join(parts)
+
+    def clear(self) -> None:
+        self._history.clear()
+
+    @property
+    def turn_count(self) -> int:
+        return len(self._history) // 2
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +66,7 @@ class MLXInferenceEngine:
         self.vlm_processor = None
         self.use_stub = True
         self._loaded = False
+        self._conversations: Dict[str, ConversationContext] = {}
         logger.info(
             f"MLXInferenceEngine created: path={model_path}, "
             f"quant={quantization}, mode={mode}"
@@ -162,4 +195,16 @@ class MLXInferenceEngine:
         self.vlm_model = None
         self.vlm_processor = None
         self._loaded = False
+        self._conversations.clear()
         logger.info("Models unloaded")
+
+    def get_conversation(self, device_id: str, max_turns: int = 10) -> ConversationContext:
+        """Get or create a conversation context for a device."""
+        if device_id not in self._conversations:
+            self._conversations[device_id] = ConversationContext(max_turns=max_turns)
+        return self._conversations[device_id]
+
+    def clear_conversation(self, device_id: str) -> None:
+        """Clear conversation history for a device."""
+        if device_id in self._conversations:
+            self._conversations[device_id].clear()

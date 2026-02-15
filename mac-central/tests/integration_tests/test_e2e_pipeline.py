@@ -26,6 +26,8 @@ async def e2e_stack(tmp_path):
         vlm_rules=[VLMTriggerRule("person", 0.8, "person_behavior")],
         detection_store=store,
     )
+    orch._batch_max_size = 1
+    orch._batch_timeout = 0.05
     # Mock inference engine (no real model needed)
     orch.inference_engine = MagicMock()
     orch.inference_engine.load_model = AsyncMock()

@@ -177,6 +177,8 @@ async def test_vlm_queue_enqueue():
 async def test_vlm_worker_processes_queue():
     """VLM worker consumes queue and records events."""
     orch = CentralOrchestrator(Path("models/test"))
+    orch._batch_max_size = 1
+    orch._batch_timeout = 0.05
     orch.inference_engine = MagicMock()
     orch.inference_engine.analyze_image = AsyncMock(return_value="Person detected walking")
 

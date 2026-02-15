@@ -138,56 +138,78 @@ class CentralOrchestrator:
         return None
 
     async def _vlm_worker(self) -> None:
-        """Background worker that processes VLM analysis requests serially."""
-        logger.info("VLM worker started")
+        """Background worker that processes VLM analysis requests in batches."""
+        logger.info("VLM worker started (batch mode)")
+        batch_max = getattr(self, '_batch_max_size', 8)
+        batch_timeout = getattr(self, '_batch_timeout', 2.0)
+
         while True:
+            batch = []
             try:
+                # Wait for first item
                 item = await self._vlm_queue.get()
+                batch.append(item)
+                # Accumulate more items within timeout
+                deadline = asyncio.get_event_loop().time() + batch_timeout
+                while len(batch) < batch_max:
+                    remaining = deadline - asyncio.get_event_loop().time()
+                    if remaining <= 0:
+                        break
+                    try:
+                        item = await asyncio.wait_for(
+                            self._vlm_queue.get(), timeout=remaining
+                        )
+                        batch.append(item)
+                    except asyncio.TimeoutError:
+                        break
             except asyncio.CancelledError:
                 break
+
             vlm_queue_depth.set(self._vlm_queue.qsize())
 
-            if not self._circuit_breaker.allow_request():
-                vlm_requests_total.labels(status="circuit_open").inc()
-                logger.warning("Circuit breaker open, skipping VLM request")
-                self._vlm_queue.task_done()
-                continue
+            # Process batch items serially (VLM is the bottleneck)
+            for item in batch:
+                if not self._circuit_breaker.allow_request():
+                    vlm_requests_total.labels(status="circuit_open").inc()
+                    logger.warning("Circuit breaker open, skipping VLM request")
+                    self._vlm_queue.task_done()
+                    continue
 
-            try:
-                t0 = time.perf_counter()
-                vlm_result = await asyncio.wait_for(
-                    self.inference_engine.analyze_image(
-                        item["frame_data"], item["prompt"]
-                    ),
-                    timeout=30.0,
-                )
-                elapsed = time.perf_counter() - t0
-                vlm_latency.observe(elapsed)
-                self._circuit_breaker.record_success()
-                vlm_requests_total.labels(status="success").inc()
-                logger.info(f"VLM result (frame {item['frame_id']}): {vlm_result[:100]}...")
-                self._record_event({
-                    "type": "vlm_analysis",
-                    "frame_id": item["frame_id"],
-                    "trace_id": item["trace_id"],
-                    "device_id": item.get("device_id", ""),
-                    "detections": item["detections"],
-                    "vlm_result": vlm_result[:200],
-                    "rule": item["rule"],
-                    "timestamp": time.time(),
-                })
-            except (asyncio.TimeoutError, Exception) as e:
-                self._circuit_breaker.record_failure()
-                vlm_requests_total.labels(status="error").inc()
-                logger.error(f"VLM inference failed: {e}")
-                if self._circuit_breaker.state == "open" and self._alert_manager:
-                    asyncio.create_task(
-                        self._alert_manager.check_and_fire(
-                            "circuit_breaker_open", {"error": str(e)}
-                        )
+                try:
+                    t0 = time.perf_counter()
+                    vlm_result = await asyncio.wait_for(
+                        self.inference_engine.analyze_image(
+                            item["frame_data"], item["prompt"]
+                        ),
+                        timeout=30.0,
                     )
-            finally:
-                self._vlm_queue.task_done()
+                    elapsed = time.perf_counter() - t0
+                    vlm_latency.observe(elapsed)
+                    self._circuit_breaker.record_success()
+                    vlm_requests_total.labels(status="success").inc()
+                    logger.info(f"VLM result (frame {item['frame_id']}): {vlm_result[:100]}...")
+                    self._record_event({
+                        "type": "vlm_analysis",
+                        "frame_id": item["frame_id"],
+                        "trace_id": item["trace_id"],
+                        "device_id": item.get("device_id", ""),
+                        "detections": item["detections"],
+                        "vlm_result": vlm_result[:200],
+                        "rule": item["rule"],
+                        "timestamp": time.time(),
+                    })
+                except (asyncio.TimeoutError, Exception) as e:
+                    self._circuit_breaker.record_failure()
+                    vlm_requests_total.labels(status="error").inc()
+                    logger.error(f"VLM inference failed: {e}")
+                    if self._circuit_breaker.state == "open" and self._alert_manager:
+                        asyncio.create_task(
+                            self._alert_manager.check_and_fire(
+                                "circuit_breaker_open", {"error": str(e)}
+                            )
+                        )
+                finally:
+                    self._vlm_queue.task_done()
 
     def _match_vlm_rule(self, detections: list) -> Optional[VLMTriggerRule]:
         """Check if any detection matches a VLM trigger rule."""
