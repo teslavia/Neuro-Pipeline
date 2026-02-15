@@ -25,6 +25,9 @@ _detection_store = None
 # Optional: injected HealthChecker
 _health_checker = None
 
+# Optional: injected DeviceSessionManager
+_session_manager = None
+
 
 def set_detection_store(store) -> None:
     """Inject a DetectionStore instance for history queries."""
@@ -36,6 +39,12 @@ def set_health_checker(checker) -> None:
     """Inject a HealthChecker instance for probes."""
     global _health_checker
     _health_checker = checker
+
+
+def set_session_manager(manager) -> None:
+    """Inject a DeviceSessionManager for multi-device queries."""
+    global _session_manager
+    _session_manager = manager
 
 
 def _demo_status() -> dict:
@@ -73,7 +82,10 @@ async def api_status():
 
 
 @app.get("/api/events")
-async def api_events(limit: int = 50):
+async def api_events(limit: int = 50, device_id: str = ""):
+    if device_id:
+        filtered = [e for e in _events if e.get("device_id") == device_id]
+        return filtered[-limit:]
     return _events[-limit:]
 
 
@@ -97,13 +109,40 @@ async def post_event(event: dict):
 async def api_events_history(
     hours: float = Query(24, ge=0.1, le=720),
     limit: int = Query(100, ge=1, le=1000),
+    device_id: str = "",
 ):
     """Query historical events from SQLite store."""
     if _detection_store is None:
         return {"error": "No persistent store configured", "events": []}
     since = time.time() - hours * 3600
-    events = _detection_store.query(since=since, limit=limit)
+    events = _detection_store.query(since=since, limit=limit, device_id=device_id)
     return {"count": len(events), "hours": hours, "events": events}
+
+
+@app.get("/api/devices")
+async def api_devices():
+    """List all connected edge devices."""
+    if _session_manager is None:
+        return []
+    sessions = _session_manager.list_sessions()
+    return [
+        {
+            "device_id": s.device_id,
+            "device_name": s.device_name,
+            "status": s.status,
+            "connected_at": s.connected_at,
+            "last_heartbeat": s.last_heartbeat,
+            "frames_received": s.frames_received,
+        }
+        for s in sessions
+    ]
+
+
+@app.get("/api/devices/{device_id}/events")
+async def api_device_events(device_id: str, limit: int = 50):
+    """Get events for a specific device."""
+    filtered = [e for e in _events if e.get("device_id") == device_id]
+    return filtered[-limit:]
 
 
 @app.get("/metrics")

@@ -1,0 +1,75 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "title": "FPS per Device",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "targets": [{"expr": "rate(np_detections_total[1m])", "legendFormat": "{{class_name}}"}],
+      "fieldConfig": {"defaults": {"unit": "ops"}}
+    },
+    {
+      "title": "Detections by Class",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [{"expr": "increase(np_detections_total[5m])", "legendFormat": "{{class_name}}"}]
+    },
+    {
+      "title": "VLM Inference Latency",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "targets": [
+        {"expr": "histogram_quantile(0.50, rate(np_vlm_latency_seconds_bucket[5m]))", "legendFormat": "p50"},
+        {"expr": "histogram_quantile(0.95, rate(np_vlm_latency_seconds_bucket[5m]))", "legendFormat": "p95"},
+        {"expr": "histogram_quantile(0.99, rate(np_vlm_latency_seconds_bucket[5m]))", "legendFormat": "p99"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "s"}}
+    },
+    {
+      "title": "gRPC Latency",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "targets": [
+        {"expr": "histogram_quantile(0.95, rate(np_grpc_latency_seconds_bucket[5m]))", "legendFormat": "p95 {{method}}"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "s"}}
+    },
+    {
+      "title": "Edge Connections",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 16},
+      "targets": [{"expr": "np_edge_connections", "legendFormat": "connections"}]
+    },
+    {
+      "title": "VLM Queue Depth",
+      "type": "gauge",
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 16},
+      "targets": [{"expr": "np_vlm_queue_depth", "legendFormat": "queue"}],
+      "fieldConfig": {"defaults": {"max": 32, "thresholds": {"steps": [{"color": "green", "value": 0}, {"color": "yellow", "value": 16}, {"color": "red", "value": 28}]}}}
+    },
+    {
+      "title": "Circuit Breaker State",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 16},
+      "targets": [{"expr": "increase(np_vlm_requests_total{status='circuit_open'}[5m])", "legendFormat": "circuit_open"}]
+    },
+    {
+      "title": "Events Stored",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 16},
+      "targets": [{"expr": "np_events_stored_total", "legendFormat": "total"}]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["neuro-pipeline"],
+  "templating": {"list": []},
+  "time": {"from": "now-1h", "to": "now"},
+  "title": "Neuro-Pipeline Overview",
+  "uid": "neuro-pipeline-overview",
+  "version": 1
+}
