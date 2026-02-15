@@ -55,4 +55,4 @@ def test_gauge_set():
 
 def test_build_info():
     """Info metric can be set."""
-    build_info.info({"version": "1.0.0", "branch": "main"})
+    build_info.info({"version": "1.1.0", "branch": "main"})

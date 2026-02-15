@@ -61,7 +61,7 @@ async def main() -> None:
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
 
-    logger.info("Starting Neuro-Pipeline Central Server v1.0.0")
+    logger.info("Starting Neuro-Pipeline Central Server v1.1.0")
     logger.info(f"gRPC server will listen on {args.host}:{args.port}")
 
     # TODO: Import and initialize when generated protobuf code is available
