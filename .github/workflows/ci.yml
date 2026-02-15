@@ -5,6 +5,7 @@ on:
     branches: [main, dev]
   pull_request:
     branches: [main, dev]
+  workflow_dispatch:
 
 jobs:
   # ==========================================================================
@@ -171,3 +172,64 @@ jobs:
       - name: Validate VERSION.json
         run: |
           python3 -c "import json; v=json.load(open('VERSION.json')); print('Version:', v['version'])"
+
+  # ==========================================================================
+  # E2E + Chaos Tests
+  # ==========================================================================
+  test-e2e:
+    runs-on: macos-latest
+    needs: [test-python]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r mac-central/requirements.txt
+          pip install fastapi httpx uvicorn jinja2 python-multipart pytest-asyncio
+
+      - name: Generate protobuf code
+        run: python3 tools/generate_proto.py
+
+      - name: Run E2E tests
+        run: pytest tests/e2e/ tests/chaos/ -v --tb=short -o "addopts="
+
+  # ==========================================================================
+  # Load Test (manual trigger only)
+  # ==========================================================================
+  test-load:
+    runs-on: macos-latest
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r mac-central/requirements.txt
+          pip install locust
+
+      - name: Generate protobuf code
+        run: python3 tools/generate_proto.py
+
+      - name: Run load test (short burst)
+        run: |
+          locust -f tests/load_testing/locustfile.py \
+            --headless -u 2 -r 1 -t 10s \
+            --csv=load_results || true
+
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        with:
+          name: load-test-results
+          path: load_results*.csv
