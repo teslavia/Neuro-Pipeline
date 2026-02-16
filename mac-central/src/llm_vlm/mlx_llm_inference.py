@@ -43,8 +43,6 @@ class ConversationContext:
     def turn_count(self) -> int:
         return len(self._history) // 2
 
-logger = logging.getLogger(__name__)
-
 
 class MLXInferenceEngine:
     """MLX-based inference engine for Apple Silicon UMA."""

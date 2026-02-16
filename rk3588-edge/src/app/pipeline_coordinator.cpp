@@ -39,19 +39,52 @@ class PipelineCoordinator::Impl {
       return false;
     }
 
-    // Input source: camera or video file
+    // Input source: camera(s) or video file
     use_camera_ = config_.video_source.empty();
 
     if (use_camera_) {
-      rk_hal::V4L2Camera::Config cam_cfg;
-      cam_cfg.device_path = config_.camera_device;
-      cam_cfg.width = config_.width;
-      cam_cfg.height = config_.height;
-      cam_cfg.fps = config_.fps;
-      camera_ = std::make_unique<rk_hal::V4L2Camera>(cam_cfg);
-      if (!camera_->Initialize()) {
-        LOG_ERROR("Pipeline", "V4L2 camera init failed");
-        return false;
+      if (!config_.cameras.empty()) {
+        // Multi-camera mode
+        for (size_t i = 0; i < config_.cameras.size(); ++i) {
+          const auto& cam_cfg_in = config_.cameras[i];
+          rk_hal::V4L2Camera::Config cam_cfg;
+          cam_cfg.device_path = cam_cfg_in.device;
+          cam_cfg.width = cam_cfg_in.width;
+          cam_cfg.height = cam_cfg_in.height;
+          cam_cfg.fps = cam_cfg_in.fps;
+          auto cam = std::make_unique<rk_hal::V4L2Camera>(cam_cfg);
+          if (!cam->Initialize()) {
+            LOG_ERROR("Pipeline", "Camera[%zu] init failed: %s", i, cam_cfg_in.device.c_str());
+            return false;
+          }
+          cameras_.push_back(std::move(cam));
+
+          // Per-camera RGA processor
+          rk_hal::RGAProcessor::Config rga_cfg;
+          rga_cfg.src_width = cam_cfg_in.width;
+          rga_cfg.src_height = cam_cfg_in.height;
+          rga_cfg.dst_width = config_.model_width;
+          rga_cfg.dst_height = config_.model_height;
+          auto rga = std::make_unique<rk_hal::RGAProcessor>(rga_cfg);
+          if (!rga->Initialize()) {
+            LOG_ERROR("Pipeline", "RGA[%zu] init failed", i);
+            return false;
+          }
+          rga_processors_.push_back(std::move(rga));
+        }
+        LOG_INFO("Pipeline", "Multi-camera: %zu cameras initialized", cameras_.size());
+      } else {
+        // Single-camera fallback
+        rk_hal::V4L2Camera::Config cam_cfg;
+        cam_cfg.device_path = config_.camera_device;
+        cam_cfg.width = config_.width;
+        cam_cfg.height = config_.height;
+        cam_cfg.fps = config_.fps;
+        camera_ = std::make_unique<rk_hal::V4L2Camera>(cam_cfg);
+        if (!camera_->Initialize()) {
+          LOG_ERROR("Pipeline", "V4L2 camera init failed");
+          return false;
+        }
       }
     } else {
       rk_hal::MPPDecoder::Config dec_cfg;
@@ -71,16 +104,18 @@ class PipelineCoordinator::Impl {
       }
     }
 
-    // RGA processor (NV12 → RGB888, resize to model input)
-    rk_hal::RGAProcessor::Config rga_cfg;
-    rga_cfg.src_width = config_.width;
-    rga_cfg.src_height = config_.height;
-    rga_cfg.dst_width = config_.model_width;
-    rga_cfg.dst_height = config_.model_height;
-    rga_ = std::make_unique<rk_hal::RGAProcessor>(rga_cfg);
-    if (!rga_->Initialize()) {
-      LOG_ERROR("Pipeline", "RGA init failed");
-      return false;
+    // RGA processor (shared for single-camera / video mode)
+    if (cameras_.empty()) {
+      rk_hal::RGAProcessor::Config rga_cfg;
+      rga_cfg.src_width = config_.width;
+      rga_cfg.src_height = config_.height;
+      rga_cfg.dst_width = config_.model_width;
+      rga_cfg.dst_height = config_.model_height;
+      rga_ = std::make_unique<rk_hal::RGAProcessor>(rga_cfg);
+      if (!rga_->Initialize()) {
+        LOG_ERROR("Pipeline", "RGA init failed");
+        return false;
+      }
     }
 
     // RKNN engine
@@ -118,11 +153,21 @@ class PipelineCoordinator::Impl {
            uint32_t& measured_fps, uint64_t& frame_count) {
     using Clock = std::chrono::steady_clock;
 
-    if (use_camera_ && camera_) {
-      if (!camera_->Start()) {
-        LOG_ERROR("Pipeline", "Camera start failed");
-        running = false;
-        return;
+    if (use_camera_) {
+      if (!cameras_.empty()) {
+        for (auto& cam : cameras_) {
+          if (!cam->Start()) {
+            LOG_ERROR("Pipeline", "Multi-camera start failed");
+            running = false;
+            return;
+          }
+        }
+      } else if (camera_) {
+        if (!camera_->Start()) {
+          LOG_ERROR("Pipeline", "Camera start failed");
+          running = false;
+          return;
+        }
       }
     }
 
@@ -144,24 +189,37 @@ class PipelineCoordinator::Impl {
 
       // 1. Acquire frame
       std::shared_ptr<common::Buffer> frame;
-      if (use_camera_) {
+      std::shared_ptr<common::Buffer> processed;
+      size_t active_cam_idx = 0;
+
+      if (use_camera_ && !cameras_.empty()) {
+        // Multi-camera: round-robin across cameras
+        active_cam_idx = frame_count % cameras_.size();
+        frame = cameras_[active_cam_idx]->CaptureFrame();
+        if (!frame) continue;
+        // 2. Preprocess with per-camera RGA
+        processed = rga_processors_[active_cam_idx]->Process(frame);
+      } else if (use_camera_) {
         frame = camera_->CaptureFrame();
+        if (!frame) continue;
+        // 2. Preprocess
+        processed = rga_->Process(frame);
       } else {
         frame = ReadAndDecodePacket();
-      }
-      if (!frame) {
-        if (!use_camera_) {
+        if (!frame) {
           LOG_INFO("Pipeline", "End of video stream");
           break;
         }
-        continue;
+        // 2. Preprocess
+        processed = rga_->Process(frame);
       }
-
-      // 2. Preprocess: NV12 → RGB888 640×640
-      auto processed = rga_->Process(frame);
       if (!processed) {
         LOG_ERROR("Pipeline", "RGA processing failed");
-        if (use_camera_) camera_->ReleaseFrame(frame);
+        if (use_camera_ && !cameras_.empty()) {
+          cameras_[active_cam_idx]->ReleaseFrame(frame);
+        } else if (use_camera_) {
+          camera_->ReleaseFrame(frame);
+        }
         continue;
       }
 
@@ -170,7 +228,11 @@ class PipelineCoordinator::Impl {
         std::lock_guard<std::mutex> lock(engine_mutex_);
         if (!engine_->Infer(processed)) {
           LOG_ERROR("Pipeline", "Inference failed");
-          if (use_camera_) camera_->ReleaseFrame(frame);
+          if (use_camera_ && !cameras_.empty()) {
+            cameras_[active_cam_idx]->ReleaseFrame(frame);
+          } else if (use_camera_) {
+            camera_->ReleaseFrame(frame);
+          }
           continue;
         }
       }
@@ -237,7 +299,9 @@ class PipelineCoordinator::Impl {
       }
 
       // 6. Release frame
-      if (use_camera_) {
+      if (use_camera_ && !cameras_.empty()) {
+        cameras_[active_cam_idx]->ReleaseFrame(frame);
+      } else if (use_camera_) {
         camera_->ReleaseFrame(frame);
       }
 
@@ -285,8 +349,12 @@ class PipelineCoordinator::Impl {
       grpc_client_->StopEventStream();
     }
 
-    if (use_camera_ && camera_) {
-      camera_->Stop();
+    if (use_camera_) {
+      if (!cameras_.empty()) {
+        for (auto& cam : cameras_) cam->Stop();
+      } else if (camera_) {
+        camera_->Stop();
+      }
     }
 
     LOG_INFO("Pipeline", "Stopped. Processed %lu frames, avg latency=%.1fms",
@@ -352,9 +420,11 @@ class PipelineCoordinator::Impl {
   bool use_camera_ = true;
 
   std::unique_ptr<rk_hal::DRMAllocator> drm_allocator_;
-  std::unique_ptr<rk_hal::V4L2Camera> camera_;
+  std::unique_ptr<rk_hal::V4L2Camera> camera_;           // Single-camera fallback
+  std::vector<std::unique_ptr<rk_hal::V4L2Camera>> cameras_;  // Multi-camera
   std::unique_ptr<rk_hal::MPPDecoder> decoder_;
-  std::unique_ptr<rk_hal::RGAProcessor> rga_;
+  std::unique_ptr<rk_hal::RGAProcessor> rga_;             // Single-camera/video RGA
+  std::vector<std::unique_ptr<rk_hal::RGAProcessor>> rga_processors_;  // Per-camera RGA
   std::unique_ptr<ai_inference::RKNNEngine> engine_;
   std::unique_ptr<ai_inference::YOLOPostProcessor> postprocessor_;
   std::unique_ptr<communication::GRPCClient> grpc_client_;

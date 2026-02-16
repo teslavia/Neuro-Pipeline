@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Central server main entry point."""
+"""Central server main entry point — wires all subsystems from config."""
 import argparse
 import asyncio
 import logging
@@ -10,8 +10,12 @@ from pathlib import Path
 
 from communication.grpc_server import NeuroPipelineServer
 from application_logic.central_orchestrator import CentralOrchestrator, VLMTriggerRule
+from communication.device_session import DeviceSessionManager
 from config import AppConfig
+from observability.circuit_breaker import CircuitBreaker
+from observability.alerting import AlertManager
 from storage.detection_store import DetectionStore
+from storage.cloud_storage import CloudStorageClient
 
 
 def setup_logging(cfg) -> None:
@@ -44,18 +48,10 @@ async def main():
     parser.add_argument("--config", type=Path, default=None, help="Config YAML file")
     parser.add_argument("--host", default=None, help="Server host")
     parser.add_argument("--port", type=int, default=None, help="Server port")
-    parser.add_argument(
-        "--model-path",
-        type=Path,
-        default=None,
-        help="MLX model path",
-    )
+    parser.add_argument("--model-path", type=Path, default=None, help="MLX model path")
     args = parser.parse_args()
 
-    # Load config: file defaults → CLI overrides
     cfg = AppConfig.from_yaml(args.config) if args.config else AppConfig()
-
-    # Setup logging (must be before any log calls)
     setup_logging(cfg)
 
     host = args.host or cfg.central.host
@@ -65,17 +61,59 @@ async def main():
     logger.info("=" * 60)
     logger.info("  Neuro-Pipeline Central Server v1.1.0")
     logger.info("=" * 60)
-    logger.info(f"Host: {host}:{port}")
-    logger.info(f"Model: {model_path}")
-    logger.info(f"VLM rules: {len(cfg.vlm_rules)} loaded")
-    logger.info(f"Storage: {cfg.storage.db_path}")
-    logger.info("")
+    logger.info(f"Host: {host}:{port}  TLS: {cfg.tls.enabled}")
+    logger.info(f"Model: {model_path}  Mode: {cfg.central.inference_mode}")
+    logger.info(f"VLM rules: {len(cfg.vlm_rules)}  Batch: {cfg.batch.max_size}x{cfg.batch.timeout_seconds}s")
+    logger.info(f"Sessions: max {cfg.sessions.max_devices} devices, expiry {cfg.sessions.expiry_timeout}s")
+    logger.info(f"Storage: {cfg.storage.db_path}  Cloud: {cfg.cloud_storage.enabled}")
+    logger.info(f"Tracing: {cfg.tracing.enabled}  Metrics: {cfg.metrics.enabled}")
 
-    # Initialize detection store
+    # --- Subsystem init ---
+
+    # Detection store (SQLite)
     db_path = Path(cfg.storage.db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
     store = DetectionStore(db_path, retention_days=cfg.storage.retention_days)
 
+    # Device session manager
+    session_mgr = DeviceSessionManager(
+        max_devices=cfg.sessions.max_devices,
+        expiry_timeout=cfg.sessions.expiry_timeout,
+    )
+
+    # Circuit breaker
+    breaker = CircuitBreaker(
+        failure_threshold=cfg.circuit_breaker.failure_threshold,
+        recovery_timeout=cfg.circuit_breaker.recovery_timeout,
+        half_open_max=cfg.circuit_breaker.half_open_max,
+    )
+
+    # Alert manager
+    alert_mgr = AlertManager(
+        webhook_url=cfg.alerting.webhook_url,
+    ) if cfg.alerting.enabled and cfg.alerting.webhook_url else None
+
+    # Cloud storage (lazy boto3)
+    cloud = None
+    if cfg.cloud_storage.enabled:
+        cloud = CloudStorageClient(cfg.cloud_storage)
+        await cloud.initialize()
+
+    # Distributed tracing (lazy OTel)
+    if cfg.tracing.enabled:
+        from observability.tracing import init_tracing
+        init_tracing(cfg.tracing.service_name, cfg.tracing.endpoint)
+
+    # Prometheus metrics endpoint
+    if cfg.metrics.enabled:
+        try:
+            from prometheus_client import start_http_server
+            start_http_server(cfg.metrics.port)
+            logger.info(f"Prometheus metrics on :{cfg.metrics.port}/metrics")
+        except Exception as e:
+            logger.warning(f"Metrics server failed: {e}")
+
+    # VLM trigger rules
     vlm_rules = [
         VLMTriggerRule(
             class_name=r.class_name,
@@ -84,12 +122,32 @@ async def main():
         )
         for r in cfg.vlm_rules
     ]
-    orchestrator = CentralOrchestrator(model_path, vlm_rules=vlm_rules, detection_store=store)
+
+    # Orchestrator (core logic)
+    vlm_model_path = Path(cfg.central.vlm_model_path) if cfg.central.vlm_model_path else None
+    orchestrator = CentralOrchestrator(
+        model_path,
+        vlm_rules=vlm_rules,
+        detection_store=store,
+        inference_mode=cfg.central.inference_mode,
+        vlm_model_path=vlm_model_path,
+        circuit_breaker=breaker,
+        alert_manager=alert_mgr,
+        cloud_storage=cloud,
+        batch_config=cfg.batch,
+    )
     await orchestrator.initialize()
 
-    server = NeuroPipelineServer(host, port, orchestrator)
+    # gRPC server (with mTLS + session manager)
+    server = NeuroPipelineServer(
+        host, port, orchestrator,
+        max_message_size_mb=cfg.central.max_message_size_mb,
+        tls_config=cfg.tls if cfg.tls.enabled else None,
+        session_manager=session_mgr,
+    )
     await server.start()
 
+    # Graceful shutdown
     stop_event = asyncio.Event()
 
     def signal_handler(sig, frame):

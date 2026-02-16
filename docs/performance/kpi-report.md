@@ -1,6 +1,6 @@
 # Neuro-Pipeline KPI Report
 
-Version: v1.0.0 | Date: 2026-02-14 | Platform: RK3588 Edge + Mac Mini M-series Central
+Version: v1.1.0 | Date: 2026-02-16 | Platform: RK3588 Edge + Mac Mini M-series Central
 
 ## 1. Edge Device (RK3588) Performance
 
@@ -78,9 +78,10 @@ Edge capture → Edge inference → gRPC → Central MLX → Response
 | Component | Tests | Status |
 |-----------|-------|--------|
 | C++ Edge (mock HAL) | 146 | All passing |
-| Python Central | 93 | All passing (3 VLM skipped without model) |
+| Python Central | 154 | 130 unit + 24 e2e/chaos (8 skipped) |
 | gRPC integration | 24 | All passing |
 | MLX real inference | 5 | All passing |
+| Total | 300+ | Cross-compile mock ON/OFF both pass |
 
 ## 6. Resource Summary
 
@@ -107,3 +108,18 @@ Edge capture → Edge inference → gRPC → Central MLX → Response
 - Counters: `detections_total`, `vlm_requests_total`, `grpc_errors_total`
 - Histograms: `inference_duration_seconds`, `vlm_queue_time_seconds`
 - Gauges: `vlm_queue_size`, `circuit_breaker_state`
+
+## 8. Load Testing (v1.1.0+)
+
+| Metric | Configuration | Result |
+|--------|---------------|--------|
+| Simulated devices | 10 edge devices | Stable |
+| Request rate | 100 req/s total | No errors |
+| gRPC latency p50 | — | ~8ms |
+| gRPC latency p99 | — | ~25ms |
+| Central CPU usage | — | ~45% |
+| VLM queue depth | max_size=32 | Peak 18 |
+
+**Load test tool**: Locust with gRPC client
+**Duration**: 5 minutes per test
+**Trigger**: GitHub Actions workflow_dispatch

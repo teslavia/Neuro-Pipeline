@@ -1,8 +1,8 @@
 # Technical Decisions Record
 
 **Project**: Neuro-Pipeline
-**Version**: v1.0.0
-**Last Updated**: 2026-02-14
+**Version**: v1.1.0
+**Last Updated**: 2026-02-16
 
 ---
 
@@ -261,6 +261,12 @@ void* vaddr = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, dma_fd, 0)
 | TD-016 | Async VLM Queue | ✅ | 5 | Medium (non-blocking) | Low |
 | TD-017 | Prometheus Metrics | ✅ | 6 | High (observability) | None |
 | TD-018 | Circuit Breaker | ✅ | 6 | High (reliability) | Low |
+| TD-019 | Multi-Camera Round-Robin | ✅ | 7 | Medium (parallel capture) | Low |
+| TD-020 | Detection Dedup IoU+TTL | ✅ | 7 | Medium (reduce duplicates) | Low |
+| TD-021 | VLM Batch Accumulator | ✅ | 7 | High (throughput) | Low |
+| TD-022 | Cloud Storage Lazy-Load | ✅ | 7 | Medium (graceful degrade) | None |
+| TD-023 | OTel No-Op Fallback | ✅ | 7 | Low (optional tracing) | None |
+| TD-024 | Grafana Provisioning | ✅ | 7 | Medium (monitoring) | Low |
 
 ---
 
@@ -453,6 +459,120 @@ void* vaddr = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, dma_fd, 0)
 **Rationale**: Prevents cascade failures, auto-recovers after cooldown (30s), minimal code (~60 lines)
 
 **Implementation**: `mac-central/src/observability/circuit_breaker.py`
+
+---
+
+### TD-019: Multi-Camera Round-Robin Capture
+
+**Date**: 2026-02-16 (Week 7)
+**Status**: ✅ Implemented
+**Context**: Single-camera pipeline limits coverage, need multiple cameras per edge device
+
+**Decision**: Vector of V4L2 cameras with round-robin capture scheduling
+
+**Alternatives Considered**:
+1. Parallel capture threads (high CPU, complex sync)
+2. Single camera with external multiplexer (hardware dependency)
+3. Round-robin in main loop ✅ (simple, low overhead)
+
+**Rationale**: Sequential capture with shared NPU (mutex-protected) balances throughput and complexity
+
+**Implementation**: `rk3588-edge/src/app/pipeline_coordinator.cpp`
+
+---
+
+### TD-020: Detection Deduplication via IoU + TTL
+
+**Date**: 2026-02-16 (Week 7)
+**Status**: ✅ Implemented
+**Context**: Multi-camera overlapping views cause duplicate detections
+
+**Decision**: Cache-based deduplication with IoU spatial matching + TTL temporal coherence
+
+**Alternatives Considered**:
+1. No dedup (accept duplicates)
+2. Spatial-only (misses temporal duplicates)
+3. IoU + TTL ✅ (handles both spatial and temporal)
+
+**Rationale**: IoU threshold 0.5-0.7 filters spatial duplicates, TTL 2-5s filters temporal duplicates
+
+**Implementation**: `rk3588-edge/src/ai_inference/detection_dedup_cache.cpp`
+
+---
+
+### TD-021: VLM Batch Accumulator
+
+**Date**: 2026-02-16 (Week 7)
+**Status**: ✅ Implemented
+**Context**: Per-request VLM inference has high overhead (model load, tokenization)
+
+**Decision**: Accumulator worker with configurable batch_size + timeout
+
+**Alternatives Considered**:
+1. No batching (high latency per request)
+2. Fixed batch size (may wait too long)
+3. Batch size + timeout ✅ (balances latency and throughput)
+
+**Rationale**: Batch size 4-8 reduces per-request overhead, timeout 1-2s ensures responsiveness
+
+**Implementation**: `mac-central/src/llm_vlm/vlm_batch_worker.py`
+
+---
+
+### TD-022: Cloud Storage Lazy-Load boto3
+
+**Date**: 2026-02-16 (Week 7)
+**Status**: ✅ Implemented
+**Context**: boto3 is large dependency (~50MB), not all deployments need cloud storage
+
+**Decision**: Lazy import boto3 only when cloud_storage.enabled=true
+
+**Alternatives Considered**:
+1. Always import (bloats minimal installs)
+2. Optional dependency (pip install complexity)
+3. Lazy import ✅ (graceful degradation)
+
+**Rationale**: System works without boto3, logs warning if storage unavailable
+
+**Implementation**: `mac-central/src/storage/cloud_storage.py`
+
+---
+
+### TD-023: OpenTelemetry No-Op Fallback
+
+**Date**: 2026-02-16 (Week 7)
+**Status**: ✅ Implemented
+**Context**: OTel adds tracing overhead, not all deployments need distributed tracing
+
+**Decision**: Lazy-load OTel with no-op tracer fallback if unavailable
+
+**Alternatives Considered**:
+1. Always require OTel (forces dependency)
+2. Conditional imports with try/except ✅ (graceful)
+3. Separate tracing service (adds complexity)
+
+**Rationale**: Tracing is optional, system works without OTel
+
+**Implementation**: `mac-central/src/observability/tracing.py`
+
+---
+
+### TD-024: Grafana Dashboard Provisioning
+
+**Date**: 2026-02-16 (Week 7)
+**Status**: ✅ Implemented
+**Context**: Manual Grafana setup is error-prone and not reproducible
+
+**Decision**: Auto-provision datasource + dashboard via docker-compose volumes
+
+**Alternatives Considered**:
+1. Manual setup (not reproducible)
+2. Grafana API scripts (complex)
+3. Provisioning YAML ✅ (declarative, version-controlled)
+
+**Rationale**: Dashboard JSON + datasource YAML in git, auto-loaded on startup
+
+**Implementation**: `extensions/monitoring/grafana/provisioning/`
 
 ---
 

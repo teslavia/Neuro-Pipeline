@@ -1,6 +1,6 @@
 # Neuro-Pipeline API Reference
 
-**Version**: 1.0.0
+**Version**: 1.1.0
 **Protocol**: gRPC with Protocol Buffers 3
 **Generated From**: `proto/neuro_pipeline.proto`
 
@@ -67,6 +67,7 @@ rpc SendControlCommand(ControlCommand) returns (CommandResponse);
 |---|---|---|
 | `SET_FPS` | `{"fps": "15"}` | 调整摄像头帧率 |
 | `CHANGE_MODEL` | `{"model_path": "/models/yolov8n.rknn"}` | 切换 AI 模型 |
+| `RELOAD_MODEL` | `{}` | 热重载当前模型（无需重启） |
 | `SET_DETECTION_THRESHOLD` | `{"threshold": "0.6"}` | 调整检测置信度阈值 |
 | `ENABLE_DEBUG` | `{"enabled": "true"}` | 开关调试日志 |
 | `SHUTDOWN` | `{}` | 优雅关机 |
@@ -108,6 +109,36 @@ rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
 
 ---
 
+#### 5. RegisterDevice
+
+**Type**: Unary RPC
+
+```protobuf
+rpc RegisterDevice(DeviceRegistration) returns (RegistrationResponse);
+```
+
+**Description**: 边缘设备注册到中心服务器，获取 device_id。
+
+**DeviceRegistration**:
+```protobuf
+message DeviceRegistration {
+  string device_name = 1;
+  string device_type = 2;  // e.g., "RK3588"
+  map<string, string> metadata = 3;
+}
+```
+
+**RegistrationResponse**:
+```protobuf
+message RegistrationResponse {
+  string device_id = 1;
+  bool success = 2;
+  string message = 3;
+}
+```
+
+---
+
 ## Message Definitions
 
 ### DetectionResult
@@ -119,6 +150,8 @@ message DetectionResult {
   repeated BoundingBox boxes = 3;  // 检测到的目标
   bytes frame_data = 4;            // 可选 JPEG 编码帧 (仅事件触发时发送)
   DeviceMetrics metrics = 5;       // 设备性能指标
+  string device_id = 6;            // 设备标识 (v1.1.0+)
+  string span_id = 7;              // 分布式追踪 span ID (v1.1.0+)
 }
 ```
 
@@ -374,7 +407,8 @@ class MLXInferenceEngine:
 |----------|--------|-------------|
 | `/` | GET | 仪表盘页面 (HTML) |
 | `/api/status` | GET | 系统状态 JSON |
-| `/api/events` | GET | 最近事件列表 (`?limit=50`) |
+| `/api/devices` | GET | 已注册设备列表 (v1.1.0+) |
+| `/api/events` | GET | 最近事件列表 (`?limit=50&device_id=xxx`) |
 | `/api/events` | POST | 推送事件（供 orchestrator 调用） |
 | `/ws` | WebSocket | 实时事件流 |
 
@@ -424,8 +458,14 @@ Key metrics:
 ### Detection History
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/events/history` | GET | Query SQLite detection history (`?hours=24&limit=100`) |
+| `/api/events/history` | GET | Query SQLite detection history (`?hours=24&limit=100&device_id=xxx`) |
+
+### Device Management (v1.1.0+)
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/devices` | GET | List all registered devices with last heartbeat |
+| `/api/devices/{device_id}` | GET | Get specific device info |
 
 ---
 
-_Generated from `proto/neuro_pipeline.proto` and source code. Last updated: 2026-02-14_
+_Generated from `proto/neuro_pipeline.proto` and source code. Last updated: 2026-02-16_

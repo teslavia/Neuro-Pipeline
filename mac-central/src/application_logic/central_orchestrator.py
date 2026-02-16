@@ -49,6 +49,8 @@ class CentralOrchestrator:
         vlm_model_path: Optional[Path] = None,
         circuit_breaker: Optional[CircuitBreaker] = None,
         alert_manager: Optional[AlertManager] = None,
+        cloud_storage=None,
+        batch_config=None,
     ) -> None:
         self.model_path = model_path
         self.inference_engine: Optional[MLXInferenceEngine] = None
@@ -65,6 +67,9 @@ class CentralOrchestrator:
         self._vlm_worker_task: Optional[asyncio.Task] = None
         self._circuit_breaker = circuit_breaker or CircuitBreaker()
         self._alert_manager = alert_manager
+        self._cloud_storage = cloud_storage
+        self._batch_max_size = batch_config.max_size if batch_config else 8
+        self._batch_timeout = batch_config.timeout_seconds if batch_config else 2.0
 
     async def initialize(self) -> None:
         """Initialize orchestrator and load models."""
@@ -177,12 +182,23 @@ class CentralOrchestrator:
 
                 try:
                     t0 = time.perf_counter()
+                    device_id = item.get("device_id", "")
+                    prompt = item["prompt"]
+                    # Multi-turn: build prompt with conversation history
+                    if device_id and self.inference_engine:
+                        ctx = self.inference_engine.get_conversation(device_id)
+                        prompt = ctx.build_prompt(prompt)
                     vlm_result = await asyncio.wait_for(
                         self.inference_engine.analyze_image(
-                            item["frame_data"], item["prompt"]
+                            item["frame_data"], prompt
                         ),
                         timeout=30.0,
                     )
+                    # Record conversation turn
+                    if device_id and self.inference_engine:
+                        ctx = self.inference_engine.get_conversation(device_id)
+                        ctx.add_turn("user", item["prompt"])
+                        ctx.add_turn("assistant", vlm_result[:200])
                     elapsed = time.perf_counter() - t0
                     vlm_latency.observe(elapsed)
                     self._circuit_breaker.record_success()
@@ -192,12 +208,23 @@ class CentralOrchestrator:
                         "type": "vlm_analysis",
                         "frame_id": item["frame_id"],
                         "trace_id": item["trace_id"],
-                        "device_id": item.get("device_id", ""),
+                        "device_id": device_id,
                         "detections": item["detections"],
                         "vlm_result": vlm_result[:200],
                         "rule": item["rule"],
                         "timestamp": time.time(),
                     })
+                    # Cloud storage: upload critical frame
+                    if self._cloud_storage and item.get("frame_data"):
+                        try:
+                            await self._cloud_storage.upload_frame(
+                                device_id=device_id or "unknown",
+                                frame_id=item["frame_id"],
+                                frame_data=item["frame_data"],
+                                metadata={"vlm_result": vlm_result[:100], "rule": item["rule"]},
+                            )
+                        except Exception as ue:
+                            logger.warning(f"Cloud upload failed: {ue}")
                 except (asyncio.TimeoutError, Exception) as e:
                     self._circuit_breaker.record_failure()
                     vlm_requests_total.labels(status="error").inc()

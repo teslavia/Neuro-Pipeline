@@ -6,9 +6,9 @@
 
 <p align="center">
   <a href="https://github.com/teslavia/Neuro-Pipeline/actions"><img src="https://github.com/teslavia/Neuro-Pipeline/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <img src="https://img.shields.io/badge/version-1.0.0-green.svg" alt="Version">
+  <img src="https://img.shields.io/badge/version-1.1.0-green.svg" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License">
-  <img src="https://img.shields.io/badge/tests-239%2B_passing-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-154_Python-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/C%2B%2B-17-00599C.svg?logo=cplusplus&logoColor=white" alt="C++17">
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?logo=python&logoColor=white" alt="Python">
 </p>
@@ -44,6 +44,9 @@ Camera --> V4L2 --> MPP --> RGA --> RKNN NPU --> gRPC --> MLX VLM --> Alert
 - **Observability** — Prometheus metrics, health probes, circuit breaker, alerting
 - **SQLite persistence** — detection history survives restarts, 7-day retention
 - **Web dashboard** — FastAPI + htmx + WebSocket real-time monitoring
+- **Multi-camera + Multi-edge** — single central manages multiple devices, parallel inference
+- **VLM batch inference** — accumulator with multi-turn conversation context
+- **Cloud storage** — S3/MinIO async upload, distributed tracing
 
 ## Architecture
 
@@ -157,16 +160,19 @@ neuro-pipeline/
 │   │   ├── communication/         #   gRPC async server
 │   │   ├── llm_vlm/               #   MLX LLM/VLM dual-mode engine
 │   │   ├── application_logic/     #   Orchestrator, circuit breaker
-│   │   └── storage/               #   SQLite persistence
-│   └── tests/                     #   pytest (93 tests)
+│   │   ├── storage/               #   SQLite persistence
+│   │   └── observability/         #   Metrics, tracing
+│   └── tests/                     #   pytest (154 tests: 130 unit + 24 e2e/chaos)
 ├── proto/                         # Protobuf service definitions
-├── extensions/dashboard/          # FastAPI + htmx monitoring UI
+├── extensions/
+│   ├── dashboard/                 # FastAPI + htmx monitoring UI
+│   └── monitoring/                # Grafana + Prometheus stack
 ├── tools/
 │   ├── cross_compile_env/         #   Docker aarch64 toolchain + sysroot
 │   ├── certs/                     #   mTLS certificate generation
 │   └── services/                  #   systemd + launchd configs
 ├── config.yaml                    # Unified configuration
-└── VERSION.json                   # v1.0.0
+└── VERSION.json                   # v1.1.0
 ```
 
 ## Test Coverage
@@ -174,8 +180,8 @@ neuro-pipeline/
 | Component | Framework | Tests | Notes |
 |-----------|-----------|-------|-------|
 | C++ Edge (mock HAL) | GoogleTest | 146 | Buffer, pool, thread, HAL, YOLO, gRPC |
-| Python Central | pytest | 93 | Server, orchestrator, VLM, metrics, storage |
-| Total | — | 239+ | 3 VLM tests skipped without model |
+| Python Central | pytest | 154 | 130 unit + 24 e2e/chaos (8 skipped) |
+| Total | — | 300+ | Cross-compile mock ON/OFF both pass |
 
 ## Technology Stack
 
@@ -200,7 +206,7 @@ neuro-pipeline/
 | [API Reference](docs/API_REFERENCE.md) | gRPC services, REST endpoints, HAL APIs |
 | [Deployment Guide](docs/DEPLOYMENT_GUIDE.md) | Cross-compile, device deploy, mTLS, services |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | Common issues and solutions |
-| [Technical Decisions](docs/TECHNICAL_DECISIONS.md) | 18 architecture decision records (TD-001 ~ TD-018) |
+| [Technical Decisions](docs/TECHNICAL_DECISIONS.md) | 24 architecture decision records (TD-001 ~ TD-024) |
 | [KPI Report](docs/performance/kpi-report.md) | Benchmark results and pipeline breakdown |
 
 ## Milestones
@@ -213,6 +219,7 @@ neuro-pipeline/
 | v0.4.0 | Hardening | 4-bit quantization, dashboard, config-driven VLM |
 | v0.5.0 | Production | mTLS, SQLite, VLM multimodal, async queue |
 | v1.0.0 | Observability | Prometheus, health probes, circuit breaker, alerting |
+| v1.1.0 | Scale + Multi-edge | Multi-camera, multi-device, VLM batch, Grafana, chaos tests |
 
 ## License
 

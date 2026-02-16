@@ -1,7 +1,7 @@
 # Neuro-Pipeline 部署指南 (Deployment Guide)
 
-**版本**: v1.0.0
-**更新日期**: 2026-02-14
+**版本**: v1.1.0
+**更新日期**: 2026-02-16
 
 ---
 
@@ -711,7 +711,44 @@ alerting:
 
 ---
 
-## 十四、参考资料
+## 十四、Grafana 监控栈部署 (v1.1.0+)
+
+### 14.1 启动 Prometheus + Grafana
+
+```bash
+cd extensions/monitoring
+docker-compose up -d
+```
+
+**服务**:
+- Prometheus: http://localhost:9090
+- Grafana: http://localhost:3000 (admin/admin)
+
+### 14.2 配置数据源
+
+Grafana 自动配置 Prometheus 数据源（通过 provisioning）。
+
+### 14.3 导入仪表盘
+
+仪表盘已自动加载：`extensions/monitoring/grafana/dashboards/neuro-pipeline.json`
+
+**8 个面板**:
+1. Detections Total (Counter)
+2. VLM Inference Latency (Histogram)
+3. NPU Utilization (Gauge)
+4. VLM Queue Depth (Gauge)
+5. gRPC Requests Total (Counter)
+6. Circuit Breaker State (Gauge)
+7. Active Devices (Gauge)
+8. Error Rate (Counter)
+
+### 14.4 告警规则
+
+编辑 `extensions/monitoring/prometheus/alerts.yml` 添加自定义告警。
+
+---
+
+## 十五、参考资料
 
 - [ARCHITECTURE.md](ARCHITECTURE.md) — 系统架构设计
 - [API_REFERENCE.md](API_REFERENCE.md) — gRPC API 文档
@@ -721,5 +758,5 @@ alerting:
 
 ---
 
-**文档版本**: v1.0.0
-**最后更新**: 2026-02-14
+**文档版本**: v1.1.0
+**最后更新**: 2026-02-16

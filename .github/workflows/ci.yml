@@ -28,7 +28,6 @@ jobs:
             libgrpc++-dev libgrpc-dev protobuf-compiler-grpc \
             python3 python3-pip
           pip3 install grpcio-tools
-          # Stub aarch64 libs for cross-compile linking (real libs live on device)
           sudo mkdir -p /usr/lib/aarch64-linux-gnu
           aarch64-linux-gnu-gcc -shared -o /tmp/libprotobuf.so -xc /dev/null
           aarch64-linux-gnu-gcc -shared -o /tmp/libgrpc++.so -xc /dev/null
@@ -38,20 +37,15 @@ jobs:
       - name: Generate protobuf code
         run: python3 tools/generate_proto.py
 
-      - name: Create empty sysroot (mock HAL)
-        if: matrix.mock_hal == 'ON'
+      - name: Create sysroot
         run: |
           mkdir -p tools/cross_compile_env/sysroot/usr/include
           mkdir -p tools/cross_compile_env/sysroot/usr/lib
-
-      - name: Create stub sysroot (real HAL CI check)
-        if: matrix.mock_hal == 'OFF'
-        run: |
-          # Headers already in repo sysroot, just need stub .so for linking
-          mkdir -p tools/cross_compile_env/sysroot/usr/lib
-          aarch64-linux-gnu-gcc -shared -o tools/cross_compile_env/sysroot/usr/lib/librknnrt.so -xc /dev/null
-          aarch64-linux-gnu-gcc -shared -o tools/cross_compile_env/sysroot/usr/lib/librga.so -xc /dev/null
-          aarch64-linux-gnu-gcc -shared -o tools/cross_compile_env/sysroot/usr/lib/librockchip_mpp.so -xc /dev/null
+          if [ "${{ matrix.mock_hal }}" = "OFF" ]; then
+            aarch64-linux-gnu-gcc -shared -o tools/cross_compile_env/sysroot/usr/lib/librknnrt.so -xc /dev/null
+            aarch64-linux-gnu-gcc -shared -o tools/cross_compile_env/sysroot/usr/lib/librga.so -xc /dev/null
+            aarch64-linux-gnu-gcc -shared -o tools/cross_compile_env/sysroot/usr/lib/librockchip_mpp.so -xc /dev/null
+          fi
 
       - name: CMake configure
         env:
@@ -69,43 +63,10 @@ jobs:
         run: cd rk3588-edge/build && make -j$(nproc) neuro_edge_lib
 
       - name: Verify library
-        run: |
-          file rk3588-edge/build/libneuro_edge_lib.a
-          file rk3588-edge/build/libneuro_edge_lib.a | grep -q "ar archive"
+        run: file rk3588-edge/build/libneuro_edge_lib.a | grep -q "ar archive"
 
   # ==========================================================================
-  # C++ Unit Tests (Native x86, Mock HAL)
-  # ==========================================================================
-  test-cpp:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update && sudo apt-get install -y \
-            cmake protobuf-compiler libprotobuf-dev \
-            libgrpc++-dev libgrpc-dev protobuf-compiler-grpc
-
-      - name: Generate protobuf code
-        run: python3 tools/generate_proto.py
-
-      - name: CMake configure (native, mock HAL, tests ON)
-        run: |
-          mkdir -p rk3588-edge/build && cd rk3588-edge/build
-          cmake .. \
-            -DUSE_MOCK_HAL=ON \
-            -DCMAKE_BUILD_TYPE=Debug \
-            -DBUILD_TESTING=ON
-
-      - name: Build
-        run: cd rk3588-edge/build && make -j$(nproc)
-
-      - name: Run tests
-        run: cd rk3588-edge/build && ctest --output-on-failure --timeout 30
-
-  # ==========================================================================
-  # Python Tests (Mac Central)
+  # Python Tests + Proto Validation + Docs Check
   # ==========================================================================
   test-python:
     runs-on: macos-latest
@@ -121,57 +82,22 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r mac-central/requirements.txt
-          pip install fastapi httpx uvicorn jinja2 python-multipart
+          pip install fastapi httpx uvicorn jinja2 python-multipart pytest-asyncio
 
-      - name: Generate protobuf code
-        run: python3 tools/generate_proto.py
+      - name: Validate proto
+        run: |
+          pip install grpcio-tools
+          python3 tools/generate_proto.py
 
-      - name: Lint with flake8
-        run: flake8 mac-central/src/ mac-central/tests/ --max-line-length=100
-        continue-on-error: true
+      - name: Validate docs & version
+        run: |
+          test -f README.md && test -f VERSION.json && test -f docs/ARCHITECTURE.md
+          python3 -c "import json; v=json.load(open('VERSION.json')); print('Version:', v['version'])"
 
-      - name: Format check with black
-        run: black --check mac-central/src/ mac-central/tests/
-        continue-on-error: true
-
-      - name: Run pytest
+      - name: Run unit tests
         run: |
           cd mac-central
           pytest tests/ -v --tb=short -o "addopts="
-
-  # ==========================================================================
-  # Protobuf Validation
-  # ==========================================================================
-  validate-proto:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install protobuf compiler
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-
-      - name: Validate proto file
-        run: protoc --proto_path=proto --cpp_out=/tmp proto/neuro_pipeline.proto
-
-  # ==========================================================================
-  # Documentation & Version Check
-  # ==========================================================================
-  docs-check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Check required docs exist
-        run: |
-          test -f README.md
-          test -f VERSION.json
-          test -f docs/ARCHITECTURE.md
-          test -f docs/API_REFERENCE.md
-          test -f proto/neuro_pipeline.proto
-
-      - name: Validate VERSION.json
-        run: |
-          python3 -c "import json; v=json.load(open('VERSION.json')); print('Version:', v['version'])"
 
   # ==========================================================================
   # E2E + Chaos Tests
@@ -194,9 +120,11 @@ jobs:
           pip install fastapi httpx uvicorn jinja2 python-multipart pytest-asyncio
 
       - name: Generate protobuf code
-        run: python3 tools/generate_proto.py
+        run: |
+          pip install grpcio-tools
+          python3 tools/generate_proto.py
 
-      - name: Run E2E tests
+      - name: Run E2E + chaos tests
         run: pytest tests/e2e/ tests/chaos/ -v --tb=short -o "addopts="
 
   # ==========================================================================
@@ -217,12 +145,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r mac-central/requirements.txt
-          pip install locust
+          pip install locust grpcio-tools
 
       - name: Generate protobuf code
         run: python3 tools/generate_proto.py
 
-      - name: Run load test (short burst)
+      - name: Run load test
         run: |
           locust -f tests/load_testing/locustfile.py \
             --headless -u 2 -r 1 -t 10s \

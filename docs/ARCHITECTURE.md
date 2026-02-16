@@ -1,7 +1,7 @@
 # Neuro-Pipeline Architecture Design
 
-**Version**: 1.0.0
-**Date**: 2026-02-14
+**Version**: 1.1.0
+**Date**: 2026-02-16
 **Author**: Teslavia
 
 ---
@@ -235,11 +235,9 @@ RK3588 Edge                                    Mac Mini Central
 
 ## 9. Future Extensions
 
-- 多摄像头支持
-- 云存储集成（S3 / GCS）
-- 模型热替换（无需重启更新 YOLO）
-- 多边缘节点聚合到单中心服务器
 - Kubernetes 边缘部署 (KubeEdge)
+- 视频流录制与回放
+- 边缘侧模型自动更新
 
 ---
 
@@ -290,6 +288,64 @@ RK3588 Edge                                    Mac Mini Central
 - **CRITICAL Log**: 关键错误自动记录到日志（VLM 熔断、数据库故障）
 - **Webhook POST**: 可选 HTTP POST 通知外部系统（配置 `alerting.webhook_url`）
 - **Cooldown**: 同类告警 5 分钟内最多发送 1 次，防止告警风暴
+
+---
+
+## v1.1.0 Additions (Week 7)
+
+### Multi-Camera Support (Edge)
+- Vector of V4L2 cameras, round-robin capture
+- Per-camera RGA processor, shared NPU with mutex
+- Detection deduplication cache (IoU + TTL temporal coherence)
+
+### Multi-Edge Device Sessions (Central)
+- DeviceSessionManager: register/heartbeat/expiry
+- Per-device conversation context for VLM
+- Max devices limit with graceful rejection
+
+### Model Hot-Swap (Edge)
+- RELOAD_MODEL gRPC command
+- Mutex-protected engine swap, zero downtime
+- Config reload without restart
+
+### VLM Batch Inference (Central)
+- Accumulator worker: configurable batch_size + timeout
+- Multi-turn conversation context per device
+- Batch processing reduces per-request overhead
+
+### Cloud Storage Integration (Central)
+- S3/MinIO async upload (lazy boto3 import)
+- Graceful degradation if storage unavailable
+- Configurable bucket + credentials
+
+### Distributed Tracing (Central)
+- OpenTelemetry init + span instrumentation
+- Lazy-load with no-op fallback if unavailable
+- Trace ID propagation via gRPC metadata
+
+### Structured Logging (Edge)
+- C++ logger.hpp JSON output mode
+- Configurable via `logging.format` in config
+
+### Grafana Monitoring Stack
+- 8-panel dashboard (detections, latency, NPU, VLM queue, etc.)
+- Prometheus + docker-compose deployment
+- Auto-provisioned datasource + dashboard
+
+### Dashboard Multi-Device (Central)
+- `/api/devices` endpoint lists all registered devices
+- `device_id` filter for events/history
+- Multi-device grid view
+
+### Chaos + E2E Tests
+- Disconnect recovery, circuit breaker, SQLite retry
+- Session expiry, VLM queue overflow
+- Synthetic pipeline validation (154 Python tests total)
+
+### Load Testing
+- Locust gRPC load test (N edge devices simulation)
+- GitHub Actions workflow_dispatch trigger
+- Configurable users/spawn-rate/duration
 
 ---
 

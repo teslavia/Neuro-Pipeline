@@ -6,9 +6,9 @@
 
 <p align="center">
   <a href="https://github.com/teslavia/Neuro-Pipeline/actions"><img src="https://github.com/teslavia/Neuro-Pipeline/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <img src="https://img.shields.io/badge/version-1.0.0-green.svg" alt="Version">
+  <img src="https://img.shields.io/badge/version-1.1.0-green.svg" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License">
-  <img src="https://img.shields.io/badge/tests-239%2B_passing-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-154_Python-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/C%2B%2B-17-00599C.svg?logo=cplusplus&logoColor=white" alt="C++17">
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?logo=python&logoColor=white" alt="Python">
 </p>
@@ -44,6 +44,9 @@ Camera --> V4L2 --> MPP --> RGA --> RKNN NPU --> gRPC --> MLX VLM --> Alert
 - **可观测性** — Prometheus 指标、健康探针、熔断器、告警
 - **SQLite 持久化** — 检测历史重启不丢失，7 天自动清理
 - **Web 仪表盘** — FastAPI + htmx + WebSocket 实时监控
+- **多摄像头 + 多边缘** — 单中心管理多设备，多摄像头并行推理
+- **VLM 批量推理** — 累积批处理 + 多轮对话上下文
+- **云存储集成** — S3/MinIO 异步上传，分布式追踪
 
 ## 架构
 
@@ -156,16 +159,19 @@ neuro-pipeline/
 │   │   ├── communication/         #   gRPC async server
 │   │   ├── llm_vlm/               #   MLX LLM/VLM engine
 │   │   ├── application_logic/     #   orchestrator, breaker
-│   │   └── storage/               #   SQLite persistence
-│   └── tests/                     #   pytest (93 tests)
+│   │   ├── storage/               #   SQLite persistence
+│   │   └── observability/         #   metrics, tracing
+│   └── tests/                     #   pytest (154 tests: 130 unit + 24 e2e/chaos)
 ├── proto/                         # Protobuf definitions
-├── extensions/dashboard/          # FastAPI + htmx UI
+├── extensions/
+│   ├── dashboard/                 # FastAPI + htmx UI
+│   └── monitoring/                # Grafana + Prometheus stack
 ├── tools/
 │   ├── cross_compile_env/         #   Docker + sysroot
 │   ├── certs/                     #   mTLS cert gen
 │   └── services/                  #   systemd + launchd
 ├── config.yaml                    # unified config
-└── VERSION.json                   # v1.0.0
+└── VERSION.json                   # v1.1.0
 ```
 
 ## 测试覆盖
@@ -173,8 +179,8 @@ neuro-pipeline/
 | 组件 | 框架 | 测试数 | 说明 |
 |------|------|--------|------|
 | C++ 边缘端 (Mock HAL) | GoogleTest | 146 | buffer, pool, thread, HAL, YOLO, gRPC |
-| Python 中心端 | pytest | 93 | server, orchestrator, VLM, metrics, storage |
-| 合计 | — | 239+ | 3 个 VLM 测试在无模型时跳过 |
+| Python 中心端 | pytest | 154 | 130 unit + 24 e2e/chaos (8 skipped) |
+| 合计 | — | 300+ | 跨编译 mock ON/OFF 均通过 |
 
 ## 技术栈
 
@@ -199,7 +205,7 @@ neuro-pipeline/
 | [API 参考](docs/API_REFERENCE.md) | gRPC 服务、REST 端点、HAL API |
 | [部署指南](docs/DEPLOYMENT_GUIDE.md) | 交叉编译、设备部署、mTLS、系统服务 |
 | [故障排查](docs/TROUBLESHOOTING.md) | 常见问题与解决方案 |
-| [技术决策](docs/TECHNICAL_DECISIONS.md) | 18 条架构决策记录 (TD-001 ~ TD-018) |
+| [技术决策](docs/TECHNICAL_DECISIONS.md) | 24 条架构决策记录 (TD-001 ~ TD-024) |
 | [KPI 报告](docs/performance/kpi-report.md) | 性能基准与管线分解 |
 
 ## 里程碑
@@ -212,6 +218,7 @@ neuro-pipeline/
 | v0.4.0 | 生产加固 | 4-bit quantization, dashboard, config VLM |
 | v0.5.0 | 生产部署 | mTLS, SQLite, VLM multimodal, async queue |
 | v1.0.0 | 可观测性 | Prometheus, health probes, circuit breaker, alerting |
+| v1.1.0 | 规模化 + 多边缘 | Multi-camera, multi-device, VLM batch, Grafana, chaos tests |
 
 ## 许可证
 

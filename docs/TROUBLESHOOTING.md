@@ -1,7 +1,7 @@
 # Neuro-Pipeline 故障排查指南 (Troubleshooting Guide)
 
-**版本**: v1.0.0
-**更新日期**: 2026-02-14
+**版本**: v1.1.0
+**更新日期**: 2026-02-16
 
 ---
 
@@ -656,7 +656,7 @@ bash tools/convert_mlx_model.sh
 
 ---
 
-**文档版本**: v1.0.0
+**文档版本**: v1.1.0
 
 ---
 
@@ -749,4 +749,127 @@ bash tools/convert_mlx_model.sh --vlm
 
 ---
 
-## 十一、参考资料
+## 十一、多设备与监控问题 (v1.1.0+)
+
+### 11.1 设备注册失败
+
+**症状**: "Device registration failed: max devices reached"
+
+**原因**: 中心服务器达到最大设备数限制
+
+**解决方案**:
+- 检查 `config.yaml` 中 `central.max_devices` 配置
+- 清理过期设备: 重启中心服务器或手动调用 `DeviceSessionManager.cleanup_expired()`
+- 增加 `max_devices` 限制
+
+---
+
+### 11.2 Grafana 无法连接 Prometheus
+
+**症状**: Grafana 显示 "Data source error"
+
+**排查**:
+1. 确认 Prometheus 运行: `curl http://localhost:9090/metrics`
+2. 检查 docker-compose 网络: `docker network inspect monitoring_default`
+3. 验证 Grafana 数据源配置: http://localhost:3000/datasources
+
+**解决方案**:
+```bash
+cd extensions/monitoring
+docker-compose down
+docker-compose up -d
+```
+
+---
+
+### 11.3 云存储上传失败
+
+**症状**: "S3 upload failed: NoCredentialsError"
+
+**原因**: AWS 凭证未配置或 boto3 未安装
+
+**解决方案**:
+```bash
+# 安装 boto3
+pip install boto3
+
+# 配置 AWS 凭证
+aws configure
+# 或设置环境变量
+export AWS_ACCESS_KEY_ID=xxx
+export AWS_SECRET_ACCESS_KEY=xxx
+
+# 或在 config.yaml 中配置
+cloud_storage:
+  enabled: true
+  provider: "s3"
+  bucket: "neuro-pipeline-frames"
+  aws_access_key_id: "xxx"
+  aws_secret_access_key: "xxx"
+```
+
+**注意**: 如果云存储不可用，系统会优雅降级（仅记录警告日志）
+
+---
+
+### 11.4 分布式追踪未生效
+
+**症状**: 日志中无 span_id 或追踪数据
+
+**原因**: OpenTelemetry 未安装或配置错误
+
+**解决方案**:
+```bash
+# 安装 OpenTelemetry
+pip install opentelemetry-api opentelemetry-sdk opentelemetry-instrumentation-grpc
+
+# 确认 config.yaml 中 tracing.enabled=true
+tracing:
+  enabled: true
+  service_name: "neuro-pipeline-central"
+  exporter: "console"  # 或 "jaeger"
+```
+
+**注意**: 如果 OTel 不可用，系统会使用 no-op tracer（不影响功能）
+
+---
+
+### 11.5 多摄像头检测重复
+
+**症状**: 同一目标被多个摄像头重复检测
+
+**原因**: 检测去重缓存未生效或 IoU 阈值过低
+
+**解决方案**:
+- 检查 `config.yaml` 中 `edge.dedup_iou_threshold`（推荐 0.5-0.7）
+- 检查 `edge.dedup_ttl_seconds`（推荐 2-5 秒）
+- 确保不同摄像头视野有重叠时才启用去重
+
+---
+
+### 11.6 VLM 批处理未触发
+
+**症状**: VLM 请求逐个处理，未批量
+
+**原因**: 批处理配置错误或请求间隔过长
+
+**排查**:
+```bash
+# 检查配置
+grep -A 5 "vlm_batch" config.yaml
+
+# 应有:
+vlm_batch:
+  enabled: true
+  max_batch_size: 4
+  timeout_seconds: 2.0
+```
+
+**解决方案**:
+- 降低 `timeout_seconds` 以更快触发批处理
+- 增加 `max_batch_size` 以容纳更多请求
+- 确保多个检测事件在短时间内到达
+
+---
+
+## 十二、参考资料
