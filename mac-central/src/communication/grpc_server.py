@@ -187,7 +187,7 @@ class NeuroPipelineServicer(neuro_pipeline_pb2_grpc.NeuroPipelineServiceServicer
             else neuro_pipeline_pb2.HealthCheckResponse.NOT_SERVING
         )
         return neuro_pipeline_pb2.HealthCheckResponse(
-            status=status, version="1.3.0"
+            status=status, version="1.3.1"
         )
 
     async def RegisterDevice(self, request, context: grpc.aio.ServicerContext):
