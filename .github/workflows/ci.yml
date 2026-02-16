@@ -123,11 +123,20 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r mac-central/requirements.txt
           pip install fastapi httpx uvicorn jinja2 python-multipart pytest-asyncio
+          pip install flake8 black
 
       - name: Validate proto
         run: |
           pip install grpcio-tools
           python3 tools/generate_proto.py
+
+      - name: Lint with flake8
+        run: flake8 mac-central/src/ mac-central/tests/ --max-line-length=100
+        continue-on-error: true
+
+      - name: Format check with black
+        run: black --check mac-central/src/ mac-central/tests/
+        continue-on-error: true
 
       - name: Validate docs & version
         run: |
@@ -138,6 +147,9 @@ jobs:
         run: |
           cd mac-central
           pytest tests/ -v --tb=short -o "addopts="
+
+      - name: Run dashboard tests
+        run: pytest extensions/dashboard/tests/ -v --tb=short -o "addopts="
 
   # ==========================================================================
   # E2E + Chaos Tests
