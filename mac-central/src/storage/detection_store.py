@@ -1,10 +1,13 @@
 """SQLite-based detection event storage with retry on lock."""
 
+import asyncio
 import json
 import logging
+import shutil
 import sqlite3
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -128,6 +131,35 @@ class DetectionStore:
             self._conn.close()
             self._conn = None
             logger.info("DetectionStore closed")
+
+    def backup(self, dest_path: Path) -> bool:
+        """Create an atomic backup using sqlite3.backup(). Returns True on success."""
+        dest_path = Path(dest_path)
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with self._lock:
+                if not self._conn:
+                    return False
+                dest_conn = sqlite3.connect(str(dest_path))
+                self._conn.backup(dest_conn)
+                dest_conn.close()
+            logger.info(f"Backup created: {dest_path}")
+            return True
+        except (sqlite3.Error, OSError) as e:
+            logger.error(f"Backup failed: {e}")
+            return False
+
+    async def schedule_backup(
+        self, backup_dir: Path, interval_hours: float = 24.0
+    ) -> None:
+        """Periodically backup the database. Runs as an async task."""
+        backup_dir = Path(backup_dir)
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        while True:
+            await asyncio.sleep(interval_hours * 3600)
+            date_str = datetime.now().strftime("%Y%m%d-%H%M%S")
+            dest = backup_dir / f"detections-{date_str}.db"
+            self.backup(dest)
 
     @staticmethod
     def _row_to_dict(row: sqlite3.Row) -> dict:

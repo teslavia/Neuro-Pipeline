@@ -136,6 +136,7 @@ set(HAL_SOURCES
   src/hal/rga_processor.cpp
   src/hal/drm_allocator.cpp
   src/hal/dmabuf_sim.cpp
+  src/hal/rtsp_source.cpp
 )
 
 set(DATA_PROCESSING_SOURCES
@@ -164,6 +165,7 @@ set(APP_SOURCES
   src/app/pipeline_coordinator.cpp
   src/app/config_manager.cpp
   src/app/edge_metrics.cpp
+  src/app/video_recorder.cpp
 )
 
 # Conditionally include generated protobuf sources
@@ -182,6 +184,7 @@ add_library(neuro_edge_lib STATIC
   src/app/pipeline_coordinator.cpp
   src/app/config_manager.cpp
   src/app/edge_metrics.cpp
+  src/app/video_recorder.cpp
   ${GENERATED_SOURCES}
 )
 

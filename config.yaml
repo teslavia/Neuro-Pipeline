@@ -20,6 +20,11 @@ edge:
   class_names_file: ""
   frame_skip_interval: 0  # 0 = send every frame, N = send every Nth frame
   grpc_compression: true  # Enable gzip compression for gRPC
+  recording:
+    enabled: false
+    pre_seconds: 10
+    post_seconds: 30
+    output_dir: "/opt/neuro-pipeline/recordings"
 
 central:
   host: "0.0.0.0"
@@ -70,6 +75,11 @@ circuit_breaker:
 alerting:
   enabled: true
   webhook_url: ""
+  routes:
+    - severity: critical
+      webhook_url: ""
+    - severity: warning
+      webhook_url: ""
   rules:
     - name: "circuit_breaker_open"
       cooldown_seconds: 300
