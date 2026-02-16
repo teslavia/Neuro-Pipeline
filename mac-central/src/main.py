@@ -8,15 +8,15 @@ import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from communication.grpc_server import NeuroPipelineServer
-from application_logic.central_orchestrator import CentralOrchestrator, VLMTriggerRule
-from communication.device_session import DeviceSessionManager
-from config import AppConfig
-from observability.circuit_breaker import CircuitBreaker
-from observability.alerting import AlertManager, AlertRule, AlertSeverity, AlertRoute
-from observability.metrics import edge_device_status
-from storage.detection_store import DetectionStore
-from storage.cloud_storage import CloudStorageClient
+from src.communication.grpc_server import NeuroPipelineServer
+from src.application_logic.central_orchestrator import CentralOrchestrator, VLMTriggerRule
+from src.communication.device_session import DeviceSessionManager
+from src.config import AppConfig
+from src.observability.circuit_breaker import CircuitBreaker
+from src.observability.alerting import AlertManager, AlertRule, AlertSeverity, AlertRoute
+from src.observability.metrics import edge_device_status
+from src.storage.detection_store import DetectionStore
+from src.storage.cloud_storage import CloudStorageClient
 
 
 def setup_logging(cfg) -> None:
@@ -140,7 +140,7 @@ async def main():
 
     # Distributed tracing (lazy OTel)
     if cfg.tracing.enabled:
-        from observability.tracing import init_tracing
+        from src.observability.tracing import init_tracing
         init_tracing(cfg.tracing.service_name, cfg.tracing.endpoint)
 
     # Prometheus metrics endpoint
@@ -180,7 +180,7 @@ async def main():
     # Rate limiter
     rate_limiter = None
     if cfg.rate_limiting.enabled:
-        from communication.rate_limiter import TokenBucketRateLimiter
+        from src.communication.rate_limiter import TokenBucketRateLimiter
         rate_limiter = TokenBucketRateLimiter(
             max_per_sec=cfg.rate_limiting.max_rps,
             burst=cfg.rate_limiting.burst,
