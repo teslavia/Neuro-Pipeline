@@ -27,6 +27,14 @@ edge_device_status = Gauge(
     "np_edge_device_status", "Edge device status (1=connected, 0=disconnected)", ["device_id"]
 )
 
+# --- Security metrics ---
+grpc_validation_errors = Counter(
+    "np_grpc_validation_errors_total", "gRPC input validation errors", ["reason"]
+)
+control_commands_total = Counter(
+    "np_control_commands_total", "Control commands received", ["command_type"]
+)
+
 # --- Edge metrics (reported via gRPC health updates) ---
 edge_frames_processed = Gauge(
     "np_edge_frames_processed", "Edge frames processed", ["device_id"]

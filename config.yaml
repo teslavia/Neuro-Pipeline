@@ -113,3 +113,8 @@ cloud_storage:
   prefix: "neuro-pipeline/"
   endpoint_url: ""
   region: "us-east-1"
+
+rate_limiting:
+  enabled: false
+  max_rps: 100
+  burst: 20

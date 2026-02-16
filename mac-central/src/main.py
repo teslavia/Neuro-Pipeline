@@ -177,12 +177,23 @@ async def main():
     )
     await orchestrator.initialize()
 
-    # gRPC server (with mTLS + session manager)
+    # Rate limiter
+    rate_limiter = None
+    if cfg.rate_limiting.enabled:
+        from communication.rate_limiter import TokenBucketRateLimiter
+        rate_limiter = TokenBucketRateLimiter(
+            max_per_sec=cfg.rate_limiting.max_rps,
+            burst=cfg.rate_limiting.burst,
+        )
+        logger.info(f"Rate limiting: {cfg.rate_limiting.max_rps} rps, burst {cfg.rate_limiting.burst}")
+
+    # gRPC server (with mTLS + session manager + rate limiter)
     server = NeuroPipelineServer(
         host, port, orchestrator,
         max_message_size_mb=cfg.central.max_message_size_mb,
         tls_config=cfg.tls if cfg.tls.enabled else None,
         session_manager=session_mgr,
+        rate_limiter=rate_limiter,
     )
     await server.start()
 

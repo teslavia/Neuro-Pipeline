@@ -2,17 +2,22 @@
 
 import asyncio
 import json
+import os
+import secrets
 import time
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, PlainTextResponse, JSONResponse
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
+from starlette.status import HTTP_401_UNAUTHORIZED
 
 app = FastAPI(title="Neuro-Pipeline Dashboard")
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
+security = HTTPBasic(auto_error=False)
 
 # In-memory event store (standalone mode without orchestrator)
 _events: list[dict] = []
@@ -47,6 +52,36 @@ def set_session_manager(manager) -> None:
     _session_manager = manager
 
 
+def _get_auth_credentials():
+    """Get dashboard credentials from environment variables."""
+    username = os.environ.get("DASHBOARD_USER", "")
+    password = os.environ.get("DASHBOARD_PASS", "")
+    return username, password
+
+
+def verify_credentials(
+    credentials: Optional[HTTPBasicCredentials] = Depends(security),
+):
+    """Verify HTTP Basic Auth credentials. No-op if env vars not set."""
+    expected_user, expected_pass = _get_auth_credentials()
+    if not expected_user and not expected_pass:
+        return  # Auth not configured, allow all
+    if credentials is None:
+        raise HTTPException(
+            status_code=HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    correct_user = secrets.compare_digest(credentials.username, expected_user)
+    correct_pass = secrets.compare_digest(credentials.password, expected_pass)
+    if not (correct_user and correct_pass):
+        raise HTTPException(
+            status_code=HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+
 def _demo_status() -> dict:
     """Generate demo status when running standalone."""
     uptime = time.time() - _start_time
@@ -68,7 +103,7 @@ def _demo_status() -> dict:
 
 
 @app.get("/", response_class=HTMLResponse)
-async def index(request: Request):
+async def index(request: Request, _=Depends(verify_credentials)):
     return templates.TemplateResponse("index.html", {
         "request": request,
         "status": _demo_status(),
@@ -77,12 +112,12 @@ async def index(request: Request):
 
 
 @app.get("/api/status")
-async def api_status():
+async def api_status(_=Depends(verify_credentials)):
     return _demo_status()
 
 
 @app.get("/api/events")
-async def api_events(limit: int = 50, device_id: str = ""):
+async def api_events(limit: int = 50, device_id: str = "", _=Depends(verify_credentials)):
     if device_id:
         filtered = [e for e in _events if e.get("device_id") == device_id]
         return filtered[-limit:]
@@ -90,7 +125,7 @@ async def api_events(limit: int = 50, device_id: str = ""):
 
 
 @app.post("/api/events")
-async def post_event(event: dict):
+async def post_event(event: dict, _=Depends(verify_credentials)):
     """Receive event from orchestrator or external source."""
     event.setdefault("timestamp", time.time())
     _events.append(event)
@@ -110,6 +145,7 @@ async def api_events_history(
     hours: float = Query(24, ge=0.1, le=720),
     limit: int = Query(100, ge=1, le=1000),
     device_id: str = "",
+    _=Depends(verify_credentials),
 ):
     """Query historical events from SQLite store."""
     if _detection_store is None:
@@ -120,7 +156,7 @@ async def api_events_history(
 
 
 @app.get("/api/devices")
-async def api_devices():
+async def api_devices(_=Depends(verify_credentials)):
     """List all connected edge devices."""
     if _session_manager is None:
         return []
@@ -139,14 +175,14 @@ async def api_devices():
 
 
 @app.get("/api/devices/{device_id}/events")
-async def api_device_events(device_id: str, limit: int = 50):
+async def api_device_events(device_id: str, limit: int = 50, _=Depends(verify_credentials)):
     """Get events for a specific device."""
     filtered = [e for e in _events if e.get("device_id") == device_id]
     return filtered[-limit:]
 
 
 @app.get("/metrics")
-async def metrics_endpoint():
+async def metrics_endpoint(_=Depends(verify_credentials)):
     """Prometheus metrics in text exposition format."""
     from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
     return PlainTextResponse(generate_latest(), media_type=CONTENT_TYPE_LATEST)
@@ -162,7 +198,7 @@ async def healthz():
 
 
 @app.get("/readyz")
-async def readyz():
+async def readyz(_=Depends(verify_credentials)):
     """Readiness probe — 200 if all subsystems ready, 503 otherwise."""
     if _health_checker:
         status = _health_checker.readiness()

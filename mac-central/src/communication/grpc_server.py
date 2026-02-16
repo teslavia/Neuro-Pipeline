@@ -15,16 +15,31 @@ except ImportError:
     logger = logging.getLogger(__name__)
 
 from src.generated import neuro_pipeline_pb2, neuro_pipeline_pb2_grpc
-from src.observability.metrics import grpc_requests_total, grpc_latency, edge_connections
+from src.observability.metrics import grpc_requests_total, grpc_latency, edge_connections, control_commands_total, grpc_validation_errors
 
 
 class NeuroPipelineServicer(neuro_pipeline_pb2_grpc.NeuroPipelineServiceServicer):
     """gRPC service implementation for Neuro-Pipeline."""
 
-    def __init__(self, orchestrator, session_manager=None) -> None:
+    def __init__(self, orchestrator, session_manager=None, rate_limiter=None) -> None:
         self.orchestrator = orchestrator
         self.session_manager = session_manager
+        self._rate_limiter = rate_limiter
         logger.info("NeuroPipelineServicer initialized")
+
+    @staticmethod
+    def _validate_detection(result) -> str | None:
+        """Validate a DetectionResult message. Returns error string or None."""
+        if not result.device_id:
+            return "device_id must not be empty"
+        for box in result.boxes:
+            if not (0.0 <= box.confidence <= 1.0):
+                return f"confidence out of range [0,1]: {box.confidence}"
+            for coord_name in ("x_min", "y_min", "x_max", "y_max"):
+                val = getattr(box, coord_name, 0.0)
+                if not (0.0 <= val <= 1.0):
+                    return f"{coord_name} out of range [0,1]: {val}"
+        return None
 
     async def StreamDetectionResults(
         self,
@@ -54,6 +69,21 @@ class NeuroPipelineServicer(neuro_pipeline_pb2_grpc.NeuroPipelineServiceServicer
                     device_id = result.device_id
                     if self.session_manager:
                         self.session_manager.register(device_id)
+
+                # Rate limiting
+                if self._rate_limiter and not self._rate_limiter.allow(device_id):
+                    grpc_requests_total.labels(method="StreamDetectionResults", status="rate_limited").inc()
+                    await context.abort(grpc.StatusCode.RESOURCE_EXHAUSTED, "Rate limit exceeded")
+                    return
+
+                # Input validation
+                validation_err = self._validate_detection(result)
+                if validation_err:
+                    grpc_validation_errors.labels(reason=validation_err[:50]).inc()
+                    logger.warning(f"Validation failed: {validation_err}")
+                    # Skip invalid message but continue stream
+                    continue
+
                 logger.debug(
                     f"Received detection result: frame_id={result.frame_id}, "
                     f"boxes={len(result.boxes)}, device_id={device_id}"
@@ -87,7 +117,18 @@ class NeuroPipelineServicer(neuro_pipeline_pb2_grpc.NeuroPipelineServiceServicer
 
     async def SendControlCommand(self, request, context: grpc.aio.ServicerContext):
         """Send control command to edge device via command queue."""
-        logger.info(f"Received control command: type={request.type}, id={request.command_id}")
+        import time as _time
+        # Audit log
+        audit_entry = {
+            "action": "control_command",
+            "command_type": str(request.type),
+            "command_id": request.command_id,
+            "device_id": getattr(request, "device_id", ""),
+            "timestamp": _time.time(),
+        }
+        logger.info(f"AUDIT: {audit_entry}")
+        control_commands_total.labels(command_type=str(request.type)).inc()
+
         await self.orchestrator.send_command(request)
         return neuro_pipeline_pb2.CommandResponse(
             success=True,
@@ -146,7 +187,7 @@ class NeuroPipelineServicer(neuro_pipeline_pb2_grpc.NeuroPipelineServiceServicer
             else neuro_pipeline_pb2.HealthCheckResponse.NOT_SERVING
         )
         return neuro_pipeline_pb2.HealthCheckResponse(
-            status=status, version="1.2.0"
+            status=status, version="1.3.0"
         )
 
     async def RegisterDevice(self, request, context: grpc.aio.ServicerContext):
@@ -178,13 +219,14 @@ class NeuroPipelineServer:
 
     def __init__(self, host: str, port: int, orchestrator,
                  max_message_size_mb: int = 16, tls_config=None,
-                 session_manager=None) -> None:
+                 session_manager=None, rate_limiter=None) -> None:
         self.host = host
         self.port = port
         self.orchestrator = orchestrator
         self.max_message_size_mb = max_message_size_mb
         self.tls_config = tls_config
         self.session_manager = session_manager
+        self.rate_limiter = rate_limiter
         self.server = None
 
     async def start(self) -> None:
@@ -201,7 +243,11 @@ class NeuroPipelineServer:
         self.server = grpc.aio.server(options=options, compression=grpc.Compression.Gzip)
 
         neuro_pipeline_pb2_grpc.add_NeuroPipelineServiceServicer_to_server(
-            NeuroPipelineServicer(self.orchestrator, session_manager=self.session_manager),
+            NeuroPipelineServicer(
+                self.orchestrator,
+                session_manager=self.session_manager,
+                rate_limiter=self.rate_limiter,
+            ),
             self.server,
         )
 
