@@ -124,6 +124,42 @@ class RateLimitingConfig:
 
 
 @dataclass
+class ModelManagementConfig:
+    enabled: bool = False
+    max_models_per_device: int = 3
+
+
+@dataclass
+class ReasoningConfig:
+    enabled: bool = False
+    max_steps: int = 3
+    timeout_per_step: float = 15.0
+
+
+@dataclass
+class RAGConfig:
+    enabled: bool = False
+    max_history_items: int = 10
+    time_window_hours: float = 24.0
+
+
+@dataclass
+class ABTestConfig:
+    enabled: bool = False
+    traffic_split: float = 0.5
+    min_samples: int = 100
+    metric: str = "accuracy"
+
+
+@dataclass
+class AnomalyConfig:
+    enabled: bool = False
+    baseline_window_hours: float = 168.0
+    z_score_threshold: float = 3.0
+    min_samples: int = 50
+
+
+@dataclass
 class AppConfig:
     central: CentralConfig = field(default_factory=CentralConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
@@ -138,6 +174,11 @@ class AppConfig:
     sessions: SessionConfig = field(default_factory=SessionConfig)
     cloud_storage: CloudStorageConfig = field(default_factory=CloudStorageConfig)
     rate_limiting: RateLimitingConfig = field(default_factory=RateLimitingConfig)
+    model_management: ModelManagementConfig = field(default_factory=ModelManagementConfig)
+    reasoning: ReasoningConfig = field(default_factory=ReasoningConfig)
+    rag: RAGConfig = field(default_factory=RAGConfig)
+    ab_test: ABTestConfig = field(default_factory=ABTestConfig)
+    anomaly: AnomalyConfig = field(default_factory=AnomalyConfig)
 
     @classmethod
     def from_yaml(cls, path: Path) -> "AppConfig":
@@ -251,6 +292,37 @@ class AppConfig:
             enabled=bool(rl.get("enabled", cfg.rate_limiting.enabled)),
             max_rps=int(rl.get("max_rps", cfg.rate_limiting.max_rps)),
             burst=int(rl.get("burst", cfg.rate_limiting.burst)),
+        )
+        mm = data.get("model_management", {})
+        cfg.model_management = ModelManagementConfig(
+            enabled=bool(mm.get("enabled", cfg.model_management.enabled)),
+            max_models_per_device=int(mm.get("max_models_per_device", cfg.model_management.max_models_per_device)),
+        )
+        rc = data.get("reasoning", {})
+        cfg.reasoning = ReasoningConfig(
+            enabled=bool(rc.get("enabled", cfg.reasoning.enabled)),
+            max_steps=int(rc.get("max_steps", cfg.reasoning.max_steps)),
+            timeout_per_step=float(rc.get("timeout_per_step", cfg.reasoning.timeout_per_step)),
+        )
+        rg = data.get("rag", {})
+        cfg.rag = RAGConfig(
+            enabled=bool(rg.get("enabled", cfg.rag.enabled)),
+            max_history_items=int(rg.get("max_history_items", cfg.rag.max_history_items)),
+            time_window_hours=float(rg.get("time_window_hours", cfg.rag.time_window_hours)),
+        )
+        ab = data.get("ab_test", {})
+        cfg.ab_test = ABTestConfig(
+            enabled=bool(ab.get("enabled", cfg.ab_test.enabled)),
+            traffic_split=float(ab.get("traffic_split", cfg.ab_test.traffic_split)),
+            min_samples=int(ab.get("min_samples", cfg.ab_test.min_samples)),
+            metric=ab.get("metric", cfg.ab_test.metric),
+        )
+        an = data.get("anomaly", {})
+        cfg.anomaly = AnomalyConfig(
+            enabled=bool(an.get("enabled", cfg.anomaly.enabled)),
+            baseline_window_hours=float(an.get("baseline_window_hours", cfg.anomaly.baseline_window_hours)),
+            z_score_threshold=float(an.get("z_score_threshold", cfg.anomaly.z_score_threshold)),
+            min_samples=int(an.get("min_samples", cfg.anomaly.min_samples)),
         )
         return cfg
 

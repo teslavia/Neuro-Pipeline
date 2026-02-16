@@ -38,6 +38,7 @@ set(UNIT_TEST_SOURCES
   unit_tests/test_dmabuf_sim.cpp
   unit_tests/test_virtual_device_io.cpp
   unit_tests/test_hal_basic.cpp
+  unit_tests/test_multi_model_manager.cpp
 )
 
 add_executable(run_unit_tests ${UNIT_TEST_SOURCES})

@@ -21,10 +21,13 @@ from src.observability.metrics import grpc_requests_total, grpc_latency, edge_co
 class NeuroPipelineServicer(neuro_pipeline_pb2_grpc.NeuroPipelineServiceServicer):
     """gRPC service implementation for Neuro-Pipeline."""
 
-    def __init__(self, orchestrator, session_manager=None, rate_limiter=None) -> None:
+    def __init__(self, orchestrator, session_manager=None, rate_limiter=None,
+                 model_registry=None, detection_store=None) -> None:
         self.orchestrator = orchestrator
         self.session_manager = session_manager
         self._rate_limiter = rate_limiter
+        self._model_registry = model_registry
+        self._detection_store = detection_store
         logger.info("NeuroPipelineServicer initialized")
 
     @staticmethod
@@ -213,13 +216,117 @@ class NeuroPipelineServicer(neuro_pipeline_pb2_grpc.NeuroPipelineServiceServicer
             assigned_id=request.device_id,
         )
 
+    async def ManageModel(self, request, context: grpc.aio.ServicerContext):
+        """v2: Model lifecycle management."""
+        grpc_requests_total.labels(method="ManageModel", status="ok").inc()
+        action = request.action
+        model = request.model
+
+        if not self._model_registry:
+            return neuro_pipeline_pb2.ModelManagementResponse(
+                success=False, message="Model management not enabled"
+            )
+
+        # DEPLOY
+        if action == neuro_pipeline_pb2.ModelManagementRequest.DEPLOY:
+            ok = self._model_registry.deploy(
+                model_id=model.model_id,
+                model_path=model.model_path,
+                model_type=model.model_type,
+                version=model.version,
+                target_device_id=request.target_device_id,
+                npu_core=request.npu_core,
+                metadata=dict(model.metadata),
+            )
+            return neuro_pipeline_pb2.ModelManagementResponse(
+                success=ok, message="Deployed" if ok else "Deploy failed"
+            )
+
+        # UNDEPLOY
+        if action == neuro_pipeline_pb2.ModelManagementRequest.UNDEPLOY:
+            ok = self._model_registry.undeploy(model.model_id)
+            return neuro_pipeline_pb2.ModelManagementResponse(
+                success=ok, message="Undeployed" if ok else "Undeploy failed"
+            )
+
+        # LIST
+        if action == neuro_pipeline_pb2.ModelManagementRequest.LIST:
+            records = self._model_registry.list_models(device_id=request.target_device_id)
+            model_infos = [
+                neuro_pipeline_pb2.ModelInfo(
+                    model_id=r.model_id, model_path=r.model_path,
+                    model_type=r.model_type, version=r.version,
+                    metadata=r.metadata,
+                )
+                for r in records
+            ]
+            return neuro_pipeline_pb2.ModelManagementResponse(
+                success=True, message=f"{len(model_infos)} models", models=model_infos
+            )
+
+        # ROLLBACK
+        if action == neuro_pipeline_pb2.ModelManagementRequest.ROLLBACK:
+            ok = self._model_registry.rollback(model.model_id)
+            return neuro_pipeline_pb2.ModelManagementResponse(
+                success=ok, message="Rolled back" if ok else "Rollback failed"
+            )
+
+        # STATUS
+        if action == neuro_pipeline_pb2.ModelManagementRequest.STATUS:
+            record = self._model_registry.get_model(model.model_id)
+            if not record:
+                return neuro_pipeline_pb2.ModelManagementResponse(
+                    success=False, message="Model not found"
+                )
+            info = neuro_pipeline_pb2.ModelInfo(
+                model_id=record.model_id, model_path=record.model_path,
+                model_type=record.model_type, version=record.version,
+                metadata={**record.metadata, "status": record.status.value},
+            )
+            return neuro_pipeline_pb2.ModelManagementResponse(
+                success=True, message=record.status.value, models=[info]
+            )
+
+        return neuro_pipeline_pb2.ModelManagementResponse(
+            success=False, message=f"Unknown action: {action}"
+        )
+
+    async def QueryTimeSeries(self, request, context: grpc.aio.ServicerContext):
+        """v2: Query time-series metrics."""
+        grpc_requests_total.labels(method="QueryTimeSeries", status="ok").inc()
+
+        if not self._detection_store or not hasattr(self._detection_store, 'query_timeseries'):
+            return neuro_pipeline_pb2.TimeSeriesResponse(
+                success=False, message="Time series not available"
+            )
+
+        rows = self._detection_store.query_timeseries(
+            metric_name=request.metric_name,
+            device_id=request.device_id,
+            start_time=request.start_time,
+            end_time=request.end_time if request.end_time > 0 else 0,
+            aggregation=request.aggregation or "avg",
+            bucket_seconds=request.bucket_seconds or 0,
+        )
+        points = [
+            neuro_pipeline_pb2.TimeSeriesPoint(
+                timestamp=r["timestamp"], value=r["value"],
+                labels=r.get("labels", {}),
+            )
+            for r in rows
+        ]
+        return neuro_pipeline_pb2.TimeSeriesResponse(
+            success=True, message=f"{len(points)} points", points=points
+        )
+
 
 class NeuroPipelineServer:
     """Async gRPC server wrapper with optional mTLS."""
 
     def __init__(self, host: str, port: int, orchestrator,
                  max_message_size_mb: int = 16, tls_config=None,
-                 session_manager=None, rate_limiter=None) -> None:
+                 session_manager=None, rate_limiter=None,
+                 model_registry=None, detection_store=None) -> None:
         self.host = host
         self.port = port
         self.orchestrator = orchestrator
@@ -227,6 +334,8 @@ class NeuroPipelineServer:
         self.tls_config = tls_config
         self.session_manager = session_manager
         self.rate_limiter = rate_limiter
+        self.model_registry = model_registry
+        self.detection_store = detection_store
         self.server = None
 
     async def start(self) -> None:
@@ -247,6 +356,8 @@ class NeuroPipelineServer:
                 self.orchestrator,
                 session_manager=self.session_manager,
                 rate_limiter=self.rate_limiter,
+                model_registry=self.model_registry,
+                detection_store=self.detection_store,
             ),
             self.server,
         )

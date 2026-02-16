@@ -25,6 +25,12 @@ service NeuroPipelineService {
 
   // Edge device registration
   rpc RegisterDevice(DeviceRegistration) returns (DeviceRegistrationResponse);
+
+  // v2: Model lifecycle management (deploy/undeploy/list/rollback)
+  rpc ManageModel(ModelManagementRequest) returns (ModelManagementResponse);
+
+  // v2: Query time-series metrics
+  rpc QueryTimeSeries(TimeSeriesQuery) returns (TimeSeriesResponse);
 }
 
 // =============================================================================
@@ -41,6 +47,10 @@ message DetectionResult {
   string trace_id = 6;             // Distributed trace identifier
   string device_id = 7;            // Source edge device identifier
   string span_id = 8;              // Distributed tracing span identifier
+
+  // v2 extensions (high field numbers for backward compat)
+  string model_id = 100;                  // Which model produced these detections
+  repeated float feature_vector = 101;    // Frame-level embedding for ReID/similarity
 }
 
 // Single detected object bounding box.
@@ -54,6 +64,9 @@ message BoundingBox {
   float y_min = 5;
   float x_max = 6;
   float y_max = 7;
+
+  // v2 extensions
+  uint64 track_id = 100;   // Object tracking ID (assigned by TemporalTracker)
 }
 
 // Device performance metrics.
@@ -85,6 +98,9 @@ message ControlCommand {
     SET_DETECTION_THRESHOLD = 3;   // Adjust confidence threshold
     SHUTDOWN = 4;                  // Graceful shutdown
     RELOAD_MODEL = 5;              // Hot-reload current model
+    SWITCH_MODEL_VARIANT = 6;      // v2: Switch to a specific model variant by ID
+    SET_DETECTION_REGION = 7;      // v2: Update detection ROI (VLM-guided)
+    SET_SENSITIVITY = 8;           // v2: Adjust detection sensitivity (VLM-guided)
   }
 
   CommandType type = 1;
@@ -204,4 +220,83 @@ message DeviceRegistrationResponse {
   bool success = 1;
   string message = 2;
   string assigned_id = 3;        // Server-assigned ID (or echo back device_id)
+}
+
+// =============================================================================
+// v2: Model Management
+// =============================================================================
+
+// Describes a deployable model.
+message ModelInfo {
+  string model_id = 1;            // Unique model identifier (e.g., "yolov5s-640")
+  string model_path = 2;          // Path on device or registry
+  string model_type = 3;          // "detection", "classification", "reid", etc.
+  string version = 4;             // Semantic version string
+  map<string, string> metadata = 5;  // Arbitrary metadata (accuracy, size, etc.)
+}
+
+// Model management request.
+message ModelManagementRequest {
+  enum Action {
+    DEPLOY = 0;       // Deploy a model to edge device(s)
+    UNDEPLOY = 1;     // Remove a model from edge device(s)
+    LIST = 2;         // List deployed models
+    ROLLBACK = 3;     // Rollback to previous model version
+    STATUS = 4;       // Get model deployment status
+  }
+
+  Action action = 1;
+  ModelInfo model = 2;             // Model to deploy/undeploy (ignored for LIST)
+  string target_device_id = 3;    // Target device ("" = all devices)
+  int32 npu_core = 4;             // Target NPU core (0-2, -1 = auto)
+}
+
+// Model management response.
+message ModelManagementResponse {
+  bool success = 1;
+  string message = 2;
+  repeated ModelInfo models = 3;   // Populated for LIST action
+}
+
+// =============================================================================
+// v2: Behavior Alert
+// =============================================================================
+
+// Behavior alert from temporal analysis.
+message BehaviorAlert {
+  string device_id = 1;
+  uint64 timestamp_us = 2;
+  string behavior_type = 3;       // "loitering", "running", "lingering", "crowd"
+  float severity = 4;             // [0.0, 1.0]
+  uint64 track_id = 5;            // Associated tracked object
+  string description = 6;
+  map<string, string> metadata = 7;
+}
+
+// =============================================================================
+// v2: Time Series Query
+// =============================================================================
+
+// Single time-series data point.
+message TimeSeriesPoint {
+  double timestamp = 1;           // Unix timestamp (seconds)
+  double value = 2;
+  map<string, string> labels = 3; // Optional labels
+}
+
+// Time-series query request.
+message TimeSeriesQuery {
+  string metric_name = 1;         // e.g., "detections_count", "fps", "latency"
+  string device_id = 2;           // Filter by device ("" = all)
+  double start_time = 3;          // Unix timestamp
+  double end_time = 4;            // Unix timestamp (0 = now)
+  string aggregation = 5;         // "avg", "sum", "max", "min", "count"
+  int32 bucket_seconds = 6;       // Aggregation bucket size (0 = raw)
+}
+
+// Time-series query response.
+message TimeSeriesResponse {
+  bool success = 1;
+  string message = 2;
+  repeated TimeSeriesPoint points = 3;
 }

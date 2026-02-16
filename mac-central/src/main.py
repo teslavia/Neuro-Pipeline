@@ -189,13 +189,24 @@ async def main():
         )
         logger.info(f"Rate limiting: {cfg.rate_limiting.max_rps} rps, burst {cfg.rate_limiting.burst}")
 
-    # gRPC server (with mTLS + session manager + rate limiter)
+    # Model registry (v2)
+    model_registry = None
+    if cfg.model_management.enabled:
+        from src.model_management.model_registry import ModelRegistry
+        model_registry = ModelRegistry(
+            max_models_per_device=cfg.model_management.max_models_per_device,
+        )
+        logger.info(f"Model management: max {cfg.model_management.max_models_per_device} models/device")
+
+    # gRPC server (with mTLS + session manager + rate limiter + model registry)
     server = NeuroPipelineServer(
         host, port, orchestrator,
         max_message_size_mb=cfg.central.max_message_size_mb,
         tls_config=cfg.tls if cfg.tls.enabled else None,
         session_manager=session_mgr,
         rate_limiter=rate_limiter,
+        model_registry=model_registry,
+        detection_store=store,
     )
     await server.start()
 

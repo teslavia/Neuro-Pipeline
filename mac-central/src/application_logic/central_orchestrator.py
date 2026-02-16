@@ -386,12 +386,24 @@ class CentralOrchestrator:
             self._event_listeners.remove(q)
 
     def _record_event(self, event: Dict[str, Any]) -> None:
-        """Record event to in-memory buffer, DB, and notify listeners."""
+        """Record event to in-memory buffer, DB, timeseries, and notify listeners."""
         self._recent_events.append(event)
         if self._detection_store:
             try:
                 self._detection_store.record(event)
                 events_stored.inc()
+                # Write timeseries data points
+                device_id = event.get("device_id", "")
+                ts = event.get("timestamp", time.time())
+                if event.get("type") == "detection" and event.get("detections"):
+                    self._detection_store.record_timeseries(
+                        device_id, "detections_count",
+                        float(len(event["detections"])), ts
+                    )
+                if event.get("type") == "vlm_analysis":
+                    self._detection_store.record_timeseries(
+                        device_id, "vlm_analyses_count", 1.0, ts
+                    )
             except Exception as e:
                 logger.error(f"Failed to persist event: {e}")
         for q in self._event_listeners:

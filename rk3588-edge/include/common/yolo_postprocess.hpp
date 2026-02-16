@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "common/postprocessor_base.hpp"
 #include "common/types.hpp"
 
 namespace ai_inference {
@@ -12,7 +13,7 @@ namespace ai_inference {
 /**
  * @brief YOLO model post-processing: output parsing + NMS.
  */
-class YOLOPostProcessor {
+class YOLOPostProcessor : public PostProcessorBase {
  public:
   struct Config {
     float confidence_threshold = 0.5f;
@@ -29,7 +30,9 @@ class YOLOPostProcessor {
   /// Process raw model output tensors into detection boxes.
   std::vector<common::DetectionBox> Process(
       const std::vector<std::vector<float>>& raw_outputs,
-      uint32_t original_width, uint32_t original_height);
+      uint32_t original_width, uint32_t original_height) override;
+
+  std::string Name() const override { return "YOLOv5"; }
 
   /// Non-Maximum Suppression.
   static std::vector<common::DetectionBox> NMS(

@@ -154,6 +154,7 @@ set(AI_INFERENCE_SOURCES
   src/ai_inference/rknn_engine.cpp
   src/ai_inference/yolo_postprocess.cpp
   src/ai_inference/npu_scheduler.cpp
+  src/ai_inference/multi_model_manager.cpp
 )
 
 set(COMMUNICATION_SOURCES
