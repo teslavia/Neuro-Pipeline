@@ -98,6 +98,13 @@ class RKNNEngine::Impl {
     return true;
   }
 
+  void SetCoreMask(int mask) {
+    if (ctx_ && mask > 0) {
+      rknn_core_mask m = static_cast<rknn_core_mask>(mask);
+      rknn_set_core_mask(ctx_, m);
+    }
+  }
+
   bool Infer(std::shared_ptr<common::Buffer> input,
              std::vector<std::vector<float>>& outputs) {
     if (!ctx_ || !input) return false;
@@ -245,6 +252,10 @@ class RKNNEngine::Impl {
 
   void Release() {}
 
+  void SetCoreMask(int /*mask*/) {
+    // No-op in mock mode
+  }
+
  private:
   Config config_;
   uint32_t input_width_ = 0;
@@ -275,5 +286,7 @@ bool RKNNEngine::Infer(std::shared_ptr<common::Buffer> input) {
 }
 
 void RKNNEngine::Release() { impl_->Release(); }
+
+void RKNNEngine::SetCoreMask(int mask) { impl_->SetCoreMask(mask); }
 
 }  // namespace ai_inference

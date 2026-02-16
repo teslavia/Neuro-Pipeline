@@ -44,7 +44,7 @@ def init_tracing(
     except ImportError:
         logger.warning("opentelemetry not installed, tracing disabled")
         return False
-    except Exception as e:
+    except (RuntimeError, OSError) as e:
         logger.error(f"Failed to init tracing: {e}")
         return False
 

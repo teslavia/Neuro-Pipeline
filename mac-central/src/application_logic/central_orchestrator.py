@@ -176,8 +176,25 @@ class CentralOrchestrator:
 
             vlm_queue_depth.set(self._vlm_queue.qsize())
 
-            # Process batch items serially (VLM is the bottleneck)
-            for item in batch:
+            # Try batch inference first, fall back to sequential
+            batch_results = None
+            if hasattr(self.inference_engine, 'batch_analyze') and len(batch) > 1:
+                try:
+                    batch_items = [{"frame_data": it["frame_data"], "prompt": it["prompt"]}
+                                   for it in batch]
+                    t0 = time.perf_counter()
+                    batch_results = await asyncio.wait_for(
+                        self.inference_engine.batch_analyze(batch_items),
+                        timeout=30.0 * len(batch),
+                    )
+                    elapsed = time.perf_counter() - t0
+                    logger.info(f"Batch VLM: {len(batch)} items in {elapsed*1000:.0f}ms")
+                except Exception as e:
+                    logger.warning(f"Batch inference failed, falling back to sequential: {e}")
+                    batch_results = None
+
+            # Process batch items (use batch results if available)
+            for idx, item in enumerate(batch):
                 if not self._circuit_breaker.allow_request():
                     vlm_requests_total.labels(status="circuit_open").inc()
                     logger.warning("Circuit breaker open, skipping VLM request")
@@ -192,12 +209,16 @@ class CentralOrchestrator:
                     if device_id and self.inference_engine:
                         ctx = self.inference_engine.get_conversation(device_id)
                         prompt = ctx.build_prompt(prompt)
-                    vlm_result = await asyncio.wait_for(
-                        self.inference_engine.analyze_image(
-                            item["frame_data"], prompt
-                        ),
-                        timeout=30.0,
-                    )
+                    # Use batch result if available, otherwise run individually
+                    if batch_results is not None and idx < len(batch_results):
+                        vlm_result = batch_results[idx]
+                    else:
+                        vlm_result = await asyncio.wait_for(
+                            self.inference_engine.analyze_image(
+                                item["frame_data"], prompt
+                            ),
+                            timeout=30.0,
+                        )
                     # Record conversation turn
                     if device_id and self.inference_engine:
                         ctx = self.inference_engine.get_conversation(device_id)

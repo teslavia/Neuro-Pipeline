@@ -31,6 +31,9 @@ bool GRPCClient::CreateChannel() {
   args.SetInt(GRPC_ARG_KEEPALIVE_PERMIT_WITHOUT_CALLS, 1);
   args.SetInt(GRPC_ARG_HTTP2_MAX_PINGS_WITHOUT_DATA, 0);
   args.SetInt(GRPC_ARG_MAX_RECONNECT_BACKOFF_MS, 30000);
+  if (config_.compression) {
+    args.SetCompressionAlgorithm(GRPC_COMPRESS_GZIP);
+  }
 
   std::shared_ptr<grpc::ChannelCredentials> creds;
   if (!config_.ca_cert_path.empty()) {

@@ -44,7 +44,7 @@ class CloudStorageClient:
             logger.info(f"CloudStorage initialized: bucket={self.bucket}")
         except ImportError:
             logger.warning("boto3 not installed, cloud storage disabled")
-        except Exception as e:
+        except (OSError, ConnectionError) as e:
             logger.error(f"Failed to init cloud storage: {e}")
 
     @property
@@ -78,7 +78,7 @@ class CloudStorageClient:
             )
             logger.info(f"Uploaded {len(data)} bytes to s3://{self.bucket}/{full_key}")
             return full_key
-        except Exception as e:
+        except (OSError, ConnectionError) as e:
             logger.error(f"Upload failed: {e}")
             return None
 

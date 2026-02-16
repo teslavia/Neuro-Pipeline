@@ -36,6 +36,9 @@ class RKNNEngine {
   /// Run inference on input buffer. Returns raw output tensors.
   bool Infer(std::shared_ptr<common::Buffer> input);
 
+  /// Dynamically set NPU core affinity mask (1=core0, 2=core1, 4=core2, 7=all).
+  void SetCoreMask(int mask);
+
   /// Get output tensor data after inference.
   const std::vector<std::vector<float>>& GetOutputs() const { return outputs_; }
 

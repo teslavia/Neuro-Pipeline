@@ -11,6 +11,7 @@
 #include "common/detection_cache.hpp"
 #include "common/edge_metrics.hpp"
 #include "common/logger.hpp"
+#include "common/memory_pool.hpp"
 #include "common/rknn_engine.hpp"
 #include "common/yolo_postprocess.hpp"
 #include "communication/grpc_client.hpp"
@@ -137,6 +138,13 @@ class PipelineCoordinator::Impl {
     yolo_cfg.input_height = config_.model_height;
     postprocessor_ = std::make_unique<ai_inference::YOLOPostProcessor>(yolo_cfg);
 
+    // Memory pool for inference buffers (model_w * model_h * 3 bytes, 8 blocks)
+    constexpr size_t kDefaultBufferCount = 8;
+    size_t buf_size = config_.model_width * config_.model_height * 3;
+    inference_pool_ = std::make_unique<data_processing::MemoryPool>(
+        buf_size, kDefaultBufferCount);
+    LOG_INFO("Pipeline", "Memory pool: %zu x %zu bytes", kDefaultBufferCount, buf_size);
+
     // Initialize gRPC client if enabled
     if (grpc_client_) {
       if (grpc_client_->Connect()) {
@@ -227,6 +235,11 @@ class PipelineCoordinator::Impl {
       // 3. NPU inference (mutex-protected for hot-reload safety)
       {
         std::lock_guard<std::mutex> lock(engine_mutex_);
+        // Multi-camera NPU core scheduling: round-robin across 3 NPU cores
+        if (!cameras_.empty() && config_.npu_core_mask == 7) {
+          int core = 1 << (active_cam_idx % 3);
+          engine_->SetCoreMask(core);
+        }
         auto t_infer_start = Clock::now();
         if (!engine_->Infer(processed)) {
           LOG_ERROR("Pipeline", "Inference failed");
@@ -443,6 +456,7 @@ class PipelineCoordinator::Impl {
   std::unique_ptr<communication::GRPCClient> grpc_client_;
   std::mutex engine_mutex_;
   data_processing::DetectionCache detection_cache_;
+  std::unique_ptr<data_processing::MemoryPool> inference_pool_;
 
   std::ifstream video_file_;
 };

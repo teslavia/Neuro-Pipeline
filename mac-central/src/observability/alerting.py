@@ -57,5 +57,5 @@ class AlertManager:
                     self.webhook_url,
                     json={"alert": event_type, "context": context},
                 )
-        except Exception as e:
+        except (OSError, ConnectionError) as e:
             logger.error(f"Webhook POST failed: {e}")

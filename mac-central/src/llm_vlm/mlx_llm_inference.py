@@ -12,6 +12,8 @@ from collections import deque
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from src.exceptions import ModelLoadError, InferenceError
+
 logger = logging.getLogger(__name__)
 
 
@@ -88,9 +90,9 @@ class MLXInferenceEngine:
         except ImportError:
             logger.warning("mlx_lm not installed, running in stub mode")
             self.use_stub = True
-        except Exception as e:
+        except (OSError, RuntimeError, ValueError) as e:
             logger.error(f"Failed to load LLM: {e}")
-            raise
+            raise ModelLoadError(f"LLM load failed: {e}") from e
 
         # Load VLM model if mode=vlm and path provided
         if self.mode == "vlm" and self.vlm_model_path:
@@ -106,7 +108,7 @@ class MLXInferenceEngine:
                     logger.info("VLM loaded successfully")
             except ImportError:
                 logger.warning("mlx_vlm not installed, VLM disabled")
-            except Exception as e:
+            except (OSError, RuntimeError, ValueError) as e:
                 logger.error(f"Failed to load VLM: {e}")
 
         self._loaded = True
@@ -142,9 +144,9 @@ class MLXInferenceEngine:
             t1 = time.perf_counter()
             logger.info(f"[Perf] MLX LLM inference: {(t1-t0)*1000:.1f}ms")
             return response
-        except Exception as e:
+        except (RuntimeError, ValueError) as e:
             logger.error(f"LLM generation failed: {e}")
-            raise
+            raise InferenceError(f"LLM generation failed: {e}") from e
 
     async def analyze_image(
         self,
@@ -179,12 +181,42 @@ class MLXInferenceEngine:
                 t1 = time.perf_counter()
                 logger.info(f"[Perf] MLX VLM inference: {(t1-t0)*1000:.1f}ms")
                 return result
-            except Exception as e:
+            except (RuntimeError, ValueError, OSError) as e:
                 logger.error(f"VLM inference failed, falling back to LLM: {e}")
 
         # Fallback: text-only
         logger.info(f"Text-only mode, ignoring image ({len(image_data)} bytes)")
         return await self.generate(prompt, max_tokens=max_tokens)
+
+    async def batch_analyze(
+        self,
+        items: list,
+        max_tokens: int = 256,
+    ) -> list:
+        """Batch analyze multiple items. Each item is a dict with 'frame_data' and 'prompt'.
+
+        Returns list of result strings, one per item.
+        Falls back to sequential analyze_image if batch processing fails.
+        """
+        if not self._loaded:
+            raise RuntimeError("Model not loaded. Call load_model() first.")
+
+        if self.use_stub:
+            return [f"[STUB] batch {i}: {item.get('prompt', '')[:60]}"
+                    for i, item in enumerate(items)]
+
+        # Real batch: process sequentially (VLM is the bottleneck, not batching)
+        results = []
+        for item in items:
+            try:
+                result = await self.analyze_image(
+                    item["frame_data"], item["prompt"], max_tokens=max_tokens
+                )
+                results.append(result)
+            except Exception as e:
+                logger.error(f"Batch item failed: {e}")
+                results.append(f"[ERROR] {e}")
+        return results
 
     async def unload_model(self) -> None:
         """Unload all models from memory."""

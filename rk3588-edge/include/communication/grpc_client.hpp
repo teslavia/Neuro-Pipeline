@@ -20,6 +20,7 @@ class GRPCClient {
     int keepalive_timeout_ms = 10000;
     int max_reconnect_attempts = 10;
     int initial_backoff_ms = 1000;
+    bool compression = true;  // Enable gzip compression
     // TLS (empty = insecure)
     std::string ca_cert_path;
     std::string client_cert_path;

@@ -19,6 +19,7 @@ edge:
   grpc_server: "192.168.1.100:50051"
   class_names_file: ""
   frame_skip_interval: 0  # 0 = send every frame, N = send every Nth frame
+  grpc_compression: true  # Enable gzip compression for gRPC
 
 central:
   host: "0.0.0.0"
