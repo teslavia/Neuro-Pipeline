@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.20)
 # ==============================================================================
 # GoogleTest — use local vendored copy (avoids network dependency in Docker)
 # ==============================================================================
-set(GOOGLETEST_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/googletest")
+set(GOOGLETEST_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/googletest")
 if(EXISTS "${GOOGLETEST_DIR}/CMakeLists.txt")
   # Prevent overriding parent project compiler/linker settings
   set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)

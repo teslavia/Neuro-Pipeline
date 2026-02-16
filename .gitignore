@@ -87,10 +87,8 @@ temp/
 test_output/
 
 
-# Cross-compile sysroot (assembled from RKSDK, large binaries)
-# tools/cross_compile_env/sysroot/
-tools/cross_compile_env/sysroot/usr/lib/*.so*                                       
-tools/cross_compile_env/sysroot/usr/lib/*.a 
+# Cross-compile sysroot (assembled by prepare_sysroot.sh from third_party/ or RKSDK)
+tools/cross_compile_env/sysroot/
 
 # Device logs
 tmp/device_logs/

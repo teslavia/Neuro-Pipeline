@@ -73,6 +73,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Init googletest submodule
+        run: git submodule update --init --depth 1 third_party/googletest
+
       - name: Install dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y \
