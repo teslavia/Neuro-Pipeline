@@ -97,6 +97,11 @@ int main(int argc, char* argv[]) {
         config.recording.output_dir = cfg.Get("edge.recording.output_dir", config.recording.output_dir);
         config.recording.fps = cfg.GetInt("edge.recording.fps", config.recording.fps);
 
+        // v2 feature toggles
+        config.enable_temporal_tracker = cfg.GetBool("edge.enable_temporal_tracker", config.enable_temporal_tracker);
+        config.enable_adaptive_fps = cfg.GetBool("edge.enable_adaptive_fps", config.enable_adaptive_fps);
+        config.enable_multi_model = cfg.GetBool("edge.enable_multi_model", config.enable_multi_model);
+
         // Multi-camera config: cameras.0.device, cameras.0.width, etc.
         for (int i = 0; i < static_cast<int>(common::kMaxCameras); ++i) {
           std::string prefix = "cameras." + std::to_string(i);

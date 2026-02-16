@@ -84,6 +84,14 @@ class ConfigManager {
       std::string key = line.substr(0, colon);
       std::string value = (colon + 1 < line.size()) ? line.substr(colon + 1) : "";
 
+      // Check if value is a quoted empty string before trimming
+      auto raw_value = value;
+      auto rv_start = raw_value.find_first_not_of(" \t");
+      bool is_quoted_empty = (rv_start != std::string::npos &&
+                              raw_value.size() >= rv_start + 2 &&
+                              raw_value[rv_start] == '"' &&
+                              raw_value[rv_start + 1] == '"');
+
       auto trim = [](std::string& s) {
         auto a = s.find_first_not_of(" \t\"");
         auto b = s.find_last_not_of(" \t\"");
@@ -92,7 +100,7 @@ class ConfigManager {
       trim(key);
       trim(value);
 
-      if (value.empty()) {
+      if (value.empty() && !is_quoted_empty) {
         current_section = key;
       } else {
         std::string full_key = current_section.empty()
