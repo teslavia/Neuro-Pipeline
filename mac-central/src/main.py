@@ -66,6 +66,8 @@ async def main():
     parser.add_argument("--host", default=None, help="Server host")
     parser.add_argument("--port", type=int, default=None, help="Server port")
     parser.add_argument("--model-path", type=Path, default=None, help="MLX model path")
+    parser.add_argument("--dashboard", action="store_true", help="Start dashboard in same process")
+    parser.add_argument("--dashboard-port", type=int, default=8000, help="Dashboard port")
     args = parser.parse_args()
 
     cfg = AppConfig.from_yaml(args.config) if args.config else AppConfig()
@@ -202,6 +204,24 @@ async def main():
         _session_cleanup_loop(session_mgr, cfg.sessions.expiry_timeout)
     )
 
+    # Embedded dashboard (same process, shares subsystem instances)
+    dashboard_server = None
+    if args.dashboard:
+        from dashboard.app import app as dashboard_app, inject_from_central
+        inject_from_central(
+            detection_store=store,
+            session_manager=session_mgr,
+            orchestrator=orchestrator,
+            health_checker=None,
+        )
+        import uvicorn
+        dashboard_config = uvicorn.Config(
+            dashboard_app, host="0.0.0.0", port=args.dashboard_port, log_level="info"
+        )
+        dashboard_server = uvicorn.Server(dashboard_config)
+        asyncio.create_task(dashboard_server.serve())
+        logger.info(f"Dashboard started on :{args.dashboard_port}")
+
     # Graceful shutdown
     stop_event = asyncio.Event()
 
@@ -221,6 +241,8 @@ async def main():
         await cleanup_task
     except asyncio.CancelledError:
         pass
+    if dashboard_server:
+        dashboard_server.should_exit = True
     try:
         await asyncio.wait_for(_shutdown_sequence(server, orchestrator, store), timeout=60)
     except asyncio.TimeoutError:
