@@ -42,6 +42,7 @@ set(UNIT_TEST_SOURCES
   unit_tests/test_multi_model_scheduler.cpp
   unit_tests/test_temporal_tracker.cpp
   unit_tests/test_adaptive_fps.cpp
+  unit_tests/test_yolov8_postprocess.cpp
 )
 
 add_executable(run_unit_tests ${UNIT_TEST_SOURCES})

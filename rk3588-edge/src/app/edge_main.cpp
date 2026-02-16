@@ -114,6 +114,18 @@ int main(int argc, char* argv[]) {
           cam.label = cfg.Get(prefix + ".label", "cam" + std::to_string(i));
           config.cameras.push_back(cam);
         }
+
+        // Multi-model config: models.0.model_id, models.0.model_path, etc.
+        for (int i = 0; i < 10; ++i) {
+          std::string prefix = "edge.models." + std::to_string(i);
+          if (!cfg.Has(prefix + ".model_id")) break;
+          app::PipelineCoordinator::Config::ModelConfig mc;
+          mc.model_id = cfg.Get(prefix + ".model_id");
+          mc.model_path = cfg.Get(prefix + ".model_path");
+          mc.postprocessor = cfg.Get(prefix + ".postprocessor", "yolov5");
+          mc.npu_core = cfg.GetInt(prefix + ".npu_core", -1);
+          config.models.push_back(mc);
+        }
       }
     }
 

@@ -154,6 +154,7 @@ set(DATA_PROCESSING_SOURCES
 set(AI_INFERENCE_SOURCES
   src/ai_inference/rknn_engine.cpp
   src/ai_inference/yolo_postprocess.cpp
+  src/ai_inference/yolov8_postprocess.cpp
   src/ai_inference/npu_scheduler.cpp
   src/ai_inference/multi_model_manager.cpp
   src/ai_inference/multi_model_scheduler.cpp
