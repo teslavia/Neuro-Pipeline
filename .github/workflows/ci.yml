@@ -176,8 +176,8 @@ jobs:
           pip install grpcio-tools
           python3 tools/generate_proto.py
 
-      - name: Run E2E + chaos tests
-        run: pytest tests/e2e/ tests/chaos/ -v --tb=short -o "addopts="
+      - name: Run E2E + chaos + integration tests
+        run: pytest tests/e2e/ tests/chaos/ tests/integration_tests/ -v --tb=short -o "addopts="
 
   # ==========================================================================
   # Load Test (manual trigger only)

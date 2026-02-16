@@ -8,15 +8,15 @@ import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from communication.grpc_server import NeuroPipelineServer
-from application_logic.central_orchestrator import CentralOrchestrator, VLMTriggerRule
-from communication.device_session import DeviceSessionManager
-from config import AppConfig
-from observability.circuit_breaker import CircuitBreaker
-from observability.alerting import AlertManager, AlertRule, AlertSeverity, AlertRoute
-from observability.metrics import edge_device_status
-from storage.detection_store import DetectionStore
-from storage.cloud_storage import CloudStorageClient
+from src.communication.grpc_server import NeuroPipelineServer
+from src.application_logic.central_orchestrator import CentralOrchestrator, VLMTriggerRule
+from src.communication.device_session import DeviceSessionManager
+from src.config import AppConfig
+from src.observability.circuit_breaker import CircuitBreaker
+from src.observability.alerting import AlertManager, AlertRule, AlertSeverity, AlertRoute
+from src.observability.metrics import edge_device_status
+from src.storage.detection_store import DetectionStore
+from src.storage.cloud_storage import CloudStorageClient
 
 
 def setup_logging(cfg) -> None:
@@ -66,6 +66,8 @@ async def main():
     parser.add_argument("--host", default=None, help="Server host")
     parser.add_argument("--port", type=int, default=None, help="Server port")
     parser.add_argument("--model-path", type=Path, default=None, help="MLX model path")
+    parser.add_argument("--dashboard", action="store_true", help="Start dashboard in same process")
+    parser.add_argument("--dashboard-port", type=int, default=8000, help="Dashboard port")
     args = parser.parse_args()
 
     cfg = AppConfig.from_yaml(args.config) if args.config else AppConfig()
@@ -77,7 +79,7 @@ async def main():
     model_path = Path(args.model_path or cfg.central.model_path)
 
     logger.info("=" * 60)
-    logger.info("  Neuro-Pipeline Central Server v1.3.1")
+    logger.info("  Neuro-Pipeline Central Server v2.0.0")
     logger.info("=" * 60)
     logger.info(f"Host: {host}:{port}  TLS: {cfg.tls.enabled}")
     logger.info(f"Model: {model_path}  Mode: {cfg.central.inference_mode}")
@@ -140,7 +142,7 @@ async def main():
 
     # Distributed tracing (lazy OTel)
     if cfg.tracing.enabled:
-        from observability.tracing import init_tracing
+        from src.observability.tracing import init_tracing
         init_tracing(cfg.tracing.service_name, cfg.tracing.endpoint)
 
     # Prometheus metrics endpoint
@@ -164,6 +166,46 @@ async def main():
 
     # Orchestrator (core logic)
     vlm_model_path = Path(cfg.central.vlm_model_path) if cfg.central.vlm_model_path else None
+
+    # v2: Behavior analyzer
+    behavior_analyzer = None
+    if True:  # always available, lightweight
+        from src.application_logic.behavior_analyzer import BehaviorAnalyzer
+        behavior_analyzer = BehaviorAnalyzer(detection_store=store)
+
+    # v2: Reasoning chain
+    reasoning_chain = None
+    if cfg.reasoning.enabled:
+        from src.llm_vlm.reasoning_chain import ReasoningChain
+        reasoning_chain = ReasoningChain(
+            max_steps=cfg.reasoning.max_steps,
+            timeout_per_step=cfg.reasoning.timeout_per_step,
+        )
+        logger.info(f"Reasoning chain: {cfg.reasoning.max_steps} steps, {cfg.reasoning.timeout_per_step}s/step")
+
+    # v2: RAG retriever
+    rag_retriever = None
+    if cfg.rag.enabled:
+        from src.llm_vlm.rag_retriever import RAGRetriever
+        rag_retriever = RAGRetriever(
+            detection_store=store,
+            max_items=cfg.rag.max_history_items,
+            time_window_hours=cfg.rag.time_window_hours,
+        )
+        logger.info(f"RAG retriever: {cfg.rag.max_history_items} items, {cfg.rag.time_window_hours}h window")
+
+    # v2: Anomaly baseline
+    anomaly_baseline = None
+    if cfg.anomaly.enabled:
+        from src.application_logic.anomaly_baseline import AnomalyBaseline
+        anomaly_baseline = AnomalyBaseline(
+            detection_store=store,
+            baseline_window_hours=cfg.anomaly.baseline_window_hours,
+            z_score_threshold=cfg.anomaly.z_score_threshold,
+            min_samples=cfg.anomaly.min_samples,
+        )
+        logger.info(f"Anomaly baseline: z>{cfg.anomaly.z_score_threshold}, window={cfg.anomaly.baseline_window_hours}h")
+
     orchestrator = CentralOrchestrator(
         model_path,
         vlm_rules=vlm_rules,
@@ -174,26 +216,53 @@ async def main():
         alert_manager=alert_mgr,
         cloud_storage=cloud,
         batch_config=cfg.batch,
+        behavior_analyzer=behavior_analyzer,
+        reasoning_chain=reasoning_chain,
+        rag_retriever=rag_retriever,
+        anomaly_baseline=anomaly_baseline,
     )
     await orchestrator.initialize()
 
     # Rate limiter
     rate_limiter = None
     if cfg.rate_limiting.enabled:
-        from communication.rate_limiter import TokenBucketRateLimiter
+        from src.communication.rate_limiter import TokenBucketRateLimiter
         rate_limiter = TokenBucketRateLimiter(
             max_per_sec=cfg.rate_limiting.max_rps,
             burst=cfg.rate_limiting.burst,
         )
         logger.info(f"Rate limiting: {cfg.rate_limiting.max_rps} rps, burst {cfg.rate_limiting.burst}")
 
-    # gRPC server (with mTLS + session manager + rate limiter)
+    # Model registry (v2)
+    model_registry = None
+    if cfg.model_management.enabled:
+        from src.model_management.model_registry import ModelRegistry
+        model_registry = ModelRegistry(
+            max_models_per_device=cfg.model_management.max_models_per_device,
+        )
+        logger.info(f"Model management: max {cfg.model_management.max_models_per_device} models/device")
+
+    # A/B test manager (v2)
+    ab_test_manager = None
+    if cfg.ab_test.enabled:
+        from src.model_management.ab_test_manager import ABTestManager
+        ab_test_manager = ABTestManager(
+            traffic_split=cfg.ab_test.traffic_split,
+            min_samples=cfg.ab_test.min_samples,
+            metric=cfg.ab_test.metric,
+        )
+        logger.info(f"A/B testing: split={cfg.ab_test.traffic_split}, metric={cfg.ab_test.metric}")
+
+    # gRPC server (with mTLS + session manager + rate limiter + model registry)
     server = NeuroPipelineServer(
         host, port, orchestrator,
         max_message_size_mb=cfg.central.max_message_size_mb,
         tls_config=cfg.tls if cfg.tls.enabled else None,
         session_manager=session_mgr,
         rate_limiter=rate_limiter,
+        model_registry=model_registry,
+        detection_store=store,
+        ab_test_manager=ab_test_manager,
     )
     await server.start()
 
@@ -201,6 +270,25 @@ async def main():
     cleanup_task = asyncio.create_task(
         _session_cleanup_loop(session_mgr, cfg.sessions.expiry_timeout)
     )
+
+    # Embedded dashboard (same process, shares subsystem instances)
+    dashboard_server = None
+    if args.dashboard:
+        from dashboard.app import app as dashboard_app, inject_from_central
+        inject_from_central(
+            detection_store=store,
+            session_manager=session_mgr,
+            orchestrator=orchestrator,
+            health_checker=None,
+            ab_test_manager=ab_test_manager,
+        )
+        import uvicorn
+        dashboard_config = uvicorn.Config(
+            dashboard_app, host="0.0.0.0", port=args.dashboard_port, log_level="info"
+        )
+        dashboard_server = uvicorn.Server(dashboard_config)
+        asyncio.create_task(dashboard_server.serve())
+        logger.info(f"Dashboard started on :{args.dashboard_port}")
 
     # Graceful shutdown
     stop_event = asyncio.Event()
@@ -221,6 +309,8 @@ async def main():
         await cleanup_task
     except asyncio.CancelledError:
         pass
+    if dashboard_server:
+        dashboard_server.should_exit = True
     try:
         await asyncio.wait_for(_shutdown_sequence(server, orchestrator, store), timeout=60)
     except asyncio.TimeoutError:

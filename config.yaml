@@ -118,3 +118,44 @@ rate_limiting:
   enabled: false
   max_rps: 100
   burst: 20
+
+# v2: Model management
+model_management:
+  enabled: false
+  max_models_per_device: 3
+
+# v2: Multi-round reasoning chain
+reasoning:
+  enabled: false
+  max_steps: 3
+  timeout_per_step: 15.0
+
+# v2: Adaptive frame rate (edge)
+adaptive_fps:
+  enabled: false
+  min_fps: 5
+  max_fps: 30
+  idle_fps: 10
+  active_fps: 30
+  ramp_up_frames: 1
+  ramp_down_frames: 90
+
+# v2: RAG historical context
+rag:
+  enabled: false
+  max_history_items: 10
+  time_window_hours: 24.0
+
+# v2: A/B model testing
+ab_test:
+  enabled: false
+  traffic_split: 0.5
+  min_samples: 100
+  metric: "accuracy"
+
+# v2: Anomaly baseline detection
+anomaly:
+  enabled: false
+  baseline_window_hours: 168.0
+  z_score_threshold: 3.0
+  min_samples: 50

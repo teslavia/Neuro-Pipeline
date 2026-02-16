@@ -53,6 +53,10 @@ class CentralOrchestrator:
         alert_manager: Optional[AlertManager] = None,
         cloud_storage=None,
         batch_config=None,
+        behavior_analyzer=None,
+        reasoning_chain=None,
+        rag_retriever=None,
+        anomaly_baseline=None,
     ) -> None:
         self.model_path = model_path
         self.inference_engine: Optional[MLXInferenceEngine] = None
@@ -73,6 +77,10 @@ class CentralOrchestrator:
         self._batch_max_size = batch_config.max_size if batch_config else 8
         self._batch_timeout = batch_config.timeout_seconds if batch_config else 2.0
         self._shutting_down = False
+        self._behavior_analyzer = behavior_analyzer
+        self._reasoning_chain = reasoning_chain
+        self._rag_retriever = rag_retriever
+        self._anomaly_baseline = anomaly_baseline
 
     async def initialize(self) -> None:
         """Initialize orchestrator and load models."""
@@ -145,6 +153,43 @@ class CentralOrchestrator:
                             )
                 vlm_queue_depth.set(self._vlm_queue.qsize())
 
+            # Behavior analysis (v2)
+            if self._behavior_analyzer and detections:
+                try:
+                    behavior_events = self._behavior_analyzer.analyze(
+                        device_id, detections, timestamp=time.time()
+                    )
+                    for be in behavior_events:
+                        self._record_event({
+                            "type": "behavior_alert",
+                            "device_id": device_id,
+                            "behavior_type": be.behavior_type.value,
+                            "confidence": be.confidence,
+                            "description": be.description,
+                            "timestamp": be.timestamp,
+                        })
+                except Exception as e:
+                    logger.warning(f"Behavior analysis failed: {e}")
+
+            # Anomaly scoring (v2)
+            if self._anomaly_baseline and detections:
+                try:
+                    score = self._anomaly_baseline.score(
+                        device_id, "detections_count", float(len(detections))
+                    )
+                    if score.is_anomaly:
+                        self._record_event({
+                            "type": "anomaly_alert",
+                            "device_id": device_id,
+                            "metric_name": "detections_count",
+                            "value": score.value,
+                            "z_score": score.z_score,
+                            "baseline_mean": score.baseline_mean,
+                            "timestamp": time.time(),
+                        })
+                except Exception as e:
+                    logger.warning(f"Anomaly scoring failed: {e}")
+
             self._record_event({
                 "type": "detection",
                 "frame_id": result.frame_id,
@@ -214,6 +259,16 @@ class CentralOrchestrator:
                     t0 = time.perf_counter()
                     device_id = item.get("device_id", "")
                     prompt = item["prompt"]
+                    # RAG: inject historical context (v2)
+                    if self._rag_retriever and device_id:
+                        try:
+                            class_names = [d.get("class_name") for d in item.get("detections", [])]
+                            rag_ctx = self._rag_retriever.retrieve(device_id, class_names=class_names)
+                            if rag_ctx.items:
+                                rag_text = self._rag_retriever.format_for_prompt(rag_ctx)
+                                prompt = f"{prompt}\n\nHistorical context:\n{rag_text}"
+                        except Exception as e:
+                            logger.warning(f"RAG retrieval failed: {e}")
                     # Multi-turn: build prompt with conversation history
                     if device_id and self.inference_engine:
                         ctx = self.inference_engine.get_conversation(device_id)
@@ -386,12 +441,24 @@ class CentralOrchestrator:
             self._event_listeners.remove(q)
 
     def _record_event(self, event: Dict[str, Any]) -> None:
-        """Record event to in-memory buffer, DB, and notify listeners."""
+        """Record event to in-memory buffer, DB, timeseries, and notify listeners."""
         self._recent_events.append(event)
         if self._detection_store:
             try:
                 self._detection_store.record(event)
                 events_stored.inc()
+                # Write timeseries data points
+                device_id = event.get("device_id", "")
+                ts = event.get("timestamp", time.time())
+                if event.get("type") == "detection" and event.get("detections"):
+                    self._detection_store.record_timeseries(
+                        device_id, "detections_count",
+                        float(len(event["detections"])), ts
+                    )
+                if event.get("type") == "vlm_analysis":
+                    self._detection_store.record_timeseries(
+                        device_id, "vlm_analyses_count", 1.0, ts
+                    )
             except Exception as e:
                 logger.error(f"Failed to persist event: {e}")
         for q in self._event_listeners:

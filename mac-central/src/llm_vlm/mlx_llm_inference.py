@@ -75,8 +75,10 @@ class MLXInferenceEngine:
     async def load_model(self) -> None:
         """Load model into unified memory. Falls back to stub mode if unavailable."""
         if not self.model_path.exists():
-            logger.error(f"Model path not found: {self.model_path}")
-            raise FileNotFoundError(f"Model not found: {self.model_path}")
+            logger.warning(f"Model path not found: {self.model_path} — running in stub mode")
+            self.use_stub = True
+            self._loaded = True
+            return
 
         # Load LLM (text) model
         try:

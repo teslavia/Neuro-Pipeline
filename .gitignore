@@ -96,6 +96,14 @@ tmp/device_logs/
 # Generated certificates
 certs/
 
+# Local scripts & validation docs
+scripts/
+VALIDATION.md
+
+# Runtime data
+data/
+logs/
+
 # plan & notes
 工程架构设计与任务拆解.md
 **/docs/notes/**

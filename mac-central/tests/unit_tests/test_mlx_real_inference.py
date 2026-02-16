@@ -102,11 +102,11 @@ async def test_model_not_loaded_error():
 
 @pytest.mark.asyncio
 async def test_model_path_not_found():
-    """Test error when model path doesn't exist."""
+    """Test graceful fallback to stub mode when model path doesn't exist."""
     eng = MLXInferenceEngine(Path("models/nonexistent"))
 
-    with pytest.raises(FileNotFoundError):
-        await eng.load_model()
+    await eng.load_model()
+    assert eng.use_stub is True
 
 
 # ── VLM Real Inference Tests ───────────────────────────────────────────────

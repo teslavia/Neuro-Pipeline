@@ -8,6 +8,7 @@
 #include <thread>
 #include <vector>
 
+#include "common/adaptive_fps.hpp"
 #include "common/constants.hpp"
 #include "common/detection_cache.hpp"
 #include "common/edge_metrics.hpp"
@@ -15,6 +16,7 @@
 #include "common/memory_pool.hpp"
 #include "common/npu_scheduler.hpp"
 #include "common/rknn_engine.hpp"
+#include "common/temporal_tracker.hpp"
 #include "common/video_recorder.hpp"
 #include "common/yolo_postprocess.hpp"
 #include "communication/grpc_client.hpp"
@@ -192,6 +194,23 @@ class PipelineCoordinator::Impl {
       }
     }
 
+    // v2: Temporal tracker (object tracking + behavior detection)
+    if (config_.enable_temporal_tracker) {
+      data_processing::TemporalTracker::Config tt_cfg;
+      temporal_tracker_ = std::make_unique<data_processing::TemporalTracker>(tt_cfg);
+      LOG_INFO("Pipeline", "Temporal tracker enabled");
+    }
+
+    // v2: Adaptive FPS controller
+    if (config_.enable_adaptive_fps) {
+      app::AdaptiveFPSController::Config afps_cfg;
+      afps_cfg.min_fps = 5;
+      afps_cfg.max_fps = config_.fps;
+      adaptive_fps_ = std::make_unique<app::AdaptiveFPSController>(afps_cfg);
+      LOG_INFO("Pipeline", "Adaptive FPS enabled (range: %u-%u)",
+               afps_cfg.min_fps, afps_cfg.max_fps);
+    }
+
     LOG_INFO("Pipeline", "All components initialized");
     return true;
   }
@@ -330,6 +349,27 @@ class PipelineCoordinator::Impl {
       auto detections = postprocessor_->Process(
           engine_->GetOutputs(), config_.width, config_.height);
 
+      // v2: Temporal tracking — assign track IDs and detect behaviors
+      std::vector<uint64_t> track_ids;
+      if (temporal_tracker_) {
+        track_ids = temporal_tracker_->Update(detections, frame_count);
+
+        auto behaviors = temporal_tracker_->DetectBehaviors();
+        for (const auto& [tid, btype] : behaviors) {
+          if (btype != data_processing::BehaviorType::kNone && grpc_client_ && grpc_client_->IsConnected()) {
+            neuro_pipeline::EdgeEvent behavior_event;
+            behavior_event.set_type(neuro_pipeline::EdgeEvent::DETECTION_ALERT);
+            behavior_event.set_timestamp_us(
+                std::chrono::duration_cast<std::chrono::microseconds>(
+                    Clock::now().time_since_epoch()).count());
+            behavior_event.set_description("behavior_detected");
+            (*behavior_event.mutable_metadata())["track_id"] = std::to_string(tid);
+            (*behavior_event.mutable_metadata())["behavior_type"] = std::to_string(static_cast<int>(btype));
+            grpc_client_->SendEdgeEvent(behavior_event);
+          }
+        }
+      }
+
       // Push every frame to video recorder ring buffer (pre-event buffer)
       if (video_recorder_ && frame) {
         video_recorder_->PushFrame(frame);
@@ -376,7 +416,8 @@ class PipelineCoordinator::Impl {
                 std::chrono::duration_cast<std::chrono::microseconds>(
                     t0.time_since_epoch()).count());
 
-            for (const auto& det : novel_detections) {
+            for (size_t di = 0; di < novel_detections.size(); ++di) {
+              const auto& det = novel_detections[di];
               auto* box = result.add_boxes();
               box->set_class_id(0);
               box->set_class_name(det.class_name);
@@ -385,6 +426,10 @@ class PipelineCoordinator::Impl {
               box->set_y_min(det.y_min);
               box->set_x_max(det.x_max);
               box->set_y_max(det.y_max);
+              // v2: set track_id if temporal tracker assigned one
+              if (!track_ids.empty() && di < track_ids.size()) {
+                box->set_track_id(track_ids[di]);
+              }
             }
 
             if (!grpc_client_->StreamDetection(result)) {
@@ -449,6 +494,15 @@ class PipelineCoordinator::Impl {
         LOG_INFO("Pipeline", "Reached frame limit: %u", config_.max_frames);
         break;
       }
+
+      // v2: Adaptive FPS — adjust frame delay based on detection activity
+      if (adaptive_fps_) {
+        adaptive_fps_->Update(static_cast<int>(novel_detections.size()));
+        auto delay_us = adaptive_fps_->GetFrameDelayUs();
+        if (delay_us > 0) {
+          std::this_thread::sleep_for(std::chrono::microseconds(delay_us));
+        }
+      }
     }
 
     // Flush gRPC stream before stopping
@@ -509,6 +563,37 @@ class PipelineCoordinator::Impl {
         LOG_INFO("Pipeline", "Shutdown command received");
         running = false;
         break;
+      case neuro_pipeline::ControlCommand::SWITCH_MODEL_VARIANT: {
+        auto it = cmd.parameters().find("model_id");
+        if (it != cmd.parameters().end()) {
+          LOG_INFO("Pipeline", "Switch model variant: %s", it->second.c_str());
+          // Model hot-swap would be handled by MultiModelManager
+        }
+        break;
+      }
+      case neuro_pipeline::ControlCommand::SET_DETECTION_REGION: {
+        auto x = cmd.parameters().find("x_min");
+        auto y = cmd.parameters().find("y_min");
+        auto x2 = cmd.parameters().find("x_max");
+        auto y2 = cmd.parameters().find("y_max");
+        if (x != cmd.parameters().end() && y != cmd.parameters().end() &&
+            x2 != cmd.parameters().end() && y2 != cmd.parameters().end()) {
+          LOG_INFO("Pipeline", "Detection region set: (%.3f,%.3f)-(%.3f,%.3f)",
+                   std::stof(x->second), std::stof(y->second),
+                   std::stof(x2->second), std::stof(y2->second));
+        }
+        break;
+      }
+      case neuro_pipeline::ControlCommand::SET_SENSITIVITY: {
+        auto it = cmd.parameters().find("sensitivity");
+        if (it != cmd.parameters().end()) {
+          float sens = std::stof(it->second);
+          config_.confidence_threshold = 1.0f - sens;
+          LOG_INFO("Pipeline", "Sensitivity set to %.2f (threshold=%.2f)",
+                   sens, config_.confidence_threshold);
+        }
+        break;
+      }
       default:
         LOG_WARN("Pipeline", "Unknown command type: %d", static_cast<int>(cmd.type()));
         break;
@@ -545,6 +630,8 @@ class PipelineCoordinator::Impl {
   std::unique_ptr<data_processing::MemoryPool> inference_pool_;
   std::unique_ptr<ai_inference::NPUScheduler> npu_scheduler_;
   std::unique_ptr<common::VideoRecorder> video_recorder_;
+  std::unique_ptr<data_processing::TemporalTracker> temporal_tracker_;
+  std::unique_ptr<app::AdaptiveFPSController> adaptive_fps_;
 
   std::ifstream video_file_;
 };
