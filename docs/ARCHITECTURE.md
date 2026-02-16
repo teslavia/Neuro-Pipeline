@@ -180,7 +180,22 @@ RK3588 Edge                                    Mac Mini Central
 
 ---
 
-## 6. Key Design Decisions
+## 6. Third-Party Dependencies
+
+第三方依赖统一管理在 `third_party/` 目录下：
+
+| 依赖 | 类型 | 用途 |
+|------|------|------|
+| `rknn-toolkit2` | git submodule | RKNN SDK + MPP/RGA 头文件和库（sysroot 组装来源） |
+| `googletest` | git submodule (v1.14.0) | C++ 单元测试框架 |
+| `stubs/` | 项目自写 | CI native 编译用极简 stub 头文件 |
+
+- Sysroot (`tools/cross_compile_env/sysroot/`) 是纯构建产物，由 `prepare_sysroot.sh` 从 submodule 或本地 RKSDK 组装
+- 初始化: `git submodule update --init --depth 1`
+
+---
+
+## 7. Key Design Decisions
 
 ### Decision 1: Zero-Copy Architecture
 - **Choice**: DMA-BUF for zero-copy data sharing
@@ -209,7 +224,7 @@ RK3588 Edge                                    Mac Mini Central
 
 ---
 
-## 7. Performance Targets
+## 8. Performance Targets
 
 | Metric | Target | Measurement Method |
 |---|---|---|
@@ -223,7 +238,7 @@ RK3588 Edge                                    Mac Mini Central
 
 ---
 
-## 8. Security Considerations
+## 9. Security Considerations
 
 - **mTLS**: gRPC 通道使用双向 TLS 认证
 - **Input Validation**: 所有 Protobuf 消息校验
@@ -237,14 +252,14 @@ RK3588 Edge                                    Mac Mini Central
 
 ---
 
-## 9. Future Extensions
+## 10. Future Extensions
 
 - Kubernetes 边缘部署 (KubeEdge)
 - 边缘侧模型自动更新
 
 ---
 
-## 10. Reference Projects
+## 11. Reference Projects
 
 | Project | Relevance |
 |---|---|
@@ -256,7 +271,7 @@ RK3588 Edge                                    Mac Mini Central
 
 ---
 
-## 11. Observability (v1.0.0)
+## 12. Observability (v1.0.0)
 
 ### Prometheus Metrics
 - **Counters**:

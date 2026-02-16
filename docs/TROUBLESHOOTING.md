@@ -39,12 +39,15 @@ docker build --build-arg APT_MIRROR=mirrors.tuna.tsinghua.edu.cn -t neuro-pipeli
 echo $RKSDK_PATH
 # 应输出: /Volumes/TMAC/Satoshi/DEV/mac/github/RKSDK
 
+# 确保 submodule 已初始化（优先使用 submodule）
+git submodule update --init --depth 1
+
 # 重新生成 sysroot
 rm -rf tools/cross_compile_env/sysroot
 bash tools/cross_compile_env/prepare_sysroot.sh
 
 # 验证库文件
-ls -lh tools/cross_compile_env/sysroot/lib/*.so*
+ls -lh tools/cross_compile_env/sysroot/usr/lib/*.so*
 ```
 
 ---
@@ -61,7 +64,7 @@ librockchip_mpp.so: No such file or directory
 **解决方案**:
 ```bash
 # 在 Docker 内手动创建符号链接
-cd tools/cross_compile_env/sysroot/lib
+cd tools/cross_compile_env/sysroot/usr/lib
 ln -sf librockchip_mpp.so.0 librockchip_mpp.so
 ln -sf librga.so.2 librga.so
 ```
@@ -652,7 +655,7 @@ bash tools/convert_mlx_model.sh
 - [KPI Report](performance/kpi-report.md) — 性能基准报告
 - [Week 2 Retrospective](devlog/week2-retro.md) — Week 2 复盘
 - [RKNN API 文档](https://github.com/airockchip/rknn-toolkit2/tree/master/doc)
-- [MPP 文档](https://github.com/rockchip-linux/mpp/wiki)
+- [MPP 文档](https://github.com/airockchip/rknn-toolkit2/tree/master/rknpu2/examples/3rdparty/mpp)
 
 ---
 

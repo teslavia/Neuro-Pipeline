@@ -113,7 +113,10 @@ Total           35.1 ms  (~28.5 FPS)
 ### 边缘端 — RK3588 交叉编译
 
 ```bash
-# 组装 sysroot（从 RKSDK 提取头文件和库）
+# 初始化第三方依赖（首次克隆后执行）
+git submodule update --init --depth 1
+
+# 组装 sysroot（从 submodule 或本地 RKSDK 提取头文件和库）
 bash tools/cross_compile_env/prepare_sysroot.sh
 
 # Docker 交叉编译（推荐）
@@ -171,8 +174,12 @@ neuro-pipeline/
 ├── extensions/
 │   ├── dashboard/                 # FastAPI + htmx UI
 │   └── monitoring/                # Grafana + Prometheus stack
+├── third_party/
+│   ├── rknn-toolkit2/             # git submodule (RKNN SDK + MPP/RGA)
+│   ├── googletest/                # git submodule (v1.14.0)
+│   └── stubs/                     # CI 编译用极简 stub 头文件
 ├── tools/
-│   ├── cross_compile_env/         #   Docker + sysroot
+│   ├── cross_compile_env/         #   Docker + sysroot (构建产物)
 │   ├── certs/                     #   mTLS cert gen
 │   └── services/                  #   systemd + launchd
 ├── config.yaml                    # unified config
