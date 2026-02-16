@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 
 from src.observability.alerting import AlertManager, AlertRule
 
@@ -59,15 +59,11 @@ async def test_webhook_post():
     rules = [AlertRule(name="test_alert", cooldown_seconds=0)]
     mgr = AlertManager(rules=rules, webhook_url="http://localhost:9999/hook")
 
-    mock_client = AsyncMock()
-    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client.__aexit__ = AsyncMock(return_value=False)
-    mock_client.post = AsyncMock()
-
-    with patch("src.observability.alerting.httpx", create=True) as mock_httpx:
-        mock_httpx.AsyncClient.return_value = mock_client
-        # Re-import to pick up the mock — or just call directly
+    with patch.object(mgr, '_post_webhook', new_callable=AsyncMock) as mock_post:
         fired = await mgr.check_and_fire("test_alert", {"key": "val"})
+        mock_post.assert_awaited_once_with(
+            "http://localhost:9999/hook", "test_alert", {"key": "val"}
+        )
 
     assert fired is True
 
