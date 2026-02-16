@@ -139,3 +139,23 @@ adaptive_fps:
   active_fps: 30
   ramp_up_frames: 1
   ramp_down_frames: 90
+
+# v2: RAG historical context
+rag:
+  enabled: false
+  max_history_items: 10
+  time_window_hours: 24.0
+
+# v2: A/B model testing
+ab_test:
+  enabled: false
+  traffic_split: 0.5
+  min_samples: 100
+  metric: "accuracy"
+
+# v2: Anomaly baseline detection
+anomaly:
+  enabled: false
+  baseline_window_hours: 168.0
+  z_score_threshold: 3.0
+  min_samples: 50

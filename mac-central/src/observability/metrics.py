@@ -53,6 +53,14 @@ edge_inference_latency_avg = Gauge(
 # --- Info ---
 build_info = Info("np_build", "Build information")
 
+# --- A/B test metrics ---
+ab_test_inferences = Counter(
+    "np_ab_test_inferences_total", "A/B test inferences", ["variant"]
+)
+ab_test_latency = Histogram(
+    "np_ab_test_latency_seconds", "A/B test inference latency", ["variant"]
+)
+
 
 def update_edge_metrics(device_id: str, metadata: dict) -> None:
     """Update edge Prometheus gauges from health update metadata."""

@@ -166,6 +166,46 @@ async def main():
 
     # Orchestrator (core logic)
     vlm_model_path = Path(cfg.central.vlm_model_path) if cfg.central.vlm_model_path else None
+
+    # v2: Behavior analyzer
+    behavior_analyzer = None
+    if True:  # always available, lightweight
+        from src.application_logic.behavior_analyzer import BehaviorAnalyzer
+        behavior_analyzer = BehaviorAnalyzer(detection_store=store)
+
+    # v2: Reasoning chain
+    reasoning_chain = None
+    if cfg.reasoning.enabled:
+        from src.llm_vlm.reasoning_chain import ReasoningChain
+        reasoning_chain = ReasoningChain(
+            max_steps=cfg.reasoning.max_steps,
+            timeout_per_step=cfg.reasoning.timeout_per_step,
+        )
+        logger.info(f"Reasoning chain: {cfg.reasoning.max_steps} steps, {cfg.reasoning.timeout_per_step}s/step")
+
+    # v2: RAG retriever
+    rag_retriever = None
+    if cfg.rag.enabled:
+        from src.llm_vlm.rag_retriever import RAGRetriever
+        rag_retriever = RAGRetriever(
+            detection_store=store,
+            max_items=cfg.rag.max_history_items,
+            time_window_hours=cfg.rag.time_window_hours,
+        )
+        logger.info(f"RAG retriever: {cfg.rag.max_history_items} items, {cfg.rag.time_window_hours}h window")
+
+    # v2: Anomaly baseline
+    anomaly_baseline = None
+    if cfg.anomaly.enabled:
+        from src.application_logic.anomaly_baseline import AnomalyBaseline
+        anomaly_baseline = AnomalyBaseline(
+            detection_store=store,
+            baseline_window_hours=cfg.anomaly.baseline_window_hours,
+            z_score_threshold=cfg.anomaly.z_score_threshold,
+            min_samples=cfg.anomaly.min_samples,
+        )
+        logger.info(f"Anomaly baseline: z>{cfg.anomaly.z_score_threshold}, window={cfg.anomaly.baseline_window_hours}h")
+
     orchestrator = CentralOrchestrator(
         model_path,
         vlm_rules=vlm_rules,
@@ -176,6 +216,10 @@ async def main():
         alert_manager=alert_mgr,
         cloud_storage=cloud,
         batch_config=cfg.batch,
+        behavior_analyzer=behavior_analyzer,
+        reasoning_chain=reasoning_chain,
+        rag_retriever=rag_retriever,
+        anomaly_baseline=anomaly_baseline,
     )
     await orchestrator.initialize()
 
@@ -198,6 +242,17 @@ async def main():
         )
         logger.info(f"Model management: max {cfg.model_management.max_models_per_device} models/device")
 
+    # A/B test manager (v2)
+    ab_test_manager = None
+    if cfg.ab_test.enabled:
+        from src.model_management.ab_test_manager import ABTestManager
+        ab_test_manager = ABTestManager(
+            traffic_split=cfg.ab_test.traffic_split,
+            min_samples=cfg.ab_test.min_samples,
+            metric=cfg.ab_test.metric,
+        )
+        logger.info(f"A/B testing: split={cfg.ab_test.traffic_split}, metric={cfg.ab_test.metric}")
+
     # gRPC server (with mTLS + session manager + rate limiter + model registry)
     server = NeuroPipelineServer(
         host, port, orchestrator,
@@ -207,6 +262,7 @@ async def main():
         rate_limiter=rate_limiter,
         model_registry=model_registry,
         detection_store=store,
+        ab_test_manager=ab_test_manager,
     )
     await server.start()
 
@@ -224,6 +280,7 @@ async def main():
             session_manager=session_mgr,
             orchestrator=orchestrator,
             health_checker=None,
+            ab_test_manager=ab_test_manager,
         )
         import uvicorn
         dashboard_config = uvicorn.Config(

@@ -55,6 +55,8 @@ class CentralOrchestrator:
         batch_config=None,
         behavior_analyzer=None,
         reasoning_chain=None,
+        rag_retriever=None,
+        anomaly_baseline=None,
     ) -> None:
         self.model_path = model_path
         self.inference_engine: Optional[MLXInferenceEngine] = None
@@ -77,6 +79,8 @@ class CentralOrchestrator:
         self._shutting_down = False
         self._behavior_analyzer = behavior_analyzer
         self._reasoning_chain = reasoning_chain
+        self._rag_retriever = rag_retriever
+        self._anomaly_baseline = anomaly_baseline
 
     async def initialize(self) -> None:
         """Initialize orchestrator and load models."""
@@ -167,6 +171,25 @@ class CentralOrchestrator:
                 except Exception as e:
                     logger.warning(f"Behavior analysis failed: {e}")
 
+            # Anomaly scoring (v2)
+            if self._anomaly_baseline and detections:
+                try:
+                    score = self._anomaly_baseline.score(
+                        device_id, "detections_count", float(len(detections))
+                    )
+                    if score.is_anomaly:
+                        self._record_event({
+                            "type": "anomaly_alert",
+                            "device_id": device_id,
+                            "metric_name": "detections_count",
+                            "value": score.value,
+                            "z_score": score.z_score,
+                            "baseline_mean": score.baseline_mean,
+                            "timestamp": time.time(),
+                        })
+                except Exception as e:
+                    logger.warning(f"Anomaly scoring failed: {e}")
+
             self._record_event({
                 "type": "detection",
                 "frame_id": result.frame_id,
@@ -236,6 +259,16 @@ class CentralOrchestrator:
                     t0 = time.perf_counter()
                     device_id = item.get("device_id", "")
                     prompt = item["prompt"]
+                    # RAG: inject historical context (v2)
+                    if self._rag_retriever and device_id:
+                        try:
+                            class_names = [d.get("class_name") for d in item.get("detections", [])]
+                            rag_ctx = self._rag_retriever.retrieve(device_id, class_names=class_names)
+                            if rag_ctx.items:
+                                rag_text = self._rag_retriever.format_for_prompt(rag_ctx)
+                                prompt = f"{prompt}\n\nHistorical context:\n{rag_text}"
+                        except Exception as e:
+                            logger.warning(f"RAG retrieval failed: {e}")
                     # Multi-turn: build prompt with conversation history
                     if device_id and self.inference_engine:
                         ctx = self.inference_engine.get_conversation(device_id)

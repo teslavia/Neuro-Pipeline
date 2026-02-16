@@ -48,6 +48,9 @@ _session_manager = None
 # Optional: injected CentralOrchestrator (for command dispatch)
 _orchestrator = None
 
+# Optional: injected ABTestManager
+_ab_test_manager = None
+
 
 def set_detection_store(store) -> None:
     """Inject a DetectionStore instance for history queries."""
@@ -74,8 +77,10 @@ def set_orchestrator(orchestrator) -> None:
 
 
 def inject_from_central(*, detection_store=None, session_manager=None,
-                        orchestrator=None, health_checker=None):
+                        orchestrator=None, health_checker=None,
+                        ab_test_manager=None):
     """One-call injection from central server process."""
+    global _ab_test_manager
     if detection_store is not None:
         set_detection_store(detection_store)
     if session_manager is not None:
@@ -84,6 +89,8 @@ def inject_from_central(*, detection_store=None, session_manager=None,
         set_orchestrator(orchestrator)
     if health_checker is not None:
         set_health_checker(health_checker)
+    if ab_test_manager is not None:
+        _ab_test_manager = ab_test_manager
 
 
 def _get_auth_credentials():
@@ -492,3 +499,27 @@ async def websocket_endpoint(ws: WebSocket):
     finally:
         if ws in _ws_clients:
             _ws_clients.remove(ws)
+
+
+@app.get("/api/v2/ab-test")
+async def api_v2_ab_test(_=Depends(verify_credentials)):
+    """A/B test results endpoint."""
+    if _ab_test_manager is None:
+        return {"enabled": False, "message": "A/B testing not configured"}
+    result = _ab_test_manager.evaluate()
+    metrics = _ab_test_manager.get_metrics()
+    return {
+        "enabled": True,
+        "winner": result.winner,
+        "confidence": result.confidence,
+        "sufficient_samples": result.sufficient_samples,
+        "variants": {
+            name: {
+                "total_inferences": m.total_inferences,
+                "avg_latency_ms": round(m.avg_latency_ms, 2),
+                "accuracy": round(m.accuracy, 4),
+                "total_detections": m.total_detections,
+            }
+            for name, m in metrics.items()
+        },
+    }

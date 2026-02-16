@@ -22,12 +22,13 @@ class NeuroPipelineServicer(neuro_pipeline_pb2_grpc.NeuroPipelineServiceServicer
     """gRPC service implementation for Neuro-Pipeline."""
 
     def __init__(self, orchestrator, session_manager=None, rate_limiter=None,
-                 model_registry=None, detection_store=None) -> None:
+                 model_registry=None, detection_store=None, ab_test_manager=None) -> None:
         self.orchestrator = orchestrator
         self.session_manager = session_manager
         self._rate_limiter = rate_limiter
         self._model_registry = model_registry
         self._detection_store = detection_store
+        self._ab_test_manager = ab_test_manager
         logger.info("NeuroPipelineServicer initialized")
 
     @staticmethod
@@ -210,6 +211,13 @@ class NeuroPipelineServicer(neuro_pipeline_pb2_grpc.NeuroPipelineServiceServicer
                     message="Max devices reached",
                     assigned_id=request.device_id,
                 )
+            # A/B test group assignment
+            if self._ab_test_manager:
+                group = self._ab_test_manager.assign_group(request.device_id)
+                session = self.session_manager.get_session(request.device_id)
+                if session:
+                    session.ab_test_group = group.value
+                    session.model_version = self._ab_test_manager.get_variant(request.device_id)
         return neuro_pipeline_pb2.DeviceRegistrationResponse(
             success=True,
             message="Registered",
@@ -326,7 +334,8 @@ class NeuroPipelineServer:
     def __init__(self, host: str, port: int, orchestrator,
                  max_message_size_mb: int = 16, tls_config=None,
                  session_manager=None, rate_limiter=None,
-                 model_registry=None, detection_store=None) -> None:
+                 model_registry=None, detection_store=None,
+                 ab_test_manager=None) -> None:
         self.host = host
         self.port = port
         self.orchestrator = orchestrator
@@ -336,6 +345,7 @@ class NeuroPipelineServer:
         self.rate_limiter = rate_limiter
         self.model_registry = model_registry
         self.detection_store = detection_store
+        self.ab_test_manager = ab_test_manager
         self.server = None
 
     async def start(self) -> None:
@@ -358,6 +368,7 @@ class NeuroPipelineServer:
                 rate_limiter=self.rate_limiter,
                 model_registry=self.model_registry,
                 detection_store=self.detection_store,
+                ab_test_manager=self.ab_test_manager,
             ),
             self.server,
         )

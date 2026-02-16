@@ -21,6 +21,8 @@ class DeviceSession:
     last_heartbeat: float = field(default_factory=time.time)
     frames_received: int = 0
     status: str = "connected"  # connected, stale, disconnected
+    ab_test_group: str = ""  # "control" or "treatment"
+    model_version: str = ""
 
 
 class DeviceSessionManager:
