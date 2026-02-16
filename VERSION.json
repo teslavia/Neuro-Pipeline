@@ -1,10 +1,10 @@
 {
-  "version": "1.1.0",
+  "version": "1.2.0",
   "name": "neuro-pipeline",
   "description": "Edge-Central AI inference pipeline for RK3588 + Mac Mini",
-  "milestone": "Week 7 - Scale + Reliability + Multi-Edge",
+  "milestone": "Week 8 - Production Hardening + Performance",
   "components": {
-    "rk3588-edge": "6.0.0",
-    "mac-central": "5.0.0"
+    "rk3588-edge": "7.0.0",
+    "mac-central": "6.0.0"
   }
 }

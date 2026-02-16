@@ -26,6 +26,8 @@ class Logger {
     else format_ = Format::kText;
   }
 
+  static void SetDeviceId(const std::string& id) { device_id_ = id; }
+
   static void Log(Level level, const char* component, const char* fmt, ...) {
     if (level < min_level_) return;
 
@@ -37,11 +39,12 @@ class Logger {
     va_end(args);
 
     if (format_ == Format::kJson) {
-      // JSON structured output
+      // JSON structured output — unified fields: ts, level, component, device_id, msg
       time_t now = std::time(nullptr);
       std::fprintf(stderr,
-          "{\"ts\":%ld,\"level\":\"%s\",\"component\":\"%s\",\"msg\":\"%s\"}\n",
-          static_cast<long>(now), LevelTag(level), component, msg_buf);
+          "{\"ts\":%ld,\"level\":\"%s\",\"component\":\"%s\",\"device_id\":\"%s\",\"msg\":\"%s\"}\n",
+          static_cast<long>(now), LevelTag(level), component,
+          device_id_.c_str(), msg_buf);
     } else {
       // Text output (original format)
       std::fprintf(stderr, "[%s] [%s] %s\n", LevelTag(level), component, msg_buf);
@@ -61,6 +64,7 @@ class Logger {
 
   static inline Level min_level_ = Level::kInfo;
   static inline Format format_ = Format::kText;
+  static inline std::string device_id_;
 };
 
 }  // namespace common

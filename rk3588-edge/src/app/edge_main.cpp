@@ -4,6 +4,7 @@
 #include <string>
 #include <thread>
 
+#include "common/constants.hpp"
 #include "common/pipeline_coordinator.hpp"
 #include "app/config_manager.hpp"
 #include "common/logger.hpp"
@@ -20,7 +21,7 @@ void SignalHandler(int signal) {
 
 int main(int argc, char* argv[]) {
   std::cout << "============================================" << std::endl;
-  std::cout << "  Neuro-Pipeline Edge v1.0.0" << std::endl;
+  std::cout << "  Neuro-Pipeline Edge " << common::kEdgeVersion << std::endl;
   std::cout << "  RK3588 NPU Inference Engine" << std::endl;
   std::cout << "============================================" << std::endl;
 
@@ -28,8 +29,8 @@ int main(int argc, char* argv[]) {
   std::signal(SIGINT, SignalHandler);
   std::signal(SIGTERM, SignalHandler);
 
-  // Initialize logger
-  common::Logger::Init("info");
+  // Initialize logger (JSON format for structured logging)
+  common::Logger::Init("info", "json");
 
   try {
     // Parse command-line arguments
@@ -90,7 +91,7 @@ int main(int argc, char* argv[]) {
         config.dedup_ttl_seconds = cfg.GetFloat("edge.dedup_ttl_seconds", static_cast<float>(config.dedup_ttl_seconds));
 
         // Multi-camera config: cameras.0.device, cameras.0.width, etc.
-        for (int i = 0; i < 8; ++i) {
+        for (int i = 0; i < static_cast<int>(common::kMaxCameras); ++i) {
           std::string prefix = "cameras." + std::to_string(i);
           if (!cfg.Has(prefix + ".device")) break;
           app::PipelineCoordinator::CameraConfig cam;
@@ -103,6 +104,9 @@ int main(int argc, char* argv[]) {
         }
       }
     }
+
+    // Set device_id for structured logging
+    common::Logger::SetDeviceId(config.device_id);
 
     app::PipelineCoordinator coordinator(config);
 

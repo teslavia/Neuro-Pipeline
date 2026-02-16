@@ -4,6 +4,8 @@
 #include <iostream>
 #include <vector>
 
+#include "common/buffer.hpp"
+
 #ifndef USE_MOCK_HAL
 
 // ============================================================================
@@ -18,8 +20,6 @@ class RTSPSource::Impl {
   ~Impl() { Stop(); }
 
   bool Initialize() {
-    // Real implementation would call:
-    // avformat_open_input(), avformat_find_stream_info(), etc.
     std::cout << "[RTSP] Connecting to " << config_.url << std::endl;
     return true;
   }
@@ -35,9 +35,8 @@ class RTSPSource::Impl {
 
   std::shared_ptr<common::Buffer> CaptureFrame() {
     if (!running_) return nullptr;
-    // Real: av_read_frame() + decode
-    auto buf = std::make_shared<common::Buffer>(
-        config_.width * config_.height * 3);
+    size_t frame_size = config_.width * config_.height * 3;
+    auto buf = common::BufferFactory::CreateDMABuffer(frame_size);
     std::memset(buf->Data(), 128, buf->Size());
     return buf;
   }
@@ -74,8 +73,8 @@ class RTSPSource::Impl {
 
   std::shared_ptr<common::Buffer> CaptureFrame() {
     if (!running_) return nullptr;
-    auto buf = std::make_shared<common::Buffer>(
-        config_.width * config_.height * 3);
+    size_t frame_size = config_.width * config_.height * 3;
+    auto buf = common::BufferFactory::CreateDMABuffer(frame_size);
     std::memset(buf->Data(), 64 + (frame_count_++ % 128), buf->Size());
     return buf;
   }

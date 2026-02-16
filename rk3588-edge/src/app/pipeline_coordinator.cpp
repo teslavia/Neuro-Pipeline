@@ -8,6 +8,7 @@
 #include <thread>
 #include <vector>
 
+#include "common/constants.hpp"
 #include "common/detection_cache.hpp"
 #include "common/edge_metrics.hpp"
 #include "common/logger.hpp"
@@ -138,12 +139,11 @@ class PipelineCoordinator::Impl {
     yolo_cfg.input_height = config_.model_height;
     postprocessor_ = std::make_unique<ai_inference::YOLOPostProcessor>(yolo_cfg);
 
-    // Memory pool for inference buffers (model_w * model_h * 3 bytes, 8 blocks)
-    constexpr size_t kDefaultBufferCount = 8;
+    // Memory pool for inference buffers (model_w * model_h * 3 bytes)
     size_t buf_size = config_.model_width * config_.model_height * 3;
     inference_pool_ = std::make_unique<data_processing::MemoryPool>(
-        buf_size, kDefaultBufferCount);
-    LOG_INFO("Pipeline", "Memory pool: %zu x %zu bytes", kDefaultBufferCount, buf_size);
+        buf_size, common::kDefaultBufferCount);
+    LOG_INFO("Pipeline", "Memory pool: %zu x %zu bytes", common::kDefaultBufferCount, buf_size);
 
     // Initialize gRPC client if enabled
     if (grpc_client_) {
@@ -335,16 +335,15 @@ class PipelineCoordinator::Impl {
 
       // Update FPS every second
       auto fps_elapsed = std::chrono::duration<double>(t1 - fps_start).count();
-      if (fps_elapsed >= 1.0) {
+      if (fps_elapsed >= common::kFPSUpdateIntervalSec) {
         measured_fps = static_cast<uint32_t>(fps_frames / fps_elapsed);
         common::EdgeMetrics::Instance().SetFPS(static_cast<double>(measured_fps));
         fps_frames = 0;
         fps_start = t1;
       }
 
-      // Send health update every 5 seconds
       auto health_elapsed = std::chrono::duration<double>(t1 - last_health).count();
-      if (health_elapsed >= 5.0 && grpc_client_ && grpc_client_->IsConnected()) {
+      if (health_elapsed >= common::kHealthUpdateIntervalSec && grpc_client_ && grpc_client_->IsConnected()) {
         neuro_pipeline::EdgeEvent health_event;
         health_event.set_type(neuro_pipeline::EdgeEvent::HEALTH_UPDATE);
         health_event.set_timestamp_us(
@@ -433,7 +432,7 @@ class PipelineCoordinator::Impl {
 
   std::shared_ptr<common::Buffer> ReadAndDecodePacket() {
     // Read a chunk from the video file and decode
-    constexpr size_t kChunkSize = 256 * 1024;  // 256KB
+    constexpr size_t kChunkSize = common::kVideoChunkSize;
     std::vector<uint8_t> chunk(kChunkSize);
     video_file_.read(reinterpret_cast<char*>(chunk.data()), kChunkSize);
     auto bytes_read = video_file_.gcount();
