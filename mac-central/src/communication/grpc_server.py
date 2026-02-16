@@ -251,6 +251,17 @@ class NeuroPipelineServer:
             self.server,
         )
 
+        # Enable gRPC reflection for grpcurl / debugging
+        try:
+            from grpc_reflection.v1alpha import reflection
+            service_names = (
+                neuro_pipeline_pb2.DESCRIPTOR.services_by_name['NeuroPipelineService'].full_name,
+                reflection.SERVICE_NAME,
+            )
+            reflection.enable_server_reflection(service_names, self.server)
+        except ImportError:
+            logger.debug("grpc-reflection not installed, reflection disabled")
+
         listen_addr = f"{self.host}:{self.port}"
 
         if self.tls_config and self.tls_config.enabled:
