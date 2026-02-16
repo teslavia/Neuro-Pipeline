@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "common/detection_cache.hpp"
+#include "common/edge_metrics.hpp"
 #include "common/logger.hpp"
 #include "common/rknn_engine.hpp"
 #include "common/yolo_postprocess.hpp"
@@ -226,8 +227,10 @@ class PipelineCoordinator::Impl {
       // 3. NPU inference (mutex-protected for hot-reload safety)
       {
         std::lock_guard<std::mutex> lock(engine_mutex_);
+        auto t_infer_start = Clock::now();
         if (!engine_->Infer(processed)) {
           LOG_ERROR("Pipeline", "Inference failed");
+          common::EdgeMetrics::Instance().IncrementInferenceErrors();
           if (use_camera_ && !cameras_.empty()) {
             cameras_[active_cam_idx]->ReleaseFrame(frame);
           } else if (use_camera_) {
@@ -235,6 +238,9 @@ class PipelineCoordinator::Impl {
           }
           continue;
         }
+        double infer_ms = std::chrono::duration<double, std::milli>(
+            Clock::now() - t_infer_start).count();
+        common::EdgeMetrics::Instance().RecordInferenceLatencyMs(infer_ms);
       }
 
       // 4. Postprocess
@@ -251,6 +257,7 @@ class PipelineCoordinator::Impl {
       }
 
       if (!novel_detections.empty()) {
+        common::EdgeMetrics::Instance().IncrementDetectionsTotal(novel_detections.size());
         std::printf("[Frame %lu] %zu detections (%zu novel):\n",
                     frame_count, detections.size(), novel_detections.size());
         for (const auto& det : novel_detections) {
@@ -311,11 +318,13 @@ class PipelineCoordinator::Impl {
       avg_latency = avg_latency * 0.9 + latency * 0.1;  // EMA
       frame_count++;
       fps_frames++;
+      common::EdgeMetrics::Instance().IncrementFramesProcessed();
 
       // Update FPS every second
       auto fps_elapsed = std::chrono::duration<double>(t1 - fps_start).count();
       if (fps_elapsed >= 1.0) {
         measured_fps = static_cast<uint32_t>(fps_frames / fps_elapsed);
+        common::EdgeMetrics::Instance().SetFPS(static_cast<double>(measured_fps));
         fps_frames = 0;
         fps_start = t1;
       }
@@ -329,7 +338,11 @@ class PipelineCoordinator::Impl {
             std::chrono::duration_cast<std::chrono::microseconds>(
                 t1.time_since_epoch()).count());
         health_event.set_description("health");
-        (*health_event.mutable_metadata())["fps"] = std::to_string(measured_fps);
+        // Include all edge metrics in health update
+        auto& metrics = common::EdgeMetrics::Instance();
+        for (const auto& kv : metrics.Snapshot()) {
+          (*health_event.mutable_metadata())[kv.first] = kv.second;
+        }
         (*health_event.mutable_metadata())["latency_ms"] =
             std::to_string(static_cast<int>(avg_latency));
         grpc_client_->SendEdgeEvent(health_event);

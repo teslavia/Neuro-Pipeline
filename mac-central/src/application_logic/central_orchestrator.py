@@ -70,6 +70,7 @@ class CentralOrchestrator:
         self._cloud_storage = cloud_storage
         self._batch_max_size = batch_config.max_size if batch_config else 8
         self._batch_timeout = batch_config.timeout_seconds if batch_config else 2.0
+        self._shutting_down = False
 
     async def initialize(self) -> None:
         """Initialize orchestrator and load models."""
@@ -113,23 +114,26 @@ class CentralOrchestrator:
                 detections, template=matched_rule.prompt_template
             )
             # Enqueue for async VLM processing (non-blocking)
-            try:
-                self._vlm_queue.put_nowait({
-                    "frame_data": result.frame_data,
-                    "prompt": prompt,
-                    "frame_id": result.frame_id,
-                    "trace_id": trace_id,
-                    "device_id": device_id,
-                    "detections": detections,
-                    "rule": matched_rule.class_name,
-                })
-            except asyncio.QueueFull:
-                vlm_requests_total.labels(status="dropped").inc()
-                logger.warning("VLM queue full, dropping analysis request")
-                if self._alert_manager:
-                    asyncio.create_task(
-                        self._alert_manager.check_and_fire("vlm_queue_full", {"frame_id": result.frame_id})
-                    )
+            if self._shutting_down:
+                logger.warning("Shutting down, rejecting VLM request")
+            else:
+                try:
+                    self._vlm_queue.put_nowait({
+                        "frame_data": result.frame_data,
+                        "prompt": prompt,
+                        "frame_id": result.frame_id,
+                        "trace_id": trace_id,
+                        "device_id": device_id,
+                        "detections": detections,
+                        "rule": matched_rule.class_name,
+                    })
+                except asyncio.QueueFull:
+                    vlm_requests_total.labels(status="dropped").inc()
+                    logger.warning("VLM queue full, dropping analysis request")
+                    if self._alert_manager:
+                        asyncio.create_task(
+                            self._alert_manager.check_and_fire("vlm_queue_full", {"frame_id": result.frame_id})
+                        )
             vlm_queue_depth.set(self._vlm_queue.qsize())
 
         self._record_event({
@@ -269,9 +273,21 @@ class CentralOrchestrator:
             and getattr(self.inference_engine, "_loaded", False)
         )
 
-    async def shutdown(self) -> None:
-        """Graceful shutdown."""
+    async def shutdown(self, timeout: float = 30.0) -> None:
+        """Graceful shutdown: drain VLM queue, then cancel worker."""
         logger.info(f"Shutting down (processed {self._event_count} events)...")
+        self._shutting_down = True
+
+        # Wait for VLM queue to drain
+        if self._vlm_worker_task and not self._vlm_queue.empty():
+            logger.info(f"Draining VLM queue ({self._vlm_queue.qsize()} items)...")
+            try:
+                await asyncio.wait_for(self._vlm_queue.join(), timeout=timeout)
+                logger.info("VLM queue drained successfully")
+            except asyncio.TimeoutError:
+                remaining = self._vlm_queue.qsize()
+                logger.warning(f"VLM drain timeout, {remaining} items discarded")
+
         if self._vlm_worker_task:
             self._vlm_worker_task.cancel()
             try:

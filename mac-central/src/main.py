@@ -52,6 +52,7 @@ async def main():
     args = parser.parse_args()
 
     cfg = AppConfig.from_yaml(args.config) if args.config else AppConfig()
+    cfg.validate()
     setup_logging(cfg)
 
     host = args.host or cfg.central.host
@@ -165,10 +166,17 @@ async def main():
     await stop_event.wait()
 
     logger.info("Shutting down...")
+    try:
+        await asyncio.wait_for(_shutdown_sequence(server, orchestrator, store), timeout=60)
+    except asyncio.TimeoutError:
+        logger.error("Global shutdown timeout (60s), forcing exit")
+    logger.info("Shutdown complete")
+
+
+async def _shutdown_sequence(server, orchestrator, store):
     await server.stop()
     await orchestrator.shutdown()
     store.close()
-    logger.info("Shutdown complete")
 
 
 if __name__ == "__main__":

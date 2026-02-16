@@ -6,6 +6,8 @@ from typing import List, Optional
 
 import yaml
 
+from src.exceptions import ConfigError
+
 
 @dataclass
 class VLMRuleConfig:
@@ -221,3 +223,51 @@ class AppConfig:
             region=cs.get("region", cfg.cloud_storage.region),
         )
         return cfg
+
+    def validate(self) -> None:
+        """Validate configuration values. Raises ConfigError on invalid values."""
+        # Port ranges
+        for name, port in [("central.port", self.central.port),
+                           ("metrics.port", self.metrics.port)]:
+            if not (1 <= port <= 65535):
+                raise ConfigError(f"{name} must be 1-65535, got {port}")
+
+        # Confidence thresholds in VLM rules
+        for i, rule in enumerate(self.vlm_rules):
+            if not (0.0 <= rule.min_confidence <= 1.0):
+                raise ConfigError(
+                    f"vlm_rules[{i}].min_confidence must be 0.0-1.0, got {rule.min_confidence}"
+                )
+
+        # Positive timeouts
+        for name, val in [
+            ("circuit_breaker.recovery_timeout", self.circuit_breaker.recovery_timeout),
+            ("sessions.expiry_timeout", self.sessions.expiry_timeout),
+            ("batch.timeout_seconds", self.batch.timeout_seconds),
+        ]:
+            if val <= 0:
+                raise ConfigError(f"{name} must be > 0, got {val}")
+
+        # TLS cert paths
+        if self.tls.enabled:
+            for name, path in [("tls.ca_cert", self.tls.ca_cert),
+                               ("tls.server_cert", self.tls.server_cert),
+                               ("tls.server_key", self.tls.server_key)]:
+                if not path or not Path(path).exists():
+                    raise ConfigError(f"{name} path does not exist: {path}")
+
+        # Inference mode
+        if self.central.inference_mode not in ("llm", "vlm"):
+            raise ConfigError(
+                f"inference_mode must be 'llm' or 'vlm', got '{self.central.inference_mode}'"
+            )
+
+        # Max devices
+        if self.sessions.max_devices <= 0:
+            raise ConfigError(
+                f"sessions.max_devices must be > 0, got {self.sessions.max_devices}"
+            )
+
+        # Cloud storage bucket
+        if self.cloud_storage.enabled and not self.cloud_storage.bucket:
+            raise ConfigError("cloud_storage.bucket must be non-empty when enabled")

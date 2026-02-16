@@ -163,6 +163,7 @@ set(APP_SOURCES
   src/app/edge_main.cpp
   src/app/pipeline_coordinator.cpp
   src/app/config_manager.cpp
+  src/app/edge_metrics.cpp
 )
 
 # Conditionally include generated protobuf sources
@@ -180,6 +181,7 @@ add_library(neuro_edge_lib STATIC
   ${COMMUNICATION_SOURCES}
   src/app/pipeline_coordinator.cpp
   src/app/config_manager.cpp
+  src/app/edge_metrics.cpp
   ${GENERATED_SOURCES}
 )
 
