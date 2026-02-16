@@ -148,6 +148,7 @@ set(DATA_PROCESSING_SOURCES
   src/data_processing/neon_image_ops.cpp
   src/data_processing/virtual_device_io.cpp
   src/data_processing/detection_cache.cpp
+  src/data_processing/temporal_tracker.cpp
 )
 
 set(AI_INFERENCE_SOURCES
@@ -155,6 +156,7 @@ set(AI_INFERENCE_SOURCES
   src/ai_inference/yolo_postprocess.cpp
   src/ai_inference/npu_scheduler.cpp
   src/ai_inference/multi_model_manager.cpp
+  src/ai_inference/multi_model_scheduler.cpp
 )
 
 set(COMMUNICATION_SOURCES
@@ -167,6 +169,7 @@ set(APP_SOURCES
   src/app/config_manager.cpp
   src/app/edge_metrics.cpp
   src/app/video_recorder.cpp
+  src/app/adaptive_fps.cpp
 )
 
 # Conditionally include generated protobuf sources
@@ -186,6 +189,7 @@ add_library(neuro_edge_lib STATIC
   src/app/config_manager.cpp
   src/app/edge_metrics.cpp
   src/app/video_recorder.cpp
+  src/app/adaptive_fps.cpp
   ${GENERATED_SOURCES}
 )
 

@@ -53,6 +53,8 @@ class CentralOrchestrator:
         alert_manager: Optional[AlertManager] = None,
         cloud_storage=None,
         batch_config=None,
+        behavior_analyzer=None,
+        reasoning_chain=None,
     ) -> None:
         self.model_path = model_path
         self.inference_engine: Optional[MLXInferenceEngine] = None
@@ -73,6 +75,8 @@ class CentralOrchestrator:
         self._batch_max_size = batch_config.max_size if batch_config else 8
         self._batch_timeout = batch_config.timeout_seconds if batch_config else 2.0
         self._shutting_down = False
+        self._behavior_analyzer = behavior_analyzer
+        self._reasoning_chain = reasoning_chain
 
     async def initialize(self) -> None:
         """Initialize orchestrator and load models."""
@@ -144,6 +148,24 @@ class CentralOrchestrator:
                                 self._alert_manager.check_and_fire("vlm_queue_full", {"frame_id": result.frame_id})
                             )
                 vlm_queue_depth.set(self._vlm_queue.qsize())
+
+            # Behavior analysis (v2)
+            if self._behavior_analyzer and detections:
+                try:
+                    behavior_events = self._behavior_analyzer.analyze(
+                        device_id, detections, timestamp=time.time()
+                    )
+                    for be in behavior_events:
+                        self._record_event({
+                            "type": "behavior_alert",
+                            "device_id": device_id,
+                            "behavior_type": be.behavior_type.value,
+                            "confidence": be.confidence,
+                            "description": be.description,
+                            "timestamp": be.timestamp,
+                        })
+                except Exception as e:
+                    logger.warning(f"Behavior analysis failed: {e}")
 
             self._record_event({
                 "type": "detection",

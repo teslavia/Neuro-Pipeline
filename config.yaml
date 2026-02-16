@@ -118,3 +118,24 @@ rate_limiting:
   enabled: false
   max_rps: 100
   burst: 20
+
+# v2: Model management
+model_management:
+  enabled: false
+  max_models_per_device: 3
+
+# v2: Multi-round reasoning chain
+reasoning:
+  enabled: false
+  max_steps: 3
+  timeout_per_step: 15.0
+
+# v2: Adaptive frame rate (edge)
+adaptive_fps:
+  enabled: false
+  min_fps: 5
+  max_fps: 30
+  idle_fps: 10
+  active_fps: 30
+  ramp_up_frames: 1
+  ramp_down_frames: 90

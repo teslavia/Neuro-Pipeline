@@ -34,6 +34,41 @@ TEMPLATES = {
         "Analyze the spatial relationships between these objects and describe "
         "the overall scene context."
     ),
+    # v2: Reasoning chain templates
+    "reasoning_observe": (
+        "Observe this scene carefully. Detected objects: {detections}. "
+        "Describe exactly what you see — objects, positions, actions, "
+        "and environmental context. Be factual and specific."
+    ),
+    "reasoning_reason": (
+        "Based on this observation: \"{previous_context}\"\n"
+        "Now reason about what is happening. What activities are taking place? "
+        "Are there any safety concerns, unusual patterns, or noteworthy interactions? "
+        "Explain your reasoning step by step."
+    ),
+    "reasoning_verify": (
+        "Based on this analysis: \"{previous_context}\"\n"
+        "Verify your conclusions. Rate confidence (high/medium/low). "
+        "Identify what could be wrong with the analysis. "
+        "Provide a final concise assessment with actionable recommendations."
+    ),
+    # v2: RAG-augmented template
+    "rag_scene_analysis": (
+        "Analyze the following scene. Detected objects: {detections}.\n\n"
+        "Historical context from this location:\n{rag_context}\n\n"
+        "Considering both the current scene and historical patterns, "
+        "describe what is happening and identify any concerns."
+    ),
+    # v2: Edge config suggestion
+    "edge_config_suggestion": (
+        "Based on this analysis: \"{previous_context}\"\n"
+        "Detected objects: {detections}.\n"
+        "Suggest optimal edge device configuration adjustments:\n"
+        "1. Detection region of interest (ROI) as normalized coordinates\n"
+        "2. Confidence threshold adjustment\n"
+        "3. Frame rate recommendation\n"
+        "Respond in JSON format with keys: roi, threshold, fps_recommendation."
+    ),
 }
 
 
