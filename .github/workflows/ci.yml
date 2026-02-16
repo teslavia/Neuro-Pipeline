@@ -41,6 +41,10 @@ jobs:
         run: |
           mkdir -p tools/cross_compile_env/sysroot/usr/include
           mkdir -p tools/cross_compile_env/sysroot/usr/lib
+          # Copy stub headers so CMake header checks pass
+          cp third_party/stubs/rknn_api.h tools/cross_compile_env/sysroot/usr/include/
+          cp -r third_party/stubs/rockchip tools/cross_compile_env/sysroot/usr/include/
+          cp -r third_party/stubs/rga tools/cross_compile_env/sysroot/usr/include/
           if [ "${{ matrix.mock_hal }}" = "OFF" ]; then
             aarch64-linux-gnu-gcc -shared -o tools/cross_compile_env/sysroot/usr/lib/librknnrt.so -xc /dev/null
             aarch64-linux-gnu-gcc -shared -o tools/cross_compile_env/sysroot/usr/lib/librga.so -xc /dev/null
@@ -119,11 +123,20 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r mac-central/requirements.txt
           pip install fastapi httpx uvicorn jinja2 python-multipart pytest-asyncio
+          pip install flake8 black
 
       - name: Validate proto
         run: |
           pip install grpcio-tools
           python3 tools/generate_proto.py
+
+      - name: Lint with flake8
+        run: flake8 mac-central/src/ mac-central/tests/ --max-line-length=100
+        continue-on-error: true
+
+      - name: Format check with black
+        run: black --check mac-central/src/ mac-central/tests/
+        continue-on-error: true
 
       - name: Validate docs & version
         run: |
@@ -134,6 +147,9 @@ jobs:
         run: |
           cd mac-central
           pytest tests/ -v --tb=short -o "addopts="
+
+      - name: Run dashboard tests
+        run: pytest extensions/dashboard/tests/ -v --tb=short -o "addopts="
 
   # ==========================================================================
   # E2E + Chaos Tests
