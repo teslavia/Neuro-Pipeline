@@ -96,8 +96,12 @@ async def main():
     # Cloud storage (lazy boto3)
     cloud = None
     if cfg.cloud_storage.enabled:
-        cloud = CloudStorageClient(cfg.cloud_storage)
-        await cloud.initialize()
+        cloud = CloudStorageClient(
+            bucket=cfg.cloud_storage.bucket,
+            prefix=cfg.cloud_storage.prefix,
+            endpoint_url=cfg.cloud_storage.endpoint_url,
+            region=cfg.cloud_storage.region,
+        )
 
     # Distributed tracing (lazy OTel)
     if cfg.tracing.enabled:

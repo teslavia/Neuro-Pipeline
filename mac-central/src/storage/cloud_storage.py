@@ -8,7 +8,7 @@ import asyncio
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Optional
+from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,11 @@ class CloudStorageClient:
         return self._available
 
     async def upload_bytes(
-        self, data: bytes, key: str, content_type: str = "application/octet-stream"
+        self,
+        data: bytes,
+        key: str,
+        content_type: str = "application/octet-stream",
+        metadata: Optional[Dict[str, str]] = None,
     ) -> Optional[str]:
         """Upload bytes to S3. Returns the full key on success, None on failure."""
         if not self._available:
@@ -60,14 +64,17 @@ class CloudStorageClient:
         full_key = f"{self.prefix}{key}"
         loop = asyncio.get_event_loop()
         try:
+            put_kwargs = {
+                "Bucket": self.bucket,
+                "Key": full_key,
+                "Body": data,
+                "ContentType": content_type,
+            }
+            if metadata:
+                put_kwargs["Metadata"] = metadata
             await loop.run_in_executor(
                 _executor,
-                lambda: self._client.put_object(
-                    Bucket=self.bucket,
-                    Key=full_key,
-                    Body=data,
-                    ContentType=content_type,
-                ),
+                lambda: self._client.put_object(**put_kwargs),
             )
             logger.info(f"Uploaded {len(data)} bytes to s3://{self.bucket}/{full_key}")
             return full_key
@@ -76,8 +83,14 @@ class CloudStorageClient:
             return None
 
     async def upload_frame(
-        self, frame_data: bytes, device_id: str, frame_id: int
+        self,
+        frame_data: bytes,
+        device_id: str,
+        frame_id: int,
+        metadata: Optional[Dict[str, str]] = None,
     ) -> Optional[str]:
         """Upload a JPEG keyframe with structured key."""
         key = f"frames/{device_id}/{frame_id}.jpg"
-        return await self.upload_bytes(frame_data, key, content_type="image/jpeg")
+        return await self.upload_bytes(
+            frame_data, key, content_type="image/jpeg", metadata=metadata
+        )

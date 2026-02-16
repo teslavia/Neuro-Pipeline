@@ -47,3 +47,28 @@ class TestCloudStorageClient:
         client._client = MagicMock()
         result = await client.upload_frame(b"\xff\xd8", "edge-001", 42)
         assert result == "neuro-pipeline/frames/edge-001/42.jpg"
+
+    @pytest.mark.asyncio
+    async def test_upload_bytes_with_metadata(self):
+        client = CloudStorageClient(bucket="test")
+        client._available = True
+        client._client = MagicMock()
+        result = await client.upload_bytes(
+            b"data", "key.bin", metadata={"rule": "person"}
+        )
+        assert result == "neuro-pipeline/key.bin"
+        call_kwargs = client._client.put_object.call_args
+        assert call_kwargs[1]["Metadata"] == {"rule": "person"}
+
+    @pytest.mark.asyncio
+    async def test_upload_frame_with_metadata(self):
+        client = CloudStorageClient(bucket="test")
+        client._available = True
+        client._client = MagicMock()
+        result = await client.upload_frame(
+            b"\xff\xd8", "edge-001", 42,
+            metadata={"vlm_result": "person walking", "rule": "person"},
+        )
+        assert result == "neuro-pipeline/frames/edge-001/42.jpg"
+        call_kwargs = client._client.put_object.call_args
+        assert "Metadata" in call_kwargs[1]
