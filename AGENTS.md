@@ -95,9 +95,14 @@ Neuro-Pipeline is a heterogeneous AI inference system:
 ## 4. Key Directories & Components
 
 - `proto/`: Central Protobuf definitions. The "Source of Truth" for the interface.
-- `rk3588-edge/src/hal/`: Hardware Layer. V4L2 camera, MPP decoding, RGA scaling.
-- `rk3588-edge/src/ai_inference/`: NPU Logic. RKNN context management and post-processing.
+- `rk3588-edge/src/hal/`: Hardware Layer. V4L2 camera, MPP decoding, RGA scaling, RTSP source.
+- `rk3588-edge/src/ai_inference/`: NPU Logic. RKNN context management, post-processing, NPU scheduler.
+- `rk3588-edge/src/app/`: Pipeline coordinator, video recorder, edge main.
 - `mac-central/src/llm_vlm/`: Central AI. MLX inference engine and prompt engineering.
+- `mac-central/src/communication/`: gRPC server, rate limiter.
+- `mac-central/src/observability/`: Metrics, tracing, alerting, circuit breaker, retry.
+- `mac-central/src/storage/`: SQLite persistence, cloud storage.
+- `extensions/dashboard/`: FastAPI + htmx monitoring UI (HTTP Basic Auth).
 - `docs/ARCHITECTURE.md`: Technical deep-dive into the zero-copy pipeline.
 
 ---

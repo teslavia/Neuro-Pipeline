@@ -1,6 +1,6 @@
 # Neuro-Pipeline KPI Report
 
-Version: v1.1.0 | Date: 2026-02-16 | Platform: RK3588 Edge + Mac Mini M-series Central
+Version: v1.3.0 | Date: 2026-02-16 | Platform: RK3588 Edge + Mac Mini M-series Central
 
 ## 1. Edge Device (RK3588) Performance
 
@@ -78,10 +78,10 @@ Edge capture → Edge inference → gRPC → Central MLX → Response
 | Component | Tests | Status |
 |-----------|-------|--------|
 | C++ Edge (mock HAL) | 146 | All passing |
-| Python Central | 154 | 130 unit + 24 e2e/chaos (8 skipped) |
+| Python Central | 250 | 212 unit + 38 e2e/chaos (8 skipped) |
 | gRPC integration | 24 | All passing |
 | MLX real inference | 5 | All passing |
-| Total | 300+ | Cross-compile mock ON/OFF both pass |
+| Total | 396+ | Cross-compile mock ON/OFF both pass |
 
 ## 6. Resource Summary
 
@@ -105,7 +105,7 @@ Edge capture → Edge inference → gRPC → Central MLX → Response
 
 ### Metrics Exposed
 
-- Counters: `detections_total`, `vlm_requests_total`, `grpc_errors_total`
+- Counters: `detections_total`, `vlm_requests_total`, `grpc_errors_total`, `grpc_validation_errors_total`, `control_commands_total`
 - Histograms: `inference_duration_seconds`, `vlm_queue_time_seconds`
 - Gauges: `vlm_queue_size`, `circuit_breaker_state`
 
@@ -123,3 +123,13 @@ Edge capture → Edge inference → gRPC → Central MLX → Response
 **Load test tool**: Locust with gRPC client
 **Duration**: 5 minutes per test
 **Trigger**: GitHub Actions workflow_dispatch
+
+## 9. Security Metrics (v1.3.0+)
+
+| Metric | Value |
+|--------|-------|
+| Rate limit (per device) | 100 req/s, burst 20 |
+| Input validation | device_id, confidence, coordinates |
+| Dashboard auth | HTTP Basic (env vars) |
+| Audit logging | All control commands |
+| Session cleanup | Periodic (expiry_timeout/2) |

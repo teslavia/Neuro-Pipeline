@@ -1,6 +1,6 @@
 # Neuro-Pipeline API Reference
 
-**Version**: 1.1.0
+**Version**: 1.3.0
 **Protocol**: gRPC with Protocol Buffers 3
 **Generated From**: `proto/neuro_pipeline.proto`
 
@@ -205,7 +205,7 @@ message VideoFrame {
 | `OK` | 成功 | 继续 |
 | `UNAVAILABLE` | 网络错误 | 指数退避重试 |
 | `INVALID_ARGUMENT` | 请求格式错误 | 修复客户端代码 |
-| `RESOURCE_EXHAUSTED` | 服务器过载 | 降低发送频率 |
+| `RESOURCE_EXHAUSTED` | 超过速率限制 | 降低发送频率或等待令牌恢复 |
 | `DEADLINE_EXCEEDED` | 超时 | 检查网络延迟 |
 
 ## Performance Recommendations
@@ -359,6 +359,12 @@ class VLMRuleConfig:
     prompt_template: str = "person_behavior"
 
 @dataclass
+class RateLimitingConfig:
+    enabled: bool = False
+    max_rps: int = 100
+    burst: int = 20
+
+@dataclass
 class AppConfig:
     central: CentralConfig
     logging: LoggingConfig
@@ -432,6 +438,22 @@ class MLXInferenceEngine:
 }
 ```
 
+### Authentication (v1.3.0+)
+
+Dashboard routes (except `/healthz`) require HTTP Basic Auth:
+
+```bash
+# Set credentials via environment variables
+export DASHBOARD_USER=admin
+export DASHBOARD_PASS=secret
+uvicorn app:app --host 0.0.0.0 --port 8080
+```
+
+| Endpoint | Auth Required |
+|----------|--------------|
+| `/healthz` | No |
+| All others | Yes (HTTP Basic) |
+
 ---
 
 ## Observability Endpoints
@@ -448,6 +470,8 @@ Key metrics:
 | `neuro_inference_duration_seconds` | Histogram | VLM inference latency |
 | `neuro_npu_utilization` | Gauge | Edge NPU usage [0-100] |
 | `neuro_vlm_queue_depth` | Gauge | Pending VLM analysis requests |
+| `neuro_grpc_validation_errors_total` | Counter | Protobuf validation failures |
+| `neuro_control_commands_total` | Counter | Control commands by type |
 
 ### Health Probes
 | Endpoint | Method | Description |
@@ -465,6 +489,28 @@ Key metrics:
 |----------|--------|-------------|
 | `/api/devices` | GET | List all registered devices with last heartbeat |
 | `/api/devices/{device_id}` | GET | Get specific device info |
+
+### Rate Limiting (v1.3.0+)
+
+Token bucket rate limiter per device:
+
+```yaml
+rate_limiting:
+  enabled: true
+  max_rps: 100
+  burst: 20
+```
+
+When exceeded, `StreamDetectionResults` returns `RESOURCE_EXHAUSTED`.
+
+### Input Validation (v1.3.0+)
+
+All `DetectionResult` messages are validated:
+- `device_id` must not be empty
+- `confidence` must be in [0.0, 1.0]
+- Coordinates (`x_min`, `y_min`, `x_max`, `y_max`) must be in [0.0, 1.0]
+
+Invalid messages are rejected with `INVALID_ARGUMENT` and counted in `grpc_validation_errors_total`.
 
 ---
 

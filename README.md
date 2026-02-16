@@ -6,9 +6,9 @@
 
 <p align="center">
   <a href="https://github.com/teslavia/Neuro-Pipeline/actions"><img src="https://github.com/teslavia/Neuro-Pipeline/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <img src="https://img.shields.io/badge/version-1.1.0-green.svg" alt="Version">
+  <img src="https://img.shields.io/badge/version-1.3.0-green.svg" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License">
-  <img src="https://img.shields.io/badge/tests-154_Python-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-250_Python-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/C%2B%2B-17-00599C.svg?logo=cplusplus&logoColor=white" alt="C++17">
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?logo=python&logoColor=white" alt="Python">
 </p>
@@ -41,12 +41,17 @@ Camera --> V4L2 --> MPP --> RGA --> RKNN NPU --> gRPC --> MLX VLM --> Alert
 - **事件驱动上报** — 节省 96% 带宽，仅上传关键检测结果
 - **双模态 VLM** — 纯文本 LLM 或视觉语言多模态推理 (Qwen2-VL)
 - **mTLS gRPC** — 双向流式通信 + 双向 TLS 认证
-- **可观测性** — Prometheus 指标、健康探针、熔断器、告警
-- **SQLite 持久化** — 检测历史重启不丢失，7 天自动清理
-- **Web 仪表盘** — FastAPI + htmx + WebSocket 实时监控
+- **可观测性** — Prometheus 指标、健康探针、熔断器、告警路由
+- **SQLite 持久化** — 检测历史重启不丢失，原子备份，7 天自动清理
+- **Web 仪表盘** — FastAPI + htmx + WebSocket 实时监控，HTTP Basic Auth 认证
 - **多摄像头 + 多边缘** — 单中心管理多设备，多摄像头并行推理
 - **VLM 批量推理** — 累积批处理 + 多轮对话上下文
-- **云存储集成** — S3/MinIO 异步上传，分布式追踪
+- **云存储集成** — S3/MinIO 异步上传，分布式追踪 (OTel)
+- **安全加固** — gRPC 令牌桶限流、Protobuf 输入校验、审计日志
+- **RTSP 输入** — 支持网络摄像头 RTSP URL 接入
+- **视频录制** — 事件触发录制 + 环形缓冲区
+- **NPU 三核调度** — 按摄像头轮询分配 NPU 核心
+- **优雅关闭** — VLM 队列排空 + 可配置超时
 
 ## 架构
 
@@ -147,21 +152,21 @@ uvicorn app:app --host 0.0.0.0 --port 8080
 neuro-pipeline/
 ├── rk3588-edge/                   # 边缘端 (C++17)
 │   ├── src/
-│   │   ├── hal/                   #   V4L2, MPP, RGA, DRM
-│   │   ├── ai_inference/          #   RKNN, YOLO postprocess
+│   │   ├── hal/                   #   V4L2, MPP, RGA, DRM, RTSP
+│   │   ├── ai_inference/          #   RKNN, YOLO, NPU 调度器
 │   │   ├── data_processing/       #   zero-copy buffer, pool
 │   │   ├── communication/         #   gRPC client
-│   │   └── app/                   #   pipeline coordinator
+│   │   └── app/                   #   pipeline coordinator, 录制器
 │   ├── tests/                     #   GoogleTest (146 tests)
 │   └── cmake/                     #   aarch64 toolchain
 ├── mac-central/                   # 中心端 (Python)
 │   ├── src/
-│   │   ├── communication/         #   gRPC async server
+│   │   ├── communication/         #   gRPC async server, 限流器
 │   │   ├── llm_vlm/               #   MLX LLM/VLM engine
 │   │   ├── application_logic/     #   orchestrator, breaker
-│   │   ├── storage/               #   SQLite persistence
-│   │   └── observability/         #   metrics, tracing
-│   └── tests/                     #   pytest (154 tests: 130 unit + 24 e2e/chaos)
+│   │   ├── storage/               #   SQLite, cloud storage
+│   │   └── observability/         #   metrics, tracing, alerting
+│   └── tests/                     #   pytest (247 tests: 209 unit + 38 e2e/chaos)
 ├── proto/                         # Protobuf definitions
 ├── extensions/
 │   ├── dashboard/                 # FastAPI + htmx UI
@@ -171,7 +176,7 @@ neuro-pipeline/
 │   ├── certs/                     #   mTLS cert gen
 │   └── services/                  #   systemd + launchd
 ├── config.yaml                    # unified config
-└── VERSION.json                   # v1.1.0
+└── VERSION.json                   # v1.3.0
 ```
 
 ## 测试覆盖
@@ -179,8 +184,8 @@ neuro-pipeline/
 | 组件 | 框架 | 测试数 | 说明 |
 |------|------|--------|------|
 | C++ 边缘端 (Mock HAL) | GoogleTest | 146 | buffer, pool, thread, HAL, YOLO, gRPC |
-| Python 中心端 | pytest | 154 | 130 unit + 24 e2e/chaos (8 skipped) |
-| 合计 | — | 300+ | 跨编译 mock ON/OFF 均通过 |
+| Python 中心端 | pytest | 250 | 212 unit + 38 e2e/chaos (8 skipped) |
+| 合计 | — | 396+ | 跨编译 mock ON/OFF 均通过 |
 
 ## 技术栈
 
@@ -219,6 +224,8 @@ neuro-pipeline/
 | v0.5.0 | 生产部署 | mTLS, SQLite, VLM multimodal, async queue |
 | v1.0.0 | 可观测性 | Prometheus, health probes, circuit breaker, alerting |
 | v1.1.0 | 规模化 + 多边缘 | Multi-camera, multi-device, VLM batch, Grafana, chaos tests |
+| v1.2.0 | 生产加固 | 异常体系、配置校验、优雅关闭、RTSP、视频录制 |
+| v1.3.0 | 安全 + 激活 | 限流、输入校验、Dashboard 认证、审计日志、死代码激活 |
 
 ## 许可证
 

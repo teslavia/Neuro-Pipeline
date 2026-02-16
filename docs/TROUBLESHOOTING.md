@@ -1,6 +1,6 @@
 # Neuro-Pipeline 故障排查指南 (Troubleshooting Guide)
 
-**版本**: v1.1.0
+**版本**: v1.3.0
 **更新日期**: 2026-02-16
 
 ---
@@ -656,7 +656,7 @@ bash tools/convert_mlx_model.sh
 
 ---
 
-**文档版本**: v1.1.0
+**文档版本**: v1.3.0
 
 ---
 
@@ -869,6 +869,51 @@ vlm_batch:
 - 降低 `timeout_seconds` 以更快触发批处理
 - 增加 `max_batch_size` 以容纳更多请求
 - 确保多个检测事件在短时间内到达
+
+---
+
+---
+
+## 十三、安全与限流问题 (v1.3.0+)
+
+### 13.1 Dashboard 认证失败
+
+**症状**: 访问 Dashboard 返回 401 Unauthorized
+
+**原因**: 未设置环境变量或凭据错误
+
+**解决方案**:
+```bash
+export DASHBOARD_USER=admin
+export DASHBOARD_PASS=your_password
+# 重启 dashboard
+```
+
+---
+
+### 13.2 gRPC 返回 RESOURCE_EXHAUSTED
+
+**症状**: Edge 设备收到 RESOURCE_EXHAUSTED 错误
+
+**原因**: 超过速率限制
+
+**解决方案**:
+- 检查 `config.yaml` 中 `rate_limiting.max_rps` 和 `rate_limiting.burst`
+- 增加限制值或降低 Edge 发送频率
+- 确认 `rate_limiting.enabled` 是否为 true
+
+---
+
+### 13.3 输入校验拒绝
+
+**症状**: 检测结果被拒绝，日志显示 validation error
+
+**原因**: Protobuf 消息字段不合法
+
+**排查**:
+- 确认 `device_id` 非空
+- 确认 `confidence` 在 [0.0, 1.0] 范围内
+- 确认坐标 (`x_min`, `y_min`, `x_max`, `y_max`) 在 [0.0, 1.0] 范围内
 
 ---
 
