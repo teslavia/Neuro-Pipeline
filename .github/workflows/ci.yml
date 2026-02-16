@@ -66,6 +66,39 @@ jobs:
         run: file rk3588-edge/build/libneuro_edge_lib.a | grep -q "ar archive"
 
   # ==========================================================================
+  # C++ Unit Tests (Native x86_64 + Mock HAL + GoogleTest)
+  # ==========================================================================
+  test-cpp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y \
+            cmake g++ protobuf-compiler libprotobuf-dev \
+            libgrpc++-dev libgrpc-dev protobuf-compiler-grpc \
+            python3 python3-pip
+          pip3 install grpcio-tools
+
+      - name: Generate protobuf code
+        run: python3 tools/generate_proto.py
+
+      - name: CMake configure (native + mock HAL + tests)
+        run: |
+          mkdir -p rk3588-edge/build && cd rk3588-edge/build
+          cmake .. \
+            -DUSE_MOCK_HAL=ON \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DBUILD_TESTING=ON
+
+      - name: Build
+        run: cd rk3588-edge/build && make -j$(nproc)
+
+      - name: Run C++ tests
+        run: cd rk3588-edge/build && ctest --output-on-failure
+
+  # ==========================================================================
   # Python Tests + Proto Validation + Docs Check
   # ==========================================================================
   test-python:
