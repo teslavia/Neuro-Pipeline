@@ -43,7 +43,8 @@ class TemporalTracker {
     float running_speed_threshold = 0.05f;  // normalized units/frame
   };
 
-  explicit TemporalTracker(const Config& config = {});
+  explicit TemporalTracker(const Config& config);
+  TemporalTracker() : TemporalTracker(Config{}) {}
 
   /// Update tracker with new detections, returns assigned track IDs.
   std::vector<uint64_t> Update(

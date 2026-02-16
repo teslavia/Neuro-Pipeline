@@ -16,7 +16,8 @@ class AdaptiveFPSController {
     int ramp_down_frames = 90;    // frames (~3s) to reach idle_fps
   };
 
-  explicit AdaptiveFPSController(const Config& config = {});
+  explicit AdaptiveFPSController(const Config& config);
+  AdaptiveFPSController() : AdaptiveFPSController(Config{}) {}
 
   /// Call after each frame with detection count.
   void Update(int detection_count);

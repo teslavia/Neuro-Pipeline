@@ -63,6 +63,11 @@ class PipelineCoordinator {
       uint32_t fps = 30;
     };
     RecordingConfig recording;
+
+    // v2 feature toggles
+    bool enable_temporal_tracker = false;
+    bool enable_adaptive_fps = false;
+    bool enable_multi_model = false;
   };
 
   explicit PipelineCoordinator(const Config& config);

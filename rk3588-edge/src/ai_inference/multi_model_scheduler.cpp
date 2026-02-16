@@ -5,6 +5,8 @@
 
 #include "common/logger.hpp"
 #include "common/multi_model_manager.hpp"
+#include "common/rknn_engine.hpp"
+#include "common/postprocessor_base.hpp"
 
 namespace ai_inference {
 

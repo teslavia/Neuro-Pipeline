@@ -6,10 +6,10 @@
 #include <string>
 #include <vector>
 
-namespace ai_inference {
+#include "common/rknn_engine.hpp"
+#include "common/postprocessor_base.hpp"
 
-class RKNNEngine;
-class PostProcessorBase;
+namespace ai_inference {
 
 struct ModelSlot {
   std::string model_id;
