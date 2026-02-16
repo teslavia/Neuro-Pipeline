@@ -22,7 +22,7 @@
 
 **必需**:
 - Docker 20.10+ (用于交叉编译)
-- Git 2.30+
+- Git 2.30+ (含 submodule 支持)
 - Python 3.10+ (用于 Protobuf 生成)
 
 **可选**:
@@ -62,29 +62,36 @@
 
 ### 3.1 准备 Sysroot
 
-从本地 RKSDK 提取交叉编译所需的头文件和库：
+首先初始化第三方 submodule，然后从中提取交叉编译所需的头文件和库：
 
 ```bash
 cd /Volumes/TMAC/Satoshi/DEV/mac/TTest/RKPRO/repo
+
+# 初始化 submodule（首次克隆后执行）
+git submodule update --init --depth 1
+
+# 组装 sysroot（优先从 third_party/rknn-toolkit2 提取，fallback 到本地 RKSDK）
 bash tools/cross_compile_env/prepare_sysroot.sh
 ```
 
 **输出**:
 ```
 ✓ Sysroot created: tools/cross_compile_env/sysroot/
-  - include/rknn_api.h
-  - include/mpp/
-  - include/rga/
-  - lib/librknnrt.so
-  - lib/librockchip_mpp.so.0
-  - lib/librga.so.2
+  - usr/include/rknn_api.h
+  - usr/include/rockchip/
+  - usr/include/rga/
+  - usr/lib/librknnrt.so
+  - usr/lib/librockchip_mpp.so.0
+  - usr/lib/librga.so.2
 ```
 
 **验证**:
 ```bash
-ls -lh tools/cross_compile_env/sysroot/lib/*.so*
+ls -lh tools/cross_compile_env/sysroot/usr/lib/*.so*
 # 应看到 RKNN/MPP/RGA 库文件
 ```
+
+> **注意**: sysroot 是纯构建产物（已加入 .gitignore），不会被 git 跟踪。每次 clean clone 后需重新执行 `prepare_sysroot.sh`。
 
 ---
 

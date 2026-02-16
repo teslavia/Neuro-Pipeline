@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
-# Assemble RK3588 sysroot from local RKSDK for cross-compilation.
+# Assemble RK3588 sysroot from third_party/ submodule or local RKSDK.
 #
-# This script extracts RKNN, MPP, and RGA headers/libraries from the
-# local RKSDK mirror and organizes them into a sysroot directory
-# that can be copied into the Docker cross-compile container.
+# Source priority:
+#   1. third_party/rknn-toolkit2 (git submodule, preferred)
+#   2. Local RKSDK directory (fallback, via argument or RKSDK_DIR env)
 #
 # Usage:
 #   bash tools/cross_compile_env/prepare_sysroot.sh [RKSDK_DIR]
@@ -12,12 +12,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 SYSROOT_DIR="${SCRIPT_DIR}/sysroot"
-
-# Default RKSDK path — override via argument or environment variable
-RKSDK_DIR="${1:-${RKSDK_DIR:-/Volumes/TMAC/Satoshi/DEV/mac/github/RKSDK}}"
-RKNPU2_DIR="${RKSDK_DIR}/rknn-toolkit2/rknpu2"
-THIRDPARTY_DIR="${RKNPU2_DIR}/examples/3rdparty"
 
 # Colors
 GREEN='\033[0;32m'
@@ -33,13 +29,30 @@ echo "============================================"
 echo "  RK3588 Sysroot Assembly"
 echo "============================================"
 
-# ── Validate RKSDK paths ──────────────────────────────────────────
-if [ ! -d "${RKNPU2_DIR}" ]; then
-    log_error "RKSDK not found at: ${RKNPU2_DIR}"
-    log_info  "Set RKSDK_DIR or pass as argument: $0 /path/to/RKSDK"
-    exit 1
+# ── Resolve SDK source ──────────────────────────────────────────
+# Priority 1: third_party/rknn-toolkit2 submodule
+SUBMODULE_RKNPU2="${REPO_ROOT}/third_party/rknn-toolkit2/rknpu2"
+
+if [ -d "${SUBMODULE_RKNPU2}/runtime/Linux/librknn_api/include" ]; then
+    RKNPU2_DIR="${SUBMODULE_RKNPU2}"
+    THIRDPARTY_DIR="${RKNPU2_DIR}/examples/3rdparty"
+    log_info "Using third_party/rknn-toolkit2 submodule"
+else
+    # Priority 2: local RKSDK (argument or env)
+    RKSDK_DIR="${1:-${RKSDK_DIR:-/Volumes/TMAC/Satoshi/DEV/mac/github/RKSDK}}"
+    RKNPU2_DIR="${RKSDK_DIR}/rknn-toolkit2/rknpu2"
+    THIRDPARTY_DIR="${RKNPU2_DIR}/examples/3rdparty"
+
+    if [ ! -d "${RKNPU2_DIR}" ]; then
+        log_error "SDK not found. Initialize submodule or set RKSDK_DIR:"
+        log_info  "  git submodule update --init --depth 1 third_party/rknn-toolkit2"
+        log_info  "  OR: $0 /path/to/RKSDK"
+        exit 1
+    fi
+    log_info "Using local RKSDK: ${RKSDK_DIR}"
 fi
 
+# ── Resolve paths ───────────────────────────────────────────────
 RKNN_INCLUDE="${RKNPU2_DIR}/runtime/Linux/librknn_api/include"
 RKNN_LIB="${RKNPU2_DIR}/runtime/Linux/librknn_api/aarch64"
 MPP_INCLUDE="${THIRDPARTY_DIR}/mpp/include/rockchip"
@@ -53,8 +66,6 @@ for dir in "${RKNN_INCLUDE}" "${RKNN_LIB}" "${MPP_INCLUDE}" "${MPP_LIB}" "${RGA_
         exit 1
     fi
 done
-
-log_info "RKSDK: ${RKSDK_DIR}"
 
 # ── Clean and create sysroot structure ────────────────────────────
 if [ -d "${SYSROOT_DIR}" ]; then

@@ -35,6 +35,9 @@
 # Git
 **/.git/
 
+# Third-party submodules (Docker only needs sysroot/, not full submodules)
+**/third_party/
+
 # Logs
 **/*.log
 

@@ -97,7 +97,6 @@ YOLO postproc    2.8 ms  (CPU)          Response          5.0 ms
 gRPC send        5.2 ms                 -------------------------
 -------------------------               Total          ~1,010 ms
 Total           35.1 ms  (~28.5 FPS)
-Total           35.1ms  (~28.5 FPS)
 ```
 
 | Metric | Target | Measured | Status |
@@ -114,7 +113,10 @@ Total           35.1ms  (~28.5 FPS)
 ### Edge — Cross-compile for RK3588
 
 ```bash
-# Prepare sysroot (extract headers + libs from RKSDK)
+# Initialize third-party dependencies (first time after clone)
+git submodule update --init --depth 1
+
+# Prepare sysroot (extract headers + libs from submodule or local RKSDK)
 bash tools/cross_compile_env/prepare_sysroot.sh
 
 # Docker cross-compile (recommended)
@@ -172,8 +174,12 @@ neuro-pipeline/
 ├── extensions/
 │   ├── dashboard/                 # FastAPI + htmx monitoring UI
 │   └── monitoring/                # Grafana + Prometheus stack
+├── third_party/
+│   ├── rknn-toolkit2/             # git submodule (RKNN SDK + MPP/RGA)
+│   ├── googletest/                # git submodule (v1.14.0)
+│   └── stubs/                     # Minimal stub headers for CI builds
 ├── tools/
-│   ├── cross_compile_env/         #   Docker aarch64 toolchain + sysroot
+│   ├── cross_compile_env/         #   Docker aarch64 toolchain + sysroot (build artifact)
 │   ├── certs/                     #   mTLS certificate generation
 │   └── services/                  #   systemd + launchd configs
 ├── config.yaml                    # Unified configuration
