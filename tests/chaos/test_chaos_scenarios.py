@@ -173,13 +173,13 @@ class TestExpiredSessionCleanup:
 
     def test_active_session_survives_cleanup(self):
         mgr = DeviceSessionManager(
-            heartbeat_interval=0.05, expiry_timeout=0.2
+            heartbeat_interval=0.05, expiry_timeout=0.8
         )
         mgr.register("edge-001")
         mgr.register("edge-002")
-        time.sleep(0.1)
+        time.sleep(0.3)
         mgr.heartbeat("edge-001")
-        time.sleep(0.15)
+        time.sleep(0.6)
         expired = mgr.cleanup_expired()
         assert "edge-002" in expired
         assert "edge-001" not in expired
