@@ -34,7 +34,7 @@ class PipelineCoordinator {
   };
 
   struct Config {
-    std::string video_source;       // Video file path, or empty for camera
+    std::string video_source;       // Video file path, RTSP URL, or empty for camera
     std::string model_path;         // .rknn model file
     std::string camera_device = "/dev/video0";  // V4L2 device (single-cam compat)
     std::string device_id = "edge-001";  // Unique device identifier
@@ -53,6 +53,16 @@ class PipelineCoordinator {
     std::vector<CameraConfig> cameras;  // Multi-camera configs (empty = single-cam)
     float dedup_iou_threshold = 0.5f;
     double dedup_ttl_seconds = 2.0;
+    bool use_rtsp = false;          // Internal: set when video_source starts with rtsp://
+
+    struct RecordingConfig {
+      bool enabled = false;
+      double pre_seconds = 10.0;
+      double post_seconds = 30.0;
+      std::string output_dir = "/opt/neuro-pipeline/recordings";
+      uint32_t fps = 30;
+    };
+    RecordingConfig recording;
   };
 
   explicit PipelineCoordinator(const Config& config);

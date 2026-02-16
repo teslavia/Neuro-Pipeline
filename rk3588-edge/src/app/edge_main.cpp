@@ -90,6 +90,13 @@ int main(int argc, char* argv[]) {
         config.dedup_iou_threshold = cfg.GetFloat("edge.dedup_iou_threshold", config.dedup_iou_threshold);
         config.dedup_ttl_seconds = cfg.GetFloat("edge.dedup_ttl_seconds", static_cast<float>(config.dedup_ttl_seconds));
 
+        // Recording config
+        config.recording.enabled = cfg.GetBool("edge.recording.enabled", config.recording.enabled);
+        config.recording.pre_seconds = cfg.GetFloat("edge.recording.pre_seconds", static_cast<float>(config.recording.pre_seconds));
+        config.recording.post_seconds = cfg.GetFloat("edge.recording.post_seconds", static_cast<float>(config.recording.post_seconds));
+        config.recording.output_dir = cfg.Get("edge.recording.output_dir", config.recording.output_dir);
+        config.recording.fps = cfg.GetInt("edge.recording.fps", config.recording.fps);
+
         // Multi-camera config: cameras.0.device, cameras.0.width, etc.
         for (int i = 0; i < static_cast<int>(common::kMaxCameras); ++i) {
           std::string prefix = "cameras." + std::to_string(i);

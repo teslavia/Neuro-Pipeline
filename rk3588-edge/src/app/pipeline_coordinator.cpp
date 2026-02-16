@@ -13,12 +13,15 @@
 #include "common/edge_metrics.hpp"
 #include "common/logger.hpp"
 #include "common/memory_pool.hpp"
+#include "common/npu_scheduler.hpp"
 #include "common/rknn_engine.hpp"
+#include "common/video_recorder.hpp"
 #include "common/yolo_postprocess.hpp"
 #include "communication/grpc_client.hpp"
 #include "rk_hal/drm_allocator.hpp"
 #include "rk_hal/mpp_decoder.hpp"
 #include "rk_hal/rga_processor.hpp"
+#include "rk_hal/rtsp_source.hpp"
 #include "rk_hal/v4l2_camera.hpp"
 
 namespace app {
@@ -42,10 +45,25 @@ class PipelineCoordinator::Impl {
       return false;
     }
 
-    // Input source: camera(s) or video file
+    // Input source: RTSP, camera(s), or video file
+    use_rtsp_ = (!config_.video_source.empty() &&
+                 config_.video_source.substr(0, 7) == "rtsp://");
     use_camera_ = config_.video_source.empty();
 
-    if (use_camera_) {
+    if (use_rtsp_) {
+      // RTSP mode
+      rk_hal::RTSPSource::Config rtsp_cfg;
+      rtsp_cfg.url = config_.video_source;
+      rtsp_cfg.width = config_.width;
+      rtsp_cfg.height = config_.height;
+      rtsp_cfg.fps = config_.fps;
+      rtsp_source_ = std::make_unique<rk_hal::RTSPSource>(rtsp_cfg);
+      if (!rtsp_source_->Initialize()) {
+        LOG_ERROR("Pipeline", "RTSP source init failed: %s", config_.video_source.c_str());
+        return false;
+      }
+      LOG_INFO("Pipeline", "RTSP source: %s", config_.video_source.c_str());
+    } else if (use_camera_) {
       if (!config_.cameras.empty()) {
         // Multi-camera mode
         for (size_t i = 0; i < config_.cameras.size(); ++i) {
@@ -145,6 +163,26 @@ class PipelineCoordinator::Impl {
         buf_size, common::kDefaultBufferCount);
     LOG_INFO("Pipeline", "Memory pool: %zu x %zu bytes", common::kDefaultBufferCount, buf_size);
 
+    // NPU scheduler (multi-camera mode with all cores enabled)
+    if (!config_.cameras.empty() && config_.npu_core_mask == 7) {
+      npu_scheduler_ = std::make_unique<ai_inference::NPUScheduler>(
+          ai_inference::NPUScheduler::Strategy::kRoundRobin);
+      LOG_INFO("Pipeline", "NPU scheduler: round-robin across 3 cores");
+    }
+
+    // Video recorder (event-triggered)
+    if (config_.recording.enabled) {
+      common::VideoRecorder::Config rec_cfg;
+      rec_cfg.enabled = true;
+      rec_cfg.pre_seconds = config_.recording.pre_seconds;
+      rec_cfg.post_seconds = config_.recording.post_seconds;
+      rec_cfg.output_dir = config_.recording.output_dir;
+      rec_cfg.fps = config_.recording.fps > 0 ? config_.recording.fps : config_.fps;
+      video_recorder_ = std::make_unique<common::VideoRecorder>(rec_cfg);
+      LOG_INFO("Pipeline", "Video recorder: pre=%.0fs post=%.0fs dir=%s",
+               rec_cfg.pre_seconds, rec_cfg.post_seconds, rec_cfg.output_dir.c_str());
+    }
+
     // Initialize gRPC client if enabled
     if (grpc_client_) {
       if (grpc_client_->Connect()) {
@@ -162,7 +200,22 @@ class PipelineCoordinator::Impl {
            uint32_t& measured_fps, uint64_t& frame_count) {
     using Clock = std::chrono::steady_clock;
 
-    if (use_camera_) {
+    // RAII guard for memory pool allocations
+    struct PoolGuard {
+      data_processing::MemoryPool* pool;
+      void* ptr;
+      PoolGuard(data_processing::MemoryPool* p) : pool(p), ptr(p ? p->Allocate() : nullptr) {}
+      ~PoolGuard() { if (pool && ptr) pool->Free(ptr); }
+      void* get() const { return ptr; }
+    };
+
+    if (use_rtsp_) {
+      if (rtsp_source_ && !rtsp_source_->Start()) {
+        LOG_ERROR("Pipeline", "RTSP source start failed");
+        running = false;
+        return;
+      }
+    } else if (use_camera_) {
       if (!cameras_.empty()) {
         for (auto& cam : cameras_) {
           if (!cam->Start()) {
@@ -201,7 +254,17 @@ class PipelineCoordinator::Impl {
       std::shared_ptr<common::Buffer> processed;
       size_t active_cam_idx = 0;
 
-      if (use_camera_ && !cameras_.empty()) {
+      // Allocate inference buffer from pool (RAII)
+      PoolGuard pool_buf(inference_pool_.get());
+
+      if (use_rtsp_) {
+        frame = rtsp_source_->CaptureFrame();
+        if (!frame) {
+          LOG_INFO("Pipeline", "RTSP stream ended");
+          break;
+        }
+        processed = rga_->Process(frame);
+      } else if (use_camera_ && !cameras_.empty()) {
         // Multi-camera: round-robin across cameras
         active_cam_idx = frame_count % cameras_.size();
         frame = cameras_[active_cam_idx]->CaptureFrame();
@@ -224,7 +287,9 @@ class PipelineCoordinator::Impl {
       }
       if (!processed) {
         LOG_ERROR("Pipeline", "RGA processing failed");
-        if (use_camera_ && !cameras_.empty()) {
+        if (use_rtsp_) {
+          rtsp_source_->ReleaseFrame(frame);
+        } else if (use_camera_ && !cameras_.empty()) {
           cameras_[active_cam_idx]->ReleaseFrame(frame);
         } else if (use_camera_) {
           camera_->ReleaseFrame(frame);
@@ -235,8 +300,11 @@ class PipelineCoordinator::Impl {
       // 3. NPU inference (mutex-protected for hot-reload safety)
       {
         std::lock_guard<std::mutex> lock(engine_mutex_);
-        // Multi-camera NPU core scheduling: round-robin across 3 NPU cores
-        if (!cameras_.empty() && config_.npu_core_mask == 7) {
+        // Multi-camera NPU core scheduling via NPUScheduler
+        if (npu_scheduler_) {
+          int core = npu_scheduler_->SelectCore();
+          engine_->SetCoreMask(core);
+        } else if (!cameras_.empty() && config_.npu_core_mask == 7) {
           int core = 1 << (active_cam_idx % 3);
           engine_->SetCoreMask(core);
         }
@@ -244,7 +312,9 @@ class PipelineCoordinator::Impl {
         if (!engine_->Infer(processed)) {
           LOG_ERROR("Pipeline", "Inference failed");
           common::EdgeMetrics::Instance().IncrementInferenceErrors();
-          if (use_camera_ && !cameras_.empty()) {
+          if (use_rtsp_) {
+            rtsp_source_->ReleaseFrame(frame);
+          } else if (use_camera_ && !cameras_.empty()) {
             cameras_[active_cam_idx]->ReleaseFrame(frame);
           } else if (use_camera_) {
             camera_->ReleaseFrame(frame);
@@ -260,6 +330,11 @@ class PipelineCoordinator::Impl {
       auto detections = postprocessor_->Process(
           engine_->GetOutputs(), config_.width, config_.height);
 
+      // Push every frame to video recorder ring buffer (pre-event buffer)
+      if (video_recorder_ && frame) {
+        video_recorder_->PushFrame(frame);
+      }
+
       // 5. Output results (filter through dedup cache)
       std::vector<common::DetectionBox> novel_detections;
       for (const auto& det : detections) {
@@ -271,6 +346,12 @@ class PipelineCoordinator::Impl {
 
       if (!novel_detections.empty()) {
         common::EdgeMetrics::Instance().IncrementDetectionsTotal(novel_detections.size());
+
+        // Video recorder: trigger recording on novel detections
+        if (video_recorder_) {
+          video_recorder_->TriggerRecording(novel_detections[0].class_name);
+        }
+
         std::printf("[Frame %lu] %zu detections (%zu novel):\n",
                     frame_count, detections.size(), novel_detections.size());
         for (const auto& det : novel_detections) {
@@ -319,7 +400,9 @@ class PipelineCoordinator::Impl {
       }
 
       // 6. Release frame
-      if (use_camera_ && !cameras_.empty()) {
+      if (use_rtsp_) {
+        rtsp_source_->ReleaseFrame(frame);
+      } else if (use_camera_ && !cameras_.empty()) {
         cameras_[active_cam_idx]->ReleaseFrame(frame);
       } else if (use_camera_) {
         camera_->ReleaseFrame(frame);
@@ -374,7 +457,9 @@ class PipelineCoordinator::Impl {
       grpc_client_->StopEventStream();
     }
 
-    if (use_camera_) {
+    if (use_rtsp_) {
+      if (rtsp_source_) rtsp_source_->Stop();
+    } else if (use_camera_) {
       if (!cameras_.empty()) {
         for (auto& cam : cameras_) cam->Stop();
       } else if (camera_) {
@@ -443,11 +528,13 @@ class PipelineCoordinator::Impl {
 
   Config config_;
   bool use_camera_ = true;
+  bool use_rtsp_ = false;
 
   std::unique_ptr<rk_hal::DRMAllocator> drm_allocator_;
   std::unique_ptr<rk_hal::V4L2Camera> camera_;           // Single-camera fallback
   std::vector<std::unique_ptr<rk_hal::V4L2Camera>> cameras_;  // Multi-camera
   std::unique_ptr<rk_hal::MPPDecoder> decoder_;
+  std::unique_ptr<rk_hal::RTSPSource> rtsp_source_;       // RTSP input
   std::unique_ptr<rk_hal::RGAProcessor> rga_;             // Single-camera/video RGA
   std::vector<std::unique_ptr<rk_hal::RGAProcessor>> rga_processors_;  // Per-camera RGA
   std::unique_ptr<ai_inference::RKNNEngine> engine_;
@@ -456,6 +543,8 @@ class PipelineCoordinator::Impl {
   std::mutex engine_mutex_;
   data_processing::DetectionCache detection_cache_;
   std::unique_ptr<data_processing::MemoryPool> inference_pool_;
+  std::unique_ptr<ai_inference::NPUScheduler> npu_scheduler_;
+  std::unique_ptr<common::VideoRecorder> video_recorder_;
 
   std::ifstream video_file_;
 };
