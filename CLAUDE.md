@@ -9,6 +9,26 @@ Neuro-Pipeline is a heterogeneous AI inference system with two halves:
 - **Mac Central** (`mac-central/`): Python 3.10+ orchestration server using MLX for LLM/VLM inference on Apple Silicon. Receives detections via gRPC, runs semantic analysis, persists to SQLite.
 - **Communication**: gRPC + Protobuf (`proto/neuro_pipeline.proto`), optional mTLS.
 
+## Third-Party Dependencies
+
+All external dependencies live under `third_party/` (see `third_party/README.md`):
+
+| Directory | Type | Purpose |
+|-----------|------|---------|
+| `third_party/rknn-toolkit2/` | git submodule | Rockchip SDK: RKNN/MPP/RGA headers + aarch64 libs |
+| `third_party/googletest/` | git submodule (v1.14.0) | C++ unit testing framework |
+| `third_party/stubs/` | project code | Minimal type stubs for CI native builds |
+
+```bash
+# Initialize submodules after clone
+git submodule update --init --depth 1
+
+# Assemble sysroot from submodule (or fallback to local RKSDK)
+bash tools/cross_compile_env/prepare_sysroot.sh
+```
+
+The sysroot (`tools/cross_compile_env/sysroot/`) is a build artifact assembled by `prepare_sysroot.sh` — it is NOT tracked in git.
+
 ## Build & Test Commands
 
 ### Protobuf Generation (required after proto changes)
@@ -22,7 +42,8 @@ python3 tools/generate_proto.py
 USE_MOCK_HAL=ON bash tools/cross_compile_env/build_rk3588.sh   # mock (no hardware)
 USE_MOCK_HAL=OFF bash tools/cross_compile_env/build_rk3588.sh  # real (needs sysroot)
 
-# Native build (mock HAL, for tests)
+# Native build (mock HAL, for tests — needs googletest submodule)
+git submodule update --init --depth 1 third_party/googletest
 cd rk3588-edge && mkdir -p build && cd build
 cmake .. -DUSE_MOCK_HAL=ON -DBUILD_TESTING=ON
 make -j$(nproc)
@@ -89,7 +110,8 @@ Key subsystems:
 - **Async fixtures**: Use `@pytest_asyncio.fixture`, not `@pytest.fixture` (pytest-asyncio strict mode).
 - **pytest skip in fixtures**: Use `pytest.skip()` inside the fixture body, not `@pytest.mark.skipif` on the fixture (pytest 9.x breaks on decorated fixtures).
 - **Structlog vs logging**: `grpc_server.py` and some modules use `structlog` when available, falling back to `logging`. Tests should mock `logger` directly rather than using `caplog`.
-- **Cross-compile gotchas**: Don't set `CMAKE_SYSROOT` (partial sysroot breaks libc). Run `dot_clean .` before Docker builds on macOS. MPP `.so` symlinks break on macOS git — use `.so.0` files.
+- **Cross-compile gotchas**: Don't set `CMAKE_SYSROOT` (partial sysroot breaks libc). Run `dot_clean .` before Docker builds on macOS. MPP `.so` symlinks break on macOS git — use `.so.0` files. Sysroot is a build artifact — run `prepare_sysroot.sh` before Docker build.
+- **Submodule gotchas**: macOS `git submodule` clone may emit `non-monotonic index` warnings from `._` files — harmless. CI `test-cpp` only inits googletest submodule (avoids cloning large rknn-toolkit2).
 - **Version bumps** touch: `VERSION.json`, `constants.hpp` (`kEdgeVersion`), `grpc_server.py`, `main.py`, and all tests that assert version strings.
 - **Dashboard tests** need `conftest.py` to add repo root to `sys.path` (extensions/ is outside mac-central/).
 - **common::Buffer** is abstract — use `BufferFactory::CreateDMABuffer()` for concrete instances.
