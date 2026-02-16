@@ -69,6 +69,7 @@ async def test_e2e_detection_to_sqlite(e2e_stack):
         for i in range(5):
             result = neuro_pipeline_pb2.DetectionResult()
             result.frame_id = i + 1
+            result.device_id = "edge-e2e"
             result.trace_id = f"e2e-{i}"
             box = result.boxes.add()
             box.class_name = "car"
@@ -96,6 +97,7 @@ async def test_e2e_vlm_trigger_and_persist(e2e_stack):
     async def send_person_detection():
         result = neuro_pipeline_pb2.DetectionResult()
         result.frame_id = 100
+        result.device_id = "edge-e2e"
         result.trace_id = "vlm-trigger"
         result.frame_data = b"\xff\xd8\xff\xe0" + b"\x00" * 50  # fake JPEG
         box = result.boxes.add()
@@ -130,6 +132,7 @@ async def test_e2e_recent_events_in_memory(e2e_stack):
     async def send_one():
         result = neuro_pipeline_pb2.DetectionResult()
         result.frame_id = 200
+        result.device_id = "edge-e2e"
         result.trace_id = "mem-test"
         yield result
 

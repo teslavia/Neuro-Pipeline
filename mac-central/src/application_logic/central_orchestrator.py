@@ -28,6 +28,7 @@ from src.observability.metrics import (
 )
 from src.observability.circuit_breaker import CircuitBreaker
 from src.observability.alerting import AlertManager
+from src.observability.tracing import span
 
 
 @dataclass
@@ -90,62 +91,69 @@ class CentralOrchestrator:
         self._event_count += 1
         trace_id = getattr(result, "trace_id", f"unknown-{self._event_count}")
         device_id = getattr(result, "device_id", "")
-        log = logger.bind(trace_id=trace_id) if hasattr(logger, "bind") else logger
-        log.info(
-            f"Processing detection #{self._event_count}: "
-            f"frame_id={result.frame_id}, boxes={len(result.boxes)}, device={device_id}"
-        )
 
-        detections = []
-        for box in result.boxes:
-            detections_total.labels(class_name=box.class_name).inc()
-            detections.append({
-                "class_name": box.class_name,
-                "confidence": box.confidence,
-                "x_min": box.x_min,
-                "y_min": box.y_min,
-                "x_max": box.x_max,
-                "y_max": box.y_max,
-            })
-
-        matched_rule = self._match_vlm_rule(detections)
-
-        if matched_rule and self.inference_engine and result.frame_data:
-            prompt = self.prompt_generator.generate(
-                detections, template=matched_rule.prompt_template
-            )
-            # Enqueue for async VLM processing (non-blocking)
-            if self._shutting_down:
-                logger.warning("Shutting down, rejecting VLM request")
-            else:
-                try:
-                    self._vlm_queue.put_nowait({
-                        "frame_data": result.frame_data,
-                        "prompt": prompt,
-                        "frame_id": result.frame_id,
-                        "trace_id": trace_id,
-                        "device_id": device_id,
-                        "detections": detections,
-                        "rule": matched_rule.class_name,
-                    })
-                except asyncio.QueueFull:
-                    vlm_requests_total.labels(status="dropped").inc()
-                    logger.warning("VLM queue full, dropping analysis request")
-                    if self._alert_manager:
-                        asyncio.create_task(
-                            self._alert_manager.check_and_fire("vlm_queue_full", {"frame_id": result.frame_id})
-                        )
-            vlm_queue_depth.set(self._vlm_queue.qsize())
-
-        self._record_event({
-            "type": "detection",
-            "frame_id": result.frame_id,
+        with span("process_detection", {
             "trace_id": trace_id,
             "device_id": device_id,
-            "detections": detections,
-            "timestamp": time.time(),
-        })
-        return None
+            "frame_id": str(result.frame_id),
+            "box_count": str(len(result.boxes)),
+        }):
+            log = logger.bind(trace_id=trace_id) if hasattr(logger, "bind") else logger
+            log.info(
+                f"Processing detection #{self._event_count}: "
+                f"frame_id={result.frame_id}, boxes={len(result.boxes)}, device={device_id}"
+            )
+
+            detections = []
+            for box in result.boxes:
+                detections_total.labels(class_name=box.class_name).inc()
+                detections.append({
+                    "class_name": box.class_name,
+                    "confidence": box.confidence,
+                    "x_min": box.x_min,
+                    "y_min": box.y_min,
+                    "x_max": box.x_max,
+                    "y_max": box.y_max,
+                })
+
+            matched_rule = self._match_vlm_rule(detections)
+
+            if matched_rule and self.inference_engine and result.frame_data:
+                prompt = self.prompt_generator.generate(
+                    detections, template=matched_rule.prompt_template
+                )
+                # Enqueue for async VLM processing (non-blocking)
+                if self._shutting_down:
+                    logger.warning("Shutting down, rejecting VLM request")
+                else:
+                    try:
+                        self._vlm_queue.put_nowait({
+                            "frame_data": result.frame_data,
+                            "prompt": prompt,
+                            "frame_id": result.frame_id,
+                            "trace_id": trace_id,
+                            "device_id": device_id,
+                            "detections": detections,
+                            "rule": matched_rule.class_name,
+                        })
+                    except asyncio.QueueFull:
+                        vlm_requests_total.labels(status="dropped").inc()
+                        logger.warning("VLM queue full, dropping analysis request")
+                        if self._alert_manager:
+                            asyncio.create_task(
+                                self._alert_manager.check_and_fire("vlm_queue_full", {"frame_id": result.frame_id})
+                            )
+                vlm_queue_depth.set(self._vlm_queue.qsize())
+
+            self._record_event({
+                "type": "detection",
+                "frame_id": result.frame_id,
+                "trace_id": trace_id,
+                "device_id": device_id,
+                "detections": detections,
+                "timestamp": time.time(),
+            })
+            return None
 
     async def _vlm_worker(self) -> None:
         """Background worker that processes VLM analysis requests in batches."""
@@ -211,15 +219,20 @@ class CentralOrchestrator:
                         ctx = self.inference_engine.get_conversation(device_id)
                         prompt = ctx.build_prompt(prompt)
                     # Use batch result if available, otherwise run individually
-                    if batch_results is not None and idx < len(batch_results):
-                        vlm_result = batch_results[idx]
-                    else:
-                        vlm_result = await asyncio.wait_for(
-                            self.inference_engine.analyze_image(
-                                item["frame_data"], prompt
-                            ),
-                            timeout=30.0,
-                        )
+                    with span("vlm_inference", {
+                        "device_id": device_id,
+                        "frame_id": str(item["frame_id"]),
+                        "rule": item.get("rule", ""),
+                    }):
+                        if batch_results is not None and idx < len(batch_results):
+                            vlm_result = batch_results[idx]
+                        else:
+                            vlm_result = await asyncio.wait_for(
+                                self.inference_engine.analyze_image(
+                                    item["frame_data"], prompt
+                                ),
+                                timeout=30.0,
+                            )
                     # Record conversation turn
                     if device_id and self.inference_engine:
                         ctx = self.inference_engine.get_conversation(device_id)

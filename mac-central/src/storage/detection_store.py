@@ -49,6 +49,9 @@ class DetectionStore:
         self._conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_detections_device ON detections(device_id)"
         )
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_detections_device_ts ON detections(device_id, timestamp)"
+        )
         self._conn.commit()
         logger.info(f"DetectionStore opened: {self.db_path}")
 

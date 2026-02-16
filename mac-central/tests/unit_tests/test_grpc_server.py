@@ -29,6 +29,7 @@ async def test_stream_detection_results_success(servicer, mock_orchestrator):
         for i in range(3):
             result = neuro_pipeline_pb2.DetectionResult()
             result.frame_id = i
+            result.device_id = "edge-test"
             yield result
 
     response = await servicer.StreamDetectionResults(mock_iterator(), None)
@@ -46,6 +47,7 @@ async def test_stream_detection_results_error(servicer, mock_orchestrator):
     async def mock_iterator():
         result = neuro_pipeline_pb2.DetectionResult()
         result.frame_id = 1
+        result.device_id = "edge-test"
         yield result
 
     response = await servicer.StreamDetectionResults(mock_iterator(), None)
@@ -63,7 +65,7 @@ async def test_health_check(servicer):
     response = await servicer.HealthCheck(request, None)
 
     assert response.status == neuro_pipeline_pb2.HealthCheckResponse.SERVING
-    assert response.version == "1.2.0"
+    assert response.version == "1.3.0"
 
 
 @pytest.mark.asyncio

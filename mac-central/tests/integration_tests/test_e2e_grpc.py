@@ -50,7 +50,7 @@ async def test_e2e_health_check(grpc_server_and_channel):
         neuro_pipeline_pb2.HealthCheckRequest(client_id="test")
     )
     assert response.status == neuro_pipeline_pb2.HealthCheckResponse.SERVING
-    assert response.version == "1.2.0"
+    assert response.version == "1.3.0"
 
 
 @pytest.mark.asyncio
@@ -63,6 +63,7 @@ async def test_e2e_stream_detection(grpc_server_and_channel):
         for i in range(3):
             result = neuro_pipeline_pb2.DetectionResult()
             result.frame_id = i
+            result.device_id = "edge-test"
             result.trace_id = f"test-{i}"
             yield result
 
