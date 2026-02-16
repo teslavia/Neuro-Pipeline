@@ -1,9 +1,8 @@
 """Tests for control command audit logging."""
 
-import logging
 from dataclasses import dataclass
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch, call
 
 import pytest
 
@@ -27,15 +26,16 @@ def servicer():
 
 
 @pytest.mark.asyncio
-async def test_command_audit_logged(servicer, caplog):
+async def test_command_audit_logged(servicer):
     """Control commands should produce an AUDIT log entry."""
     ctx = AsyncMock()
-    with caplog.at_level(logging.INFO):
+    with patch("communication.grpc_server.logger") as mock_logger:
         with patch("communication.grpc_server.neuro_pipeline_pb2") as mock_pb2:
             mock_pb2.CommandResponse.return_value = MagicMock()
             await servicer.SendControlCommand(FakeCommand(), ctx)
-    assert any("AUDIT" in r.message for r in caplog.records)
-    assert any("cmd-001" in r.message for r in caplog.records)
+        audit_calls = [c for c in mock_logger.info.call_args_list if "AUDIT" in str(c)]
+        assert len(audit_calls) >= 1
+        assert "cmd-001" in str(audit_calls[0])
 
 
 @pytest.mark.asyncio
@@ -53,14 +53,17 @@ async def test_command_metrics_incremented(servicer):
 
 
 @pytest.mark.asyncio
-async def test_audit_log_format(servicer, caplog):
+async def test_audit_log_format(servicer):
     """Audit log should contain command_type, command_id, device_id."""
     ctx = AsyncMock()
-    with caplog.at_level(logging.INFO):
+    with patch("communication.grpc_server.logger") as mock_logger:
         with patch("communication.grpc_server.neuro_pipeline_pb2") as mock_pb2:
             mock_pb2.CommandResponse.return_value = MagicMock()
-            await servicer.SendControlCommand(FakeCommand(type="SHUTDOWN", command_id="cmd-002", device_id="edge-002"), ctx)
-    audit_msgs = [r.message for r in caplog.records if "AUDIT" in r.message]
-    assert len(audit_msgs) >= 1
-    assert "SHUTDOWN" in audit_msgs[0]
-    assert "cmd-002" in audit_msgs[0]
+            await servicer.SendControlCommand(
+                FakeCommand(type="SHUTDOWN", command_id="cmd-002", device_id="edge-002"), ctx
+            )
+        audit_calls = [c for c in mock_logger.info.call_args_list if "AUDIT" in str(c)]
+        assert len(audit_calls) >= 1
+        msg = str(audit_calls[0])
+        assert "SHUTDOWN" in msg
+        assert "cmd-002" in msg

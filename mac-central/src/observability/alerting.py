@@ -61,8 +61,7 @@ class AlertManager:
             return False
 
         now = time.monotonic()
-        last = self._last_fired.get(event_type, 0.0)
-        if now - last < rule.cooldown_seconds:
+        if event_type in self._last_fired and now - self._last_fired[event_type] < rule.cooldown_seconds:
             return False
 
         self._last_fired[event_type] = now
