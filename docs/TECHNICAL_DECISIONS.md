@@ -1,7 +1,7 @@
 # Technical Decisions Record
 
 **Project**: Neuro-Pipeline
-**Version**: v1.1.0
+**Version**: v1.3.0
 **Last Updated**: 2026-02-16
 
 ---
@@ -267,6 +267,17 @@ void* vaddr = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, dma_fd, 0)
 | TD-022 | Cloud Storage Lazy-Load | ✅ | 7 | Medium (graceful degrade) | None |
 | TD-023 | OTel No-Op Fallback | ✅ | 7 | Low (optional tracing) | None |
 | TD-024 | Grafana Provisioning | ✅ | 7 | Medium (monitoring) | Low |
+| TD-025 | Custom Exception Hierarchy | ✅ | 8 | Medium (error handling) | None |
+| TD-026 | Config Validation | ✅ | 8 | Medium (safety) | None |
+| TD-027 | Graceful Shutdown | ✅ | 8 | High (reliability) | Low |
+| TD-028 | NPU 3-Core Scheduling | ✅ | 8 | Medium (throughput) | Low |
+| TD-029 | RTSP Source HAL | ✅ | 8 | Medium (flexibility) | Low |
+| TD-030 | Event-Triggered Recording | ✅ | 8 | Medium (forensics) | Low |
+| TD-031 | Token Bucket Rate Limiting | ✅ | 9 | High (security) | Low |
+| TD-032 | Protobuf Input Validation | ✅ | 9 | High (security) | None |
+| TD-033 | Dashboard HTTP Basic Auth | ✅ | 9 | Medium (security) | None |
+| TD-034 | Session Cleanup Scheduling | ✅ | 9 | Medium (reliability) | None |
+| TD-035 | OTel Span Hot Path | ✅ | 9 | Low (observability) | None |
 
 ---
 
@@ -576,6 +587,67 @@ void* vaddr = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, dma_fd, 0)
 
 ---
 
+### TD-025: Custom Exception Hierarchy
+
+**Date**: 2026-02-16 (Week 8)
+**Status**: ✅ Implemented
+**Context**: Broad `except Exception` blocks masked real errors
+
+**Decision**: NeuroPipelineError base class + 5 typed subtypes (Config, Inference, Communication, Storage, Security)
+
+**Rationale**: Specific exception types enable targeted error handling and better diagnostics
+
+**Implementation**: `mac-central/src/exceptions.py`
+
+---
+
+### TD-031: Token Bucket Rate Limiting
+
+**Date**: 2026-02-16 (Week 9 / v1.3.0)
+**Status**: ✅ Implemented
+**Context**: No protection against edge device flooding central server
+
+**Decision**: Per-device token bucket rate limiter with configurable max_rps and burst
+
+**Alternatives Considered**:
+1. Fixed window counter (bursty, unfair)
+2. Sliding window (complex, memory-heavy)
+3. Token bucket ✅ (smooth, per-device isolation)
+
+**Rationale**: Smooth rate limiting with burst tolerance, O(1) per request, per-device isolation
+
+**Implementation**: `mac-central/src/communication/rate_limiter.py`
+
+---
+
+### TD-032: Protobuf Input Validation
+
+**Date**: 2026-02-16 (Week 9 / v1.3.0)
+**Status**: ✅ Implemented
+**Context**: No server-side validation of incoming DetectionResult messages
+
+**Decision**: Validate device_id, confidence [0,1], coordinates [0,1] before processing
+
+**Rationale**: Defense in depth — reject malformed data at the boundary
+
+**Implementation**: `mac-central/src/communication/grpc_server.py:_validate_detection()`
+
+---
+
+### TD-033: Dashboard HTTP Basic Auth
+
+**Date**: 2026-02-16 (Week 9 / v1.3.0)
+**Status**: ✅ Implemented
+**Context**: Dashboard exposed without authentication
+
+**Decision**: HTTP Basic Auth via environment variables, /healthz exempt
+
+**Rationale**: Simple, no external auth service needed, credentials not in config files
+
+**Implementation**: `extensions/dashboard/app.py`
+
+---
+
 ## References
 
 - Architecture Design: `docs/ARCHITECTURE.md`
@@ -584,3 +656,5 @@ void* vaddr = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, dma_fd, 0)
 - Week 3 Completion: `docs/devlog/WEEK3_COMPLETION_SUMMARY.md`
 - Performance Benchmark: `docs/performance/week3-benchmark.md`
 - KPI Report: `docs/performance/kpi-report.md`
+- Week 8 Production Hardening: v1.2.0
+- Week 9 Security + Activation: v1.3.0

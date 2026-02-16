@@ -1,6 +1,6 @@
 # Neuro-Pipeline 部署指南 (Deployment Guide)
 
-**版本**: v1.1.0
+**版本**: v1.3.0
 **更新日期**: 2026-02-16
 
 ---
@@ -401,7 +401,19 @@ uvicorn app:app --host 0.0.0.0 --port 8080
 
 浏览器访问 http://localhost:8080 查看实时监控面板。
 
-### 6.3 功能
+### 6.3 认证配置 (v1.3.0+)
+
+Dashboard 默认启用 HTTP Basic Auth：
+
+```bash
+export DASHBOARD_USER=admin
+export DASHBOARD_PASS=your_password
+uvicorn app:app --host 0.0.0.0 --port 8080
+```
+
+`/healthz` 端点免认证，可用于健康检查。
+
+### 6.4 功能
 
 - 设备状态卡片（Edge RK3588 + Central Mac Mini）
 - WebSocket 实时事件推送
@@ -700,14 +712,37 @@ curl http://localhost:9090/metrics | grep circuit_breaker_state
 **配置** (config.yaml):
 ```yaml
 alerting:
-  webhook_url: "https://your-webhook.example.com/alerts"
-  cooldown_seconds: 300  # 同一告警 5 分钟内不重复发送
+  enabled: true
+  webhook_url: ""
+  routes:
+    - severity: critical
+      webhook_url: "https://critical-alerts.example.com"
+    - severity: warning
+      webhook_url: "https://warning-alerts.example.com"
+  rules:
+    - name: "circuit_breaker_open"
+      cooldown_seconds: 300
 ```
 
 **告警事件**:
 - VLM 推理失败超过阈值
 - 熔断器打开
 - 存储写入失败
+
+---
+
+### 13.5 速率限制 (v1.3.0+)
+
+gRPC 令牌桶限流保护中心服务器：
+
+```yaml
+rate_limiting:
+  enabled: true
+  max_rps: 100
+  burst: 20
+```
+
+超限请求返回 `RESOURCE_EXHAUSTED`，按 device_id 隔离。
 
 ---
 
@@ -758,5 +793,5 @@ Grafana 自动配置 Prometheus 数据源（通过 provisioning）。
 
 ---
 
-**文档版本**: v1.1.0
+**文档版本**: v1.3.0
 **最后更新**: 2026-02-16

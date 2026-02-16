@@ -1,6 +1,6 @@
 # Neuro-Pipeline Architecture Design
 
-**Version**: 1.1.0
+**Version**: 1.3.0
 **Date**: 2026-02-16
 **Author**: Teslavia
 
@@ -230,13 +230,16 @@ RK3588 Edge                                    Mac Mini Central
 - **Resource Limits**: 有界缓冲池防止 DoS
 - **Least Privilege**: 边缘进程以非 root 用户运行
 - **Buffer Overflow Prevention**: RAII + bounds checking
+- **Rate Limiting**: gRPC token bucket per-device rate limiting
+- **Input Validation**: Protobuf field validation (device_id, coordinates, confidence)
+- **Dashboard Auth**: HTTP Basic Auth for web dashboard
+- **Audit Logging**: Structured audit trail for control commands
 
 ---
 
 ## 9. Future Extensions
 
 - Kubernetes 边缘部署 (KubeEdge)
-- 视频流录制与回放
 - 边缘侧模型自动更新
 
 ---
@@ -340,12 +343,98 @@ RK3588 Edge                                    Mac Mini Central
 ### Chaos + E2E Tests
 - Disconnect recovery, circuit breaker, SQLite retry
 - Session expiry, VLM queue overflow
-- Synthetic pipeline validation (154 Python tests total)
+- Synthetic pipeline validation (250 Python tests total)
 
 ### Load Testing
 - Locust gRPC load test (N edge devices simulation)
 - GitHub Actions workflow_dispatch trigger
 - Configurable users/spawn-rate/duration
+
+---
+
+## v1.3.0 Additions
+
+### Session Cleanup Scheduling
+- Periodic cleanup of expired device sessions in main.py
+- Prometheus gauge update for expired devices
+
+### Edge Event Dispatch
+- handle_edge_event() routes HEALTH_UPDATE → metrics, SYSTEM_ERROR → alerts
+- Previously empty stub now fully functional
+
+### gRPC Token Bucket Rate Limiting
+- Per-device rate limiting with burst capacity
+- Returns RESOURCE_EXHAUSTED on exceed
+
+### Protobuf Input Validation
+- device_id non-empty, coordinates [0,1], confidence [0,1]
+- Validation errors tracked via Prometheus counter
+
+### Dashboard HTTP Basic Auth
+- Environment variable credentials (DASHBOARD_USER/DASHBOARD_PASS)
+- /healthz exempt from authentication
+
+### Control Command Audit Logging
+- Structured JSON audit entries for all control commands
+- Prometheus counter for command types
+
+### Dead Code Activation (Edge C++)
+- RTSP source wired into pipeline coordinator
+- Video recorder triggered on novel detections
+- Memory pool PoolGuard RAII pattern
+- NPU scheduler replaces manual bitmask
+
+### Database Optimization
+- Composite index on (device_id, timestamp)
+- Created after migration for legacy DB compatibility
+
+### OTel Span Instrumentation
+- process_detection() and vlm_inference() wrapped with spans
+- No-op fallback when OTel unavailable
+
+### CI C++ Tests
+- Native x86_64 + mock HAL + GoogleTest job in CI
+- ctest --output-on-failure
+
+---
+
+## v1.2.0 Additions (Week 8)
+
+### Custom Exception Hierarchy
+- NeuroPipelineError base + 5 subtypes (ConfigError, InferenceError, CommunicationError, StorageError, SecurityError)
+- Replaced 8 broad `except Exception` with specific types
+
+### Config Validation
+- Port range, confidence bounds, timeout positivity, TLS file existence
+- inference_mode enum, cloud storage provider validation
+
+### Graceful Shutdown
+- VLM queue drain with configurable timeout
+- Global 60-second shutdown limit
+
+### Edge Prometheus Metrics (C++)
+- Atomic counters, histograms, gauges in C++ pipeline
+- Frame count, inference latency, NPU utilization
+
+### NPU 3-Core Scheduling
+- Round-robin core assignment per camera index
+- Replaces manual `1 << (cam_idx % 3)` bitmask
+
+### RTSP Source HAL Module
+- FFmpeg-based RTSP input (placeholder + mock)
+- Auto-detected via `rtsp://` prefix in video_source config
+
+### Event-Triggered Video Recorder
+- Ring buffer (pre_seconds) + post-trigger recording (post_seconds)
+- Configurable output directory
+
+### SQLite Atomic Backup
+- sqlite3.backup() API for consistent snapshots
+- Scheduled periodic backup via async task
+
+### Alert Severity Routing
+- INFO/WARNING/CRITICAL severity levels
+- Per-severity webhook URL routing
 
 ---
 

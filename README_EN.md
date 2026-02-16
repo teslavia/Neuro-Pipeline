@@ -6,9 +6,9 @@
 
 <p align="center">
   <a href="https://github.com/teslavia/Neuro-Pipeline/actions"><img src="https://github.com/teslavia/Neuro-Pipeline/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <img src="https://img.shields.io/badge/version-1.1.0-green.svg" alt="Version">
+  <img src="https://img.shields.io/badge/version-1.3.0-green.svg" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License">
-  <img src="https://img.shields.io/badge/tests-154_Python-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-250_Python-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/C%2B%2B-17-00599C.svg?logo=cplusplus&logoColor=white" alt="C++17">
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?logo=python&logoColor=white" alt="Python">
 </p>
@@ -42,11 +42,16 @@ Camera --> V4L2 --> MPP --> RGA --> RKNN NPU --> gRPC --> MLX VLM --> Alert
 - **Dual-mode VLM** — text-only LLM or vision-language multimodal (Qwen2-VL)
 - **mTLS gRPC** — bidirectional streaming with mutual TLS authentication
 - **Observability** — Prometheus metrics, health probes, circuit breaker, alerting
-- **SQLite persistence** — detection history survives restarts, 7-day retention
-- **Web dashboard** — FastAPI + htmx + WebSocket real-time monitoring
+- **SQLite persistence** — detection history survives restarts, atomic backup, 7-day retention
+- **Web dashboard** — FastAPI + htmx + WebSocket real-time monitoring, HTTP Basic Auth
 - **Multi-camera + Multi-edge** — single central manages multiple devices, parallel inference
 - **VLM batch inference** — accumulator with multi-turn conversation context
-- **Cloud storage** — S3/MinIO async upload, distributed tracing
+- **Cloud storage** — S3/MinIO async upload, distributed tracing (OTel)
+- **Security hardening** — gRPC rate limiting, protobuf input validation, audit logging
+- **RTSP source** — network camera support via RTSP URL
+- **Video recording** — event-triggered recording with ring buffer
+- **NPU 3-core scheduling** — round-robin core assignment per camera
+- **Graceful shutdown** — VLM queue drain + configurable timeout
 
 ## Architecture
 
@@ -148,21 +153,21 @@ uvicorn app:app --host 0.0.0.0 --port 8080
 neuro-pipeline/
 ├── rk3588-edge/                   # Edge device (C++17)
 │   ├── src/
-│   │   ├── hal/                   #   V4L2, MPP, RGA, DRM (real + mock)
-│   │   ├── ai_inference/          #   RKNN engine, YOLO postprocessor
+│   │   ├── hal/                   #   V4L2, MPP, RGA, DRM, RTSP (real + mock)
+│   │   ├── ai_inference/          #   RKNN engine, YOLO postprocessor, NPU scheduler
 │   │   ├── data_processing/       #   Zero-copy buffers, memory pool
 │   │   ├── communication/         #   gRPC client (streaming + bidi)
-│   │   └── app/                   #   Pipeline coordinator
+│   │   └── app/                   #   Pipeline coordinator, video recorder
 │   ├── tests/                     #   GoogleTest (146 tests)
 │   └── cmake/                     #   aarch64 toolchain
 ├── mac-central/                   # Central server (Python)
 │   ├── src/
-│   │   ├── communication/         #   gRPC async server
+│   │   ├── communication/         #   gRPC async server, rate limiter
 │   │   ├── llm_vlm/               #   MLX LLM/VLM dual-mode engine
 │   │   ├── application_logic/     #   Orchestrator, circuit breaker
-│   │   ├── storage/               #   SQLite persistence
-│   │   └── observability/         #   Metrics, tracing
-│   └── tests/                     #   pytest (154 tests: 130 unit + 24 e2e/chaos)
+│   │   ├── storage/               #   SQLite persistence, cloud storage
+│   │   └── observability/         #   Metrics, tracing, alerting
+│   └── tests/                     #   pytest (247 tests: 209 unit + 38 e2e/chaos)
 ├── proto/                         # Protobuf service definitions
 ├── extensions/
 │   ├── dashboard/                 # FastAPI + htmx monitoring UI
@@ -172,7 +177,7 @@ neuro-pipeline/
 │   ├── certs/                     #   mTLS certificate generation
 │   └── services/                  #   systemd + launchd configs
 ├── config.yaml                    # Unified configuration
-└── VERSION.json                   # v1.1.0
+└── VERSION.json                   # v1.3.0
 ```
 
 ## Test Coverage
@@ -180,8 +185,8 @@ neuro-pipeline/
 | Component | Framework | Tests | Notes |
 |-----------|-----------|-------|-------|
 | C++ Edge (mock HAL) | GoogleTest | 146 | Buffer, pool, thread, HAL, YOLO, gRPC |
-| Python Central | pytest | 154 | 130 unit + 24 e2e/chaos (8 skipped) |
-| Total | — | 300+ | Cross-compile mock ON/OFF both pass |
+| Python Central | pytest | 250 | 212 unit + 38 e2e/chaos (8 skipped) |
+| Total | — | 396+ | Cross-compile mock ON/OFF both pass |
 
 ## Technology Stack
 
@@ -220,6 +225,8 @@ neuro-pipeline/
 | v0.5.0 | Production | mTLS, SQLite, VLM multimodal, async queue |
 | v1.0.0 | Observability | Prometheus, health probes, circuit breaker, alerting |
 | v1.1.0 | Scale + Multi-edge | Multi-camera, multi-device, VLM batch, Grafana, chaos tests |
+| v1.2.0 | Production Hardening | Exception hierarchy, config validation, graceful shutdown, RTSP, video recording |
+| v1.3.0 | Security + Activation | Rate limiting, input validation, dashboard auth, audit logging, dead code activation |
 
 ## License
 
