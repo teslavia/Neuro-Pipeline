@@ -24,6 +24,7 @@ from src.observability.metrics import (
     vlm_latency,
     vlm_queue_depth,
     events_stored,
+    update_edge_metrics,
 )
 from src.observability.circuit_breaker import CircuitBreaker
 from src.observability.alerting import AlertManager
@@ -285,7 +286,41 @@ class CentralOrchestrator:
 
     async def handle_edge_event(self, event: Any) -> None:
         """Process an edge event received via bidirectional stream."""
-        logger.info(f"Edge event: type={event.type}, desc={event.description}")
+        event_type = getattr(event, "type", None)
+        device_id = ""
+        metadata = {}
+
+        # Extract metadata from protobuf map or dict
+        if hasattr(event, "metadata"):
+            raw = event.metadata
+            metadata = dict(raw) if hasattr(raw, "items") else {}
+
+        if hasattr(event, "device_id"):
+            device_id = event.device_id
+        else:
+            device_id = metadata.get("device_id", "")
+
+        logger.info(f"Edge event: type={event_type}, device={device_id}, desc={getattr(event, 'description', '')}")
+
+        # Dispatch by event type
+        # HEALTH_UPDATE = 1 in proto enum, but also check string/int
+        type_val = event_type
+        if hasattr(event_type, "value"):
+            type_val = event_type.value
+        elif hasattr(event_type, "name"):
+            type_val = event_type.name
+
+        if type_val in (1, "HEALTH_UPDATE", "health_update"):
+            update_edge_metrics(device_id, metadata)
+        elif type_val in (2, "SYSTEM_ERROR", "system_error"):
+            logger.error(f"Edge system error from {device_id}: {metadata}")
+            if self._alert_manager:
+                asyncio.create_task(
+                    self._alert_manager.check_and_fire(
+                        "edge_system_error",
+                        {"device_id": device_id, **metadata},
+                    )
+                )
 
     def is_ready(self) -> bool:
         """Check if orchestrator is ready to process requests."""

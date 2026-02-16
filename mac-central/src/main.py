@@ -13,7 +13,8 @@ from application_logic.central_orchestrator import CentralOrchestrator, VLMTrigg
 from communication.device_session import DeviceSessionManager
 from config import AppConfig
 from observability.circuit_breaker import CircuitBreaker
-from observability.alerting import AlertManager
+from observability.alerting import AlertManager, AlertRule, AlertSeverity, AlertRoute
+from observability.metrics import edge_device_status
 from storage.detection_store import DetectionStore
 from storage.cloud_storage import CloudStorageClient
 
@@ -43,6 +44,22 @@ def setup_logging(cfg) -> None:
 logger = logging.getLogger(__name__)
 
 
+async def _session_cleanup_loop(session_mgr, expiry_timeout: float) -> None:
+    """Periodically clean up expired device sessions."""
+    interval = max(expiry_timeout / 2, 1.0)
+    while True:
+        try:
+            await asyncio.sleep(interval)
+            expired = session_mgr.cleanup_expired()
+            for device_id in expired:
+                edge_device_status.labels(device_id=device_id).set(0)
+                logger.info(f"Session expired and cleaned: {device_id}")
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"Session cleanup error: {e}")
+
+
 async def main():
     parser = argparse.ArgumentParser(description="Neuro-Pipeline Central Server")
     parser.add_argument("--config", type=Path, default=None, help="Config YAML file")
@@ -60,7 +77,7 @@ async def main():
     model_path = Path(args.model_path or cfg.central.model_path)
 
     logger.info("=" * 60)
-    logger.info("  Neuro-Pipeline Central Server v1.2.0")
+    logger.info("  Neuro-Pipeline Central Server v1.3.0")
     logger.info("=" * 60)
     logger.info(f"Host: {host}:{port}  TLS: {cfg.tls.enabled}")
     logger.info(f"Model: {model_path}  Mode: {cfg.central.inference_mode}")
@@ -89,10 +106,27 @@ async def main():
         half_open_max=cfg.circuit_breaker.half_open_max,
     )
 
-    # Alert manager
-    alert_mgr = AlertManager(
-        webhook_url=cfg.alerting.webhook_url,
-    ) if cfg.alerting.enabled and cfg.alerting.webhook_url else None
+    # Alert manager (always create when enabled, even without webhook — log-only alerts still fire)
+    alert_mgr = None
+    if cfg.alerting.enabled:
+        alert_rules = [
+            AlertRule(name=r.name, cooldown_seconds=r.cooldown_seconds)
+            for r in cfg.alerting.rules
+        ]
+        alert_routes = []
+        if hasattr(cfg.alerting, 'routes'):
+            for route_cfg in getattr(cfg.alerting, 'routes', []):
+                sev = getattr(route_cfg, 'severity', 'critical')
+                url = getattr(route_cfg, 'webhook_url', '')
+                alert_routes.append(AlertRoute(
+                    severity=AlertSeverity(sev) if isinstance(sev, str) else sev,
+                    webhook_url=url,
+                ))
+        alert_mgr = AlertManager(
+            rules=alert_rules,
+            webhook_url=cfg.alerting.webhook_url,
+            routes=alert_routes if alert_routes else None,
+        )
 
     # Cloud storage (lazy boto3)
     cloud = None
@@ -152,6 +186,11 @@ async def main():
     )
     await server.start()
 
+    # Session cleanup background task
+    cleanup_task = asyncio.create_task(
+        _session_cleanup_loop(session_mgr, cfg.sessions.expiry_timeout)
+    )
+
     # Graceful shutdown
     stop_event = asyncio.Event()
 
@@ -166,6 +205,11 @@ async def main():
     await stop_event.wait()
 
     logger.info("Shutting down...")
+    cleanup_task.cancel()
+    try:
+        await cleanup_task
+    except asyncio.CancelledError:
+        pass
     try:
         await asyncio.wait_for(_shutdown_sequence(server, orchestrator, store), timeout=60)
     except asyncio.TimeoutError:

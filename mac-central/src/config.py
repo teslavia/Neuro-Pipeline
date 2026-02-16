@@ -61,12 +61,20 @@ class AlertingConfig:
     enabled: bool = True
     webhook_url: str = ""
     rules: List["AlertRuleConfig"] = field(default_factory=list)
+    routes: List["AlertRouteConfig"] = field(default_factory=list)
 
 
 @dataclass
 class AlertRuleConfig:
     name: str = ""
     cooldown_seconds: float = 300.0
+    severity: str = "critical"
+
+
+@dataclass
+class AlertRouteConfig:
+    severity: str = "critical"
+    webhook_url: str = ""
 
 
 @dataclass
@@ -109,6 +117,13 @@ class CloudStorageConfig:
 
 
 @dataclass
+class RateLimitingConfig:
+    enabled: bool = False
+    max_rps: int = 100
+    burst: int = 20
+
+
+@dataclass
 class AppConfig:
     central: CentralConfig = field(default_factory=CentralConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
@@ -122,6 +137,7 @@ class AppConfig:
     batch: BatchConfig = field(default_factory=BatchConfig)
     sessions: SessionConfig = field(default_factory=SessionConfig)
     cloud_storage: CloudStorageConfig = field(default_factory=CloudStorageConfig)
+    rate_limiting: RateLimitingConfig = field(default_factory=RateLimitingConfig)
 
     @classmethod
     def from_yaml(cls, path: Path) -> "AppConfig":
@@ -184,8 +200,16 @@ class AppConfig:
                 AlertRuleConfig(
                     name=r.get("name", ""),
                     cooldown_seconds=float(r.get("cooldown_seconds", 300)),
+                    severity=r.get("severity", "critical"),
                 )
                 for r in al.get("rules", [])
+            ],
+            routes=[
+                AlertRouteConfig(
+                    severity=rt.get("severity", "critical"),
+                    webhook_url=rt.get("webhook_url", ""),
+                )
+                for rt in al.get("routes", [])
             ],
         )
         cb = data.get("circuit_breaker", {})
@@ -221,6 +245,12 @@ class AppConfig:
             prefix=cs.get("prefix", cfg.cloud_storage.prefix),
             endpoint_url=cs.get("endpoint_url", cfg.cloud_storage.endpoint_url),
             region=cs.get("region", cfg.cloud_storage.region),
+        )
+        rl = data.get("rate_limiting", {})
+        cfg.rate_limiting = RateLimitingConfig(
+            enabled=bool(rl.get("enabled", cfg.rate_limiting.enabled)),
+            max_rps=int(rl.get("max_rps", cfg.rate_limiting.max_rps)),
+            burst=int(rl.get("burst", cfg.rate_limiting.burst)),
         )
         return cfg
 
