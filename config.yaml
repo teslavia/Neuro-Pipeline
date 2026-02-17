@@ -26,6 +26,26 @@ edge:
     post_seconds: 30
     output_dir: "/opt/neuro-pipeline/recordings"
 
+  # v2 feature toggles
+  enable_temporal_tracker: false
+  enable_adaptive_fps: false
+  enable_multi_model: false
+
+  # Multi-model config (used when enable_multi_model: true)
+  # models:
+  #   - model_id: yolov5s
+  #     model_path: /opt/neuro-pipeline/models/yolov5s-640-640.rknn
+  #     postprocessor: yolov5
+  #     npu_core: 0
+  #   - model_id: yolov5m
+  #     model_path: /opt/neuro-pipeline/models/yolov5m-640-640.rknn
+  #     postprocessor: yolov5
+  #     npu_core: 1
+  #   - model_id: yolov8s
+  #     model_path: /opt/neuro-pipeline/models/yolov8s-640-640.rknn
+  #     postprocessor: yolov8
+  #     npu_core: 2
+
 central:
   host: "0.0.0.0"
   port: 50051

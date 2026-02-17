@@ -13,7 +13,8 @@ TemporalTracker::TemporalTracker(const Config& config) : config_(config) {}
 std::vector<uint64_t> TemporalTracker::Update(
     const std::vector<common::DetectionBox>& detections, uint64_t frame_id) {
   std::vector<uint64_t> assigned_ids(detections.size(), 0);
-  std::vector<bool> track_matched(tracks_.size(), false);
+  const size_t num_existing_tracks = tracks_.size();
+  std::vector<bool> track_matched(num_existing_tracks, false);
 
   // Greedy IoU matching: for each detection, find best matching track
   for (size_t d = 0; d < detections.size(); ++d) {
@@ -21,7 +22,7 @@ std::vector<uint64_t> TemporalTracker::Update(
     size_t best_idx = 0;
     bool found = false;
 
-    for (size_t t = 0; t < tracks_.size(); ++t) {
+    for (size_t t = 0; t < num_existing_tracks; ++t) {
       if (track_matched[t]) continue;
       float iou = ComputeIoU(detections[d], tracks_[t]);
       if (iou > best_iou) {

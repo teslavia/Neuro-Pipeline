@@ -97,6 +97,11 @@ int main(int argc, char* argv[]) {
         config.recording.output_dir = cfg.Get("edge.recording.output_dir", config.recording.output_dir);
         config.recording.fps = cfg.GetInt("edge.recording.fps", config.recording.fps);
 
+        // v2 feature toggles
+        config.enable_temporal_tracker = cfg.GetBool("edge.enable_temporal_tracker", config.enable_temporal_tracker);
+        config.enable_adaptive_fps = cfg.GetBool("edge.enable_adaptive_fps", config.enable_adaptive_fps);
+        config.enable_multi_model = cfg.GetBool("edge.enable_multi_model", config.enable_multi_model);
+
         // Multi-camera config: cameras.0.device, cameras.0.width, etc.
         for (int i = 0; i < static_cast<int>(common::kMaxCameras); ++i) {
           std::string prefix = "cameras." + std::to_string(i);
@@ -108,6 +113,18 @@ int main(int argc, char* argv[]) {
           cam.fps = cfg.GetInt(prefix + ".fps", config.fps);
           cam.label = cfg.Get(prefix + ".label", "cam" + std::to_string(i));
           config.cameras.push_back(cam);
+        }
+
+        // Multi-model config: models.0.model_id, models.0.model_path, etc.
+        for (int i = 0; i < 10; ++i) {
+          std::string prefix = "edge.models." + std::to_string(i);
+          if (!cfg.Has(prefix + ".model_id")) break;
+          app::PipelineCoordinator::Config::ModelConfig mc;
+          mc.model_id = cfg.Get(prefix + ".model_id");
+          mc.model_path = cfg.Get(prefix + ".model_path");
+          mc.postprocessor = cfg.Get(prefix + ".postprocessor", "yolov5");
+          mc.npu_core = cfg.GetInt(prefix + ".npu_core", -1);
+          config.models.push_back(mc);
         }
       }
     }

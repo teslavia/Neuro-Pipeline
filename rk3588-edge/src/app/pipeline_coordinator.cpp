@@ -19,6 +19,8 @@
 #include "common/temporal_tracker.hpp"
 #include "common/video_recorder.hpp"
 #include "common/yolo_postprocess.hpp"
+#include "common/yolov8_postprocess.hpp"
+#include "common/multi_model_manager.hpp"
 #include "communication/grpc_client.hpp"
 #include "rk_hal/drm_allocator.hpp"
 #include "rk_hal/mpp_decoder.hpp"
@@ -211,6 +213,42 @@ class PipelineCoordinator::Impl {
                afps_cfg.min_fps, afps_cfg.max_fps);
     }
 
+    // v2: Multi-model manager — load models from config
+    if (config_.enable_multi_model && !config_.models.empty()) {
+      model_mgr_ = std::make_unique<ai_inference::MultiModelManager>(
+          config_.models.size());
+      for (const auto& m : config_.models) {
+        if (!model_mgr_->LoadModel(m.model_id, m.model_path, m.npu_core)) {
+          LOG_ERROR("Pipeline", "Failed to load model: %s", m.model_id.c_str());
+          continue;
+        }
+        auto* slot = model_mgr_->GetModel(m.model_id);
+        if (slot) {
+          if (m.postprocessor == "yolov8") {
+            ai_inference::YOLOv8PostProcessor::Config v8_cfg;
+            v8_cfg.confidence_threshold = config_.confidence_threshold;
+            v8_cfg.nms_threshold = config_.nms_threshold;
+            v8_cfg.input_width = config_.model_width;
+            v8_cfg.input_height = config_.model_height;
+            slot->postprocessor =
+                std::make_unique<ai_inference::YOLOv8PostProcessor>(v8_cfg);
+          } else {
+            ai_inference::YOLOPostProcessor::Config v5_cfg;
+            v5_cfg.confidence_threshold = config_.confidence_threshold;
+            v5_cfg.nms_threshold = config_.nms_threshold;
+            v5_cfg.input_width = config_.model_width;
+            v5_cfg.input_height = config_.model_height;
+            slot->postprocessor =
+                std::make_unique<ai_inference::YOLOPostProcessor>(v5_cfg);
+          }
+          LOG_INFO("Pipeline", "Multi-model: %s (%s) on core %d",
+                   m.model_id.c_str(), m.postprocessor.c_str(), m.npu_core);
+        }
+      }
+      LOG_INFO("Pipeline", "Multi-model manager: %zu models loaded",
+               model_mgr_->ModelCount());
+    }
+
     LOG_INFO("Pipeline", "All components initialized");
     return true;
   }
@@ -317,37 +355,68 @@ class PipelineCoordinator::Impl {
       }
 
       // 3. NPU inference (mutex-protected for hot-reload safety)
+      std::vector<common::DetectionBox> detections;
       {
         std::lock_guard<std::mutex> lock(engine_mutex_);
-        // Multi-camera NPU core scheduling via NPUScheduler
-        if (npu_scheduler_) {
-          int core = npu_scheduler_->SelectCore();
-          engine_->SetCoreMask(core);
-        } else if (!cameras_.empty() && config_.npu_core_mask == 7) {
-          int core = 1 << (active_cam_idx % 3);
-          engine_->SetCoreMask(core);
-        }
-        auto t_infer_start = Clock::now();
-        if (!engine_->Infer(processed)) {
-          LOG_ERROR("Pipeline", "Inference failed");
-          common::EdgeMetrics::Instance().IncrementInferenceErrors();
-          if (use_rtsp_) {
-            rtsp_source_->ReleaseFrame(frame);
-          } else if (use_camera_ && !cameras_.empty()) {
-            cameras_[active_cam_idx]->ReleaseFrame(frame);
-          } else if (use_camera_) {
-            camera_->ReleaseFrame(frame);
-          }
-          continue;
-        }
-        double infer_ms = std::chrono::duration<double, std::milli>(
-            Clock::now() - t_infer_start).count();
-        common::EdgeMetrics::Instance().RecordInferenceLatencyMs(infer_ms);
-      }
 
-      // 4. Postprocess
-      auto detections = postprocessor_->Process(
-          engine_->GetOutputs(), config_.width, config_.height);
+        // Multi-model path: use active model from MultiModelManager
+        if (model_mgr_) {
+          auto* active = model_mgr_->GetActiveModel();
+          if (active && active->engine) {
+            auto t_infer_start = Clock::now();
+            if (!active->engine->Infer(processed)) {
+              LOG_ERROR("Pipeline", "Inference failed (model: %s)",
+                        active->model_id.c_str());
+              common::EdgeMetrics::Instance().IncrementInferenceErrors();
+              if (use_rtsp_) {
+                rtsp_source_->ReleaseFrame(frame);
+              } else if (use_camera_ && !cameras_.empty()) {
+                cameras_[active_cam_idx]->ReleaseFrame(frame);
+              } else if (use_camera_) {
+                camera_->ReleaseFrame(frame);
+              }
+              continue;
+            }
+            double infer_ms = std::chrono::duration<double, std::milli>(
+                Clock::now() - t_infer_start).count();
+            common::EdgeMetrics::Instance().RecordInferenceLatencyMs(infer_ms);
+
+            if (active->postprocessor) {
+              detections = active->postprocessor->Process(
+                  active->engine->GetOutputs(), config_.width, config_.height);
+            }
+          }
+        } else {
+          // Single-model path (original)
+          // Multi-camera NPU core scheduling via NPUScheduler
+          if (npu_scheduler_) {
+            int core = npu_scheduler_->SelectCore();
+            engine_->SetCoreMask(core);
+          } else if (!cameras_.empty() && config_.npu_core_mask == 7) {
+            int core = 1 << (active_cam_idx % 3);
+            engine_->SetCoreMask(core);
+          }
+          auto t_infer_start = Clock::now();
+          if (!engine_->Infer(processed)) {
+            LOG_ERROR("Pipeline", "Inference failed");
+            common::EdgeMetrics::Instance().IncrementInferenceErrors();
+            if (use_rtsp_) {
+              rtsp_source_->ReleaseFrame(frame);
+            } else if (use_camera_ && !cameras_.empty()) {
+              cameras_[active_cam_idx]->ReleaseFrame(frame);
+            } else if (use_camera_) {
+              camera_->ReleaseFrame(frame);
+            }
+            continue;
+          }
+          double infer_ms = std::chrono::duration<double, std::milli>(
+              Clock::now() - t_infer_start).count();
+          common::EdgeMetrics::Instance().RecordInferenceLatencyMs(infer_ms);
+
+          detections = postprocessor_->Process(
+              engine_->GetOutputs(), config_.width, config_.height);
+        }
+      }
 
       // v2: Temporal tracking — assign track IDs and detect behaviors
       std::vector<uint64_t> track_ids;
@@ -566,8 +635,17 @@ class PipelineCoordinator::Impl {
       case neuro_pipeline::ControlCommand::SWITCH_MODEL_VARIANT: {
         auto it = cmd.parameters().find("model_id");
         if (it != cmd.parameters().end()) {
-          LOG_INFO("Pipeline", "Switch model variant: %s", it->second.c_str());
-          // Model hot-swap would be handled by MultiModelManager
+          if (model_mgr_) {
+            std::lock_guard<std::mutex> lock(engine_mutex_);
+            if (model_mgr_->SwitchActiveModel(it->second)) {
+              LOG_INFO("Pipeline", "Switched to model: %s", it->second.c_str());
+            } else {
+              LOG_ERROR("Pipeline", "Failed to switch to model: %s",
+                        it->second.c_str());
+            }
+          } else {
+            LOG_WARN("Pipeline", "SWITCH_MODEL_VARIANT: multi-model not enabled");
+          }
         }
         break;
       }
@@ -632,6 +710,7 @@ class PipelineCoordinator::Impl {
   std::unique_ptr<common::VideoRecorder> video_recorder_;
   std::unique_ptr<data_processing::TemporalTracker> temporal_tracker_;
   std::unique_ptr<app::AdaptiveFPSController> adaptive_fps_;
+  std::unique_ptr<ai_inference::MultiModelManager> model_mgr_;
 
   std::ifstream video_file_;
 };

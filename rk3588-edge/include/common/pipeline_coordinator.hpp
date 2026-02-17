@@ -68,6 +68,15 @@ class PipelineCoordinator {
     bool enable_temporal_tracker = false;
     bool enable_adaptive_fps = false;
     bool enable_multi_model = false;
+
+    // v2: Multi-model config
+    struct ModelConfig {
+      std::string model_id;
+      std::string model_path;
+      std::string postprocessor = "yolov5";  // "yolov5" or "yolov8"
+      int npu_core = -1;                     // -1 = auto
+    };
+    std::vector<ModelConfig> models;
   };
 
   explicit PipelineCoordinator(const Config& config);

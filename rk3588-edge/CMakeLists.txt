@@ -38,11 +38,16 @@ find_package(Threads REQUIRED)
 find_package(Protobuf REQUIRED)
 include_directories(${Protobuf_INCLUDE_DIRS})
 
-# gRPC (try cmake config first, fallback to pkg-config)
-find_package(gRPC CONFIG QUIET)
-if(gRPC_FOUND)
-  set(GRPC_LIBS gRPC::grpc++ gRPC::grpc)
-  message(STATUS "Found gRPC via CMake config")
+# gRPC (use pkg-config to get all transitive deps including abseil)
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+  pkg_check_modules(GRPCPP QUIET grpc++)
+endif()
+if(GRPCPP_FOUND)
+  set(GRPC_LIBS ${GRPCPP_LIBRARIES})
+  include_directories(${GRPCPP_INCLUDE_DIRS})
+  link_directories(${GRPCPP_LIBRARY_DIRS})
+  message(STATUS "Found gRPC via pkg-config: ${GRPCPP_VERSION}")
 else()
   find_library(GRPCPP_LIBRARY NAMES grpc++)
   find_library(GRPC_LIBRARY NAMES grpc)
@@ -154,6 +159,7 @@ set(DATA_PROCESSING_SOURCES
 set(AI_INFERENCE_SOURCES
   src/ai_inference/rknn_engine.cpp
   src/ai_inference/yolo_postprocess.cpp
+  src/ai_inference/yolov8_postprocess.cpp
   src/ai_inference/npu_scheduler.cpp
   src/ai_inference/multi_model_manager.cpp
   src/ai_inference/multi_model_scheduler.cpp
