@@ -76,6 +76,21 @@ class ConfigManager {
         continue;
       }
 
+      // List item continuation: indented deeper than "- " line, belongs to
+      // the current list item (e.g. model_path after "- model_id:")
+      if (!list_section.empty() && indent > list_indent && list_index >= 0) {
+        auto item_colon = line.find(':');
+        if (item_colon != std::string::npos) {
+          std::string k = line.substr(0, item_colon);
+          std::string v = (item_colon + 1 < line.size()) ? line.substr(item_colon + 1) : "";
+          TrimValue(k);
+          TrimValue(v);
+          std::string full_key = list_section + "." + std::to_string(list_index) + "." + k;
+          config_[full_key] = v;
+        }
+        continue;
+      }
+
       // Not a list item — reset list tracking if indent is at or before list level
       if (!list_section.empty() && indent <= list_indent) {
         list_section.clear();
