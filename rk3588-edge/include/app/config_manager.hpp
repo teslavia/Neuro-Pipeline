@@ -5,15 +5,18 @@
 #include <iostream>
 #include <map>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace app {
 
 /**
- * @brief Simple YAML-subset config parser (section: + key: value).
+ * @brief Simple YAML-subset config parser with nested section + list support.
  *
- * No yaml-cpp dependency. Supports flat sections with string values.
- * Also supports list items (lines starting with "- ") under a section,
- * producing indexed keys like "cameras.0.device", "cameras.1.device".
+ * No yaml-cpp dependency. Supports nested sections via indentation tracking,
+ * producing dotted keys like "edge.recording.enabled". Also supports list
+ * items (lines starting with "- ") producing indexed keys like
+ * "edge.models.0.model_id".
  */
 class ConfigManager {
  public:
@@ -27,9 +30,11 @@ class ConfigManager {
     }
 
     std::string line;
-    std::string current_section;
+    // Section stack: (indent_level, section_name) pairs for nested sections
+    std::vector<std::pair<int, std::string>> section_stack;
     int list_index = -1;
     std::string list_section;
+    int list_indent = -1;
 
     while (std::getline(file, line)) {
       auto comment_pos = line.find('#');
@@ -48,34 +53,39 @@ class ConfigManager {
       // Check for list item: "- key: value"
       if (line.size() >= 2 && line[0] == '-' && line[1] == ' ') {
         if (list_section.empty()) {
-          list_section = current_section;
+          list_section = CurrentSection(section_stack);
           list_index = 0;
-        } else {
+          list_indent = indent;
+        } else if (indent <= list_indent) {
+          // Same or outer indent — new list item
           list_index++;
         }
         // Parse "- key: value" or "- value"
         std::string item = line.substr(2);
+        auto item_start = item.find_first_not_of(" \t");
+        if (item_start != std::string::npos) item = item.substr(item_start);
         auto item_colon = item.find(':');
         if (item_colon != std::string::npos) {
           std::string k = item.substr(0, item_colon);
           std::string v = (item_colon + 1 < item.size()) ? item.substr(item_colon + 1) : "";
-          auto trim = [](std::string& s) {
-            auto a = s.find_first_not_of(" \t\"");
-            auto b = s.find_last_not_of(" \t\"");
-            s = (a == std::string::npos) ? "" : s.substr(a, b - a + 1);
-          };
-          trim(k);
-          trim(v);
+          TrimValue(k);
+          TrimValue(v);
           std::string full_key = list_section + "." + std::to_string(list_index) + "." + k;
           config_[full_key] = v;
         }
         continue;
       }
 
-      // Not a list item — reset list tracking if indent is at section level
-      if (indent == 0 || (indent <= 2 && !line.empty() && line[0] != '-')) {
+      // Not a list item — reset list tracking if indent is at or before list level
+      if (!list_section.empty() && indent <= list_indent) {
         list_section.clear();
         list_index = -1;
+        list_indent = -1;
+      }
+
+      // Pop section stack to match current indent level
+      while (!section_stack.empty() && section_stack.back().first >= indent) {
+        section_stack.pop_back();
       }
 
       auto colon = line.find(':');
@@ -92,20 +102,15 @@ class ConfigManager {
                               raw_value[rv_start] == '"' &&
                               raw_value[rv_start + 1] == '"');
 
-      auto trim = [](std::string& s) {
-        auto a = s.find_first_not_of(" \t\"");
-        auto b = s.find_last_not_of(" \t\"");
-        s = (a == std::string::npos) ? "" : s.substr(a, b - a + 1);
-      };
-      trim(key);
-      trim(value);
+      TrimValue(key);
+      TrimValue(value);
 
       if (value.empty() && !is_quoted_empty) {
-        current_section = key;
+        // Section header — push onto stack
+        section_stack.push_back({indent, key});
       } else {
-        std::string full_key = current_section.empty()
-                                   ? key
-                                   : current_section + "." + key;
+        std::string section = CurrentSection(section_stack);
+        std::string full_key = section.empty() ? key : section + "." + key;
         config_[full_key] = value;
       }
     }
@@ -148,6 +153,22 @@ class ConfigManager {
   }
 
  private:
+  static void TrimValue(std::string& s) {
+    auto a = s.find_first_not_of(" \t\"");
+    auto b = s.find_last_not_of(" \t\"");
+    s = (a == std::string::npos) ? "" : s.substr(a, b - a + 1);
+  }
+
+  static std::string CurrentSection(
+      const std::vector<std::pair<int, std::string>>& stack) {
+    std::string result;
+    for (const auto& p : stack) {
+      if (!result.empty()) result += ".";
+      result += p.second;
+    }
+    return result;
+  }
+
   std::map<std::string, std::string> config_;
 };
 

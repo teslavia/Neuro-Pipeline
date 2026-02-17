@@ -8,7 +8,7 @@
 set -euo pipefail
 
 EDGE_HOST="${1:-192.168.1.70}"
-GRPC_SERVER="${2:-192.168.1.100:50051}"
+GRPC_SERVER="${2:-localhost:50051}"  # Central server (Mac Mini)
 DURATION="${3:-30}"
 MODELS=("yolov5s" "yolov5m" "yolov8s")
 LOG_DIR="/tmp/neuro-benchmark-$(date +%Y%m%d-%H%M%S)"
@@ -25,11 +25,11 @@ switch_model() {
   echo "[switch] → $model_id"
 
   # Send SWITCH_MODEL_VARIANT via gRPC
-  # Using python helper since grpcurl may not be available
+  local gen_path
+  gen_path="$(cd "$(dirname "$0")/../mac-central/src/generated" 2>/dev/null && pwd)"
   python3 -c "
-import grpc
-import sys
-sys.path.insert(0, '$(dirname "$0")/../mac-central/src/generated')
+import grpc, sys
+sys.path.insert(0, '$gen_path')
 import neuro_pipeline_pb2 as pb
 import neuro_pipeline_pb2_grpc as pb_grpc
 
@@ -41,11 +41,11 @@ cmd = pb.ControlCommand(
 )
 try:
     stub.SendControlCommand(cmd, timeout=5)
-    print(f'  Switched to {\"$model_id\"}')
+    print('  Switched to $model_id')
 except Exception as e:
     print(f'  Switch failed: {e}')
 channel.close()
-" 2>/dev/null || echo "  [warn] gRPC switch failed, trying SSH fallback..."
+" 2>/dev/null || echo "  [warn] gRPC switch failed"
 }
 
 collect_metrics() {
@@ -59,23 +59,36 @@ collect_metrics() {
     > "$log_file" 2>&1 &
   local pid=$!
 
+  # Sample NPU load periodically
+  ssh "rock@$EDGE_HOST" \
+    "for i in \$(seq 1 $((DURATION/5))); do cat /sys/kernel/debug/rknpu/load 2>/dev/null; sleep 5; done" \
+    > "$LOG_DIR/${model_id}_npu.log" 2>&1 &
+  local npu_pid=$!
+
   sleep "$DURATION"
-  kill "$pid" 2>/dev/null || true
-  wait "$pid" 2>/dev/null || true
+  kill "$pid" "$npu_pid" 2>/dev/null || true
+  wait "$pid" "$npu_pid" 2>/dev/null || true
 
-  # Parse metrics
-  local detections=$(grep -c "detections" "$log_file" 2>/dev/null || echo 0)
-  local avg_conf=$(grep -oP 'confidence[=:]\s*\K[0-9.]+' "$log_file" 2>/dev/null | \
+  # Parse metrics from edge logs
+  local detections avg_conf avg_latency
+  detections=$(grep -c "detections" "$log_file" 2>/dev/null || echo 0)
+  avg_conf=$(grep -Eo 'confidence[=:][[:space:]]*[0-9.]+' "$log_file" 2>/dev/null | \
+    grep -Eo '[0-9.]+$' | \
     awk '{s+=$1; n++} END {if(n>0) printf "%.1f", s/n*100; else print "N/A"}')
-  local avg_latency=$(grep -oP 'latency[=:]\s*\K[0-9.]+' "$log_file" 2>/dev/null | \
+  avg_latency=$(grep -Eo 'latency[=:][[:space:]]*[0-9.]+' "$log_file" 2>/dev/null | \
+    grep -Eo '[0-9.]+$' | \
     awk '{s+=$1; n++} END {if(n>0) printf "%.1f", s/n; else print "N/A"}')
+  local avg_npu
+  avg_npu=$(grep -Eo 'Core0:[[:space:]]*[0-9]+' "$LOG_DIR/${model_id}_npu.log" 2>/dev/null | \
+    grep -Eo '[0-9]+$' | \
+    awk '{s+=$1; n++} END {if(n>0) printf "%.0f", s/n; else print "N/A"}')
 
-  echo "  Detections: $detections | Avg confidence: ${avg_conf}% | Avg latency: ${avg_latency}ms"
-  echo "$model_id,$detections,$avg_conf,$avg_latency" >> "$LOG_DIR/summary.csv"
+  echo "  Detections: $detections | Confidence: ${avg_conf}% | Latency: ${avg_latency}ms | NPU: ${avg_npu}%"
+  echo "$model_id,$detections,$avg_conf,$avg_latency,$avg_npu" >> "$LOG_DIR/summary.csv"
 }
 
 # Header
-echo "model,detections,avg_confidence_pct,avg_latency_ms" > "$LOG_DIR/summary.csv"
+echo "model,detections,avg_confidence_pct,avg_latency_ms,avg_npu_pct" > "$LOG_DIR/summary.csv"
 
 for model in "${MODELS[@]}"; do
   echo ""

@@ -165,6 +165,8 @@ class RKNNEngine::Impl {
     }
   }
 
+  uint32_t NumOutputs() const { return n_output_; }
+
  private:
   Config config_;
   rknn_context ctx_;
@@ -202,6 +204,7 @@ class RKNNEngine::Impl {
     input_width_ = 640;
     input_height_ = 640;
     input_channels_ = 3;
+    n_output_ = 3;  // Mock simulates YOLOv5s (3 output heads)
 
     std::cout << "[RKNN-Mock] Model loaded (simulated YOLOv5s)" << std::endl;
     return true;
@@ -256,11 +259,14 @@ class RKNNEngine::Impl {
     // No-op in mock mode
   }
 
+  uint32_t NumOutputs() const { return n_output_; }
+
  private:
   Config config_;
   uint32_t input_width_ = 0;
   uint32_t input_height_ = 0;
   uint32_t input_channels_ = 0;
+  uint32_t n_output_ = 0;
   uint64_t frame_count_ = 0;
 };
 
@@ -277,7 +283,7 @@ RKNNEngine::~RKNNEngine() = default;
 
 bool RKNNEngine::Initialize() {
   if (!impl_->Initialize()) return false;
-  // Copy dimensions from impl (set during Initialize)
+  n_outputs_ = impl_->NumOutputs();
   return true;
 }
 

@@ -42,6 +42,9 @@ class RKNNEngine {
   /// Get output tensor data after inference.
   const std::vector<std::vector<float>>& GetOutputs() const { return outputs_; }
 
+  /// Get number of output tensors (available after Initialize; 3=YOLOv5, 9=YOLOv8).
+  uint32_t NumOutputs() const { return n_outputs_; }
+
   /// Get model input dimensions.
   uint32_t InputWidth() const { return input_width_; }
   uint32_t InputHeight() const { return input_height_; }
@@ -56,6 +59,7 @@ class RKNNEngine {
   uint32_t input_width_ = 0;
   uint32_t input_height_ = 0;
   uint32_t input_channels_ = 0;
+  uint32_t n_outputs_ = 0;
   std::vector<std::vector<float>> outputs_;
 };
 

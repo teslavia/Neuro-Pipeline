@@ -12,15 +12,23 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 OUTPUT_DIR="${1:-$REPO_DIR/models}"
-RKSDK_DIR="${RKSDK_DIR:-/Volumes/TMAC/Satoshi/DEV/mac/github/RKSDK}"
+RKSDK_DIR="${RKSDK_DIR:-}"
+# Auto-detect RKSDK location
+if [[ -z "$RKSDK_DIR" ]]; then
+  if [[ -d "/home/rock/sdcard/github/RKSDK" ]]; then
+    RKSDK_DIR="/home/rock/sdcard/github/RKSDK"
+  elif [[ -d "/Volumes/TMAC/Satoshi/DEV/mac/github/RKSDK" ]]; then
+    RKSDK_DIR="/Volumes/TMAC/Satoshi/DEV/mac/github/RKSDK"
+  fi
+fi
 RKNN_ZOO="$RKSDK_DIR/rknn_model_zoo"
 TARGET_PLATFORM="rk3588"
 
 mkdir -p "$OUTPUT_DIR"
 
-# Airockchip optimized ONNX models (pre-quantization friendly)
-YOLOV5M_ONNX_URL="https://ftp.space.rockchip.com/rknn/rknn-toolkit2/models/CV/object_detection/yolo/yolov5m_relu_tk2_RK3588_i8.onnx"
-YOLOV8S_ONNX_URL="https://ftp.space.rockchip.com/rknn/rknn-toolkit2/models/CV/object_detection/yolo/yolov8s_tk2_RK3588_i8.onnx"
+# Rockchip model zoo ONNX models (optimized for RKNN conversion)
+YOLOV5M_ONNX_URL="https://ftrg.zbox.filez.com/v2/delivery/data/95f00b0fc900458ba134f8b180b3f7a1/examples/yolov5/yolov5m.onnx"
+YOLOV8S_ONNX_URL="https://ftrg.zbox.filez.com/v2/delivery/data/95f00b0fc900458ba134f8b180b3f7a1/examples/yolov8/yolov8s.onnx"
 
 echo "=== YOLOv5m + YOLOv8s → RKNN Conversion ==="
 echo "Output: $OUTPUT_DIR"
@@ -64,11 +72,13 @@ convert_model() {
     return $?
   fi
 
-  # Method 2: Use RKSDK model zoo convert.py
-  if [[ -d "$RKNN_ZOO/examples/$model_type/python" ]]; then
+  # Method 2: Use RKSDK model zoo convert.py (needs absolute paths since we cd)
+  if [[ -n "$RKSDK_DIR" && -d "$RKNN_ZOO/examples/$model_type/python" ]]; then
     echo "[info] Using RKSDK model zoo converter"
-    cd "$RKNN_ZOO/examples/$model_type/python"
-    python3 convert.py "$onnx" "$TARGET_PLATFORM" i8 "$output"
+    local abs_onnx abs_output
+    abs_onnx="$(cd "$(dirname "$onnx")" && pwd)/$(basename "$onnx")"
+    abs_output="$(cd "$(dirname "$output")" && pwd)/$(basename "$output")"
+    (cd "$RKNN_ZOO/examples/$model_type/python" && python3 convert.py "$abs_onnx" "$TARGET_PLATFORM" i8 "$abs_output")
     return $?
   fi
 
