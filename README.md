@@ -6,9 +6,9 @@
 
 <p align="center">
   <a href="https://github.com/teslavia/Neuro-Pipeline/actions"><img src="https://github.com/teslavia/Neuro-Pipeline/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <img src="https://img.shields.io/badge/version-1.3.0-green.svg" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.0.0-green.svg" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License">
-  <img src="https://img.shields.io/badge/tests-250_Python-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-522+-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/C%2B%2B-17-00599C.svg?logo=cplusplus&logoColor=white" alt="C++17">
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?logo=python&logoColor=white" alt="Python">
 </p>
@@ -30,7 +30,7 @@ Camera --> V4L2 --> MPP --> RGA --> RKNN NPU --> gRPC --> MLX VLM --> Alert
 | | 边缘端 (RK3588) | 中心端 (Mac Mini) |
 |---|---|---|
 | **硬件** | 6 TOPS NPU, 8 核 ARM | Apple Silicon 统一内存 |
-| **AI 模型** | YOLOv5 INT8 (8.5 MB) | Llama-3.2-3B 4-bit (1.7 GB) |
+| **AI 模型** | YOLOv5/v8 INT8 (8–21 MB) | Llama-3.2-3B 4-bit (1.7 GB) |
 | **框架** | RKNN SDK 2.0 | MLX + mlx-vlm |
 | **语言** | C++17 / CMake | Python 3.10+ / asyncio |
 | **延迟** | 20.3 ms 推理 | 326 ms – 1.9 s VLM |
@@ -38,20 +38,22 @@ Camera --> V4L2 --> MPP --> RGA --> RKNN NPU --> gRPC --> MLX VLM --> Alert
 
 **核心能力：**
 - **零拷贝 DMA-BUF 管线** — V4L2 → MPP → RGA → RKNN，全程无 CPU 内存拷贝
+- **多模型热切换** — YOLOv5s/v5m/v8s 动态切换，NPU 三核独立加载，gRPC 远程触发
+- **时序跟踪 + 行为分析** — IoU 匹配跨帧追踪，自动检测徘徊/奔跑/逗留行为
+- **自适应帧率** — 根据检测密度动态调节 5–30 FPS，空闲时降频省电
 - **事件驱动上报** — 节省 96% 带宽，仅上传关键检测结果
 - **双模态 VLM** — 纯文本 LLM 或视觉语言多模态推理 (Qwen2-VL)
+- **推理链 + RAG** — 三步推理（观察→推理→验证）+ 历史上下文检索增强
+- **模型生命周期管理** — 部署/卸载/回滚/A-B 测试，gRPC ManageModel RPC
+- **时序分析引擎** — 指标写入/查询/聚合，支持 FPS/延迟/检测数等维度
+- **异常基线检测** — Z-score 异常检测，自动学习历史基线
 - **mTLS gRPC** — 双向流式通信 + 双向 TLS 认证
-- **可观测性** — Prometheus 指标、健康探针、熔断器、告警路由
+- **RTSP 视频源** — 支持网络摄像机输入 (RTSP over TCP/UDP)
+- **视频录制** — 关键事件触发录制，支持环形缓冲区预录
+- **可观测性** — Prometheus 指标、健康探针、熔断器、告警路由、OTel 追踪
 - **SQLite 持久化** — 检测历史重启不丢失，原子备份，7 天自动清理
 - **Web 仪表盘** — FastAPI + htmx + WebSocket 实时监控，HTTP Basic Auth 认证
-- **多摄像头 + 多边缘** — 单中心管理多设备，多摄像头并行推理
-- **VLM 批量推理** — 累积批处理 + 多轮对话上下文
-- **云存储集成** — S3/MinIO 异步上传，分布式追踪 (OTel)
 - **安全加固** — gRPC 令牌桶限流、Protobuf 输入校验、审计日志
-- **RTSP 输入** — 支持网络摄像头 RTSP URL 接入
-- **视频录制** — 事件触发录制 + 环形缓冲区
-- **NPU 三核调度** — 按摄像头轮询分配 NPU 核心
-- **优雅关闭** — VLM 队列排空 + 可配置超时
 
 ## 架构
 
@@ -63,8 +65,8 @@ Camera --> V4L2 --> MPP --> RGA --> RKNN NPU --> gRPC --> MLX VLM --> Alert
 |  +------------------------+  |  commands, VLM results  |  +------------------------+  |
 |  | L5  Pipeline Coord     |  |                         |  | L5  Orchestrator       |  |
 |  | L4  gRPC Client        |  |                         |  | L4  gRPC Server        |  |
-|  | L3  RKNN NPU + YOLO    |  |                         |  | L3  MLX LLM / VLM      |  |
-|  | L2  Zero-Copy Buffers  |  |                         |  | L2  SQLite + Metrics   |  |
+|  | L3  Multi-Model NPU    |  |                         |  | L3  MLX LLM / VLM      |  |
+|  | L2  Tracker + Cache    |  |                         |  | L2  Analytics + Store  |  |
 |  | L1  V4L2 / MPP / RGA   |  |                         |  | L1  Apple Silicon UMA  |  |
 |  +------------------------+  |                         |  +------------------------+  |
 +------------------------------+                         +------------------------------+
@@ -107,6 +109,14 @@ Total           35.1 ms  (~28.5 FPS)
 | 边缘内存 (RSS) | < 512 MB | ~280 MB | ✅ |
 | 中心 VLM 吞吐 | — | ~100 tok/s | ✅ |
 | MLX 模型加载 | < 3 s | 755 ms | ✅ |
+
+### 多模型对比 (RK3588 NPU Core 0, 1080p → 640×640)
+
+| 模型 | 帧数/30s | 检测数 | Person 平均置信度 | Person 范围 | 其他类别 |
+|------|----------|--------|-------------------|-------------|----------|
+| YOLOv5s (8.5 MB) | 57 | 65 | 71.6% | 51.0–78.9% | book |
+| YOLOv5m (21 MB) | 23 | 24 | 90.6% | 89.2–92.7% | bed |
+| YOLOv8s (13 MB) | 26 | 26 | 85.0% | 83.2–87.4% | bed, tie, toothbrush |
 
 ## 快速开始
 
@@ -156,20 +166,23 @@ neuro-pipeline/
 ├── rk3588-edge/                   # 边缘端 (C++17)
 │   ├── src/
 │   │   ├── hal/                   #   V4L2, MPP, RGA, DRM, RTSP
-│   │   ├── ai_inference/          #   RKNN, YOLO, NPU 调度器
-│   │   ├── data_processing/       #   zero-copy buffer, pool
+│   │   ├── ai_inference/          #   RKNN, YOLOv5/v8, 多模型管理/调度
+│   │   ├── data_processing/       #   zero-copy buffer, pool, 时序跟踪, 检测缓存
 │   │   ├── communication/         #   gRPC client
-│   │   └── app/                   #   pipeline coordinator, 录制器
-│   ├── tests/                     #   GoogleTest (146 tests)
+│   │   └── app/                   #   pipeline coordinator, 自适应帧率, 录制器
+│   ├── tests/                     #   GoogleTest (211 tests)
 │   └── cmake/                     #   aarch64 toolchain
 ├── mac-central/                   # 中心端 (Python)
 │   ├── src/
 │   │   ├── communication/         #   gRPC async server, 限流器
-│   │   ├── llm_vlm/               #   MLX LLM/VLM engine
-│   │   ├── application_logic/     #   orchestrator, breaker
+│   │   ├── llm_vlm/               #   MLX LLM/VLM, 推理链, RAG 检索
+│   │   ├── application_logic/     #   orchestrator, 行为分析, 异常基线
+│   │   ├── model_management/      #   模型注册表, A/B 测试
+│   │   ├── analytics/             #   时序引擎, 自动标注, ReID
+│   │   ├── reporting/             #   报告生成器
 │   │   ├── storage/               #   SQLite, cloud storage
 │   │   └── observability/         #   metrics, tracing, alerting
-│   └── tests/                     #   pytest (247 tests: 209 unit + 38 e2e/chaos)
+│   └── tests/                     #   pytest (311 tests: 250 unit + 61 e2e/chaos)
 ├── proto/                         # Protobuf definitions
 ├── extensions/
 │   ├── dashboard/                 # FastAPI + htmx UI
@@ -183,16 +196,16 @@ neuro-pipeline/
 │   ├── certs/                     #   mTLS cert gen
 │   └── services/                  #   systemd + launchd
 ├── config.yaml                    # unified config
-└── VERSION.json                   # v1.3.0
+└── VERSION.json                   # v2.0.0
 ```
 
 ## 测试覆盖
 
 | 组件 | 框架 | 测试数 | 说明 |
 |------|------|--------|------|
-| C++ 边缘端 (Mock HAL) | GoogleTest | 146 | buffer, pool, thread, HAL, YOLO, gRPC |
-| Python 中心端 | pytest | 250 | 212 unit + 38 e2e/chaos (8 skipped) |
-| 合计 | — | 396+ | 跨编译 mock ON/OFF 均通过 |
+| C++ 边缘端 (Mock HAL) | GoogleTest | 211 | buffer, pool, HAL, YOLOv5/v8, 多模型, 跟踪器, 自适应帧率 |
+| Python 中心端 | pytest | 311 | 限流, 健康检查, 熔断器, 输入校验, 指标, 追踪, 行为分析, RAG |
+| 合计 | — | 522+ | 跨编译 mock ON/OFF 均通过 |
 
 ## 技术栈
 
@@ -233,6 +246,7 @@ neuro-pipeline/
 | v1.1.0 | 规模化 + 多边缘 | Multi-camera, multi-device, VLM batch, Grafana, chaos tests |
 | v1.2.0 | 生产加固 | 异常体系、配置校验、优雅关闭、RTSP、视频录制 |
 | v1.3.0 | 安全 + 激活 | 限流、输入校验、Dashboard 认证、审计日志、死代码激活 |
+| v2.0.0 | 智能演进 | 多模型热切换 (YOLOv5/v8)、NPU 三核调度、时序跟踪 v2、动态配置 |
 
 ## 许可证
 

@@ -6,9 +6,9 @@
 
 <p align="center">
   <a href="https://github.com/teslavia/Neuro-Pipeline/actions"><img src="https://github.com/teslavia/Neuro-Pipeline/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <img src="https://img.shields.io/badge/version-1.3.0-green.svg" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.0.0-green.svg" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License">
-  <img src="https://img.shields.io/badge/tests-250_Python-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-522+-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/C%2B%2B-17-00599C.svg?logo=cplusplus&logoColor=white" alt="C++17">
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?logo=python&logoColor=white" alt="Python">
 </p>
@@ -30,28 +30,30 @@ Camera --> V4L2 --> MPP --> RGA --> RKNN NPU --> gRPC --> MLX VLM --> Alert
 | | Edge (RK3588) | Central (Mac Mini) |
 |---|---|---|
 | **Hardware** | 6 TOPS NPU, 8-core ARM | Apple Silicon UMA |
-| **AI Model** | YOLOv5 INT8 (8.5 MB) | Llama-3.2-3B 4-bit (1.7 GB) |
-| **Framework** | RKNN SDK 2.0 | MLX + mlx-vlm |
+| **AI Model** | YOLOv5/v8 INT8 (8–21 MB) | Llama-3.2-3B 4-bit (1.7 GB) |
+| **Framework** | RKNN SDK 2.0 / 3-Core | MLX + mlx-vlm |
 | **Language** | C++17 / CMake | Python 3.10+ / asyncio |
 | **Latency** | 20.3ms inference | 326ms–1.9s VLM |
-| **Throughput** | 28.5 FPS @ 1080p | ~100 tok/s |
+| **Throughput** | 28.5 FPS @ 1080p (Adaptive) | ~100 tok/s |
 
 **Key capabilities:**
 - **Zero-copy DMA-BUF pipeline** — V4L2 → MPP → RGA → RKNN, no CPU memcpy
+- **Multi-model hot switching** — YOLOv5s/v5m/v8s dynamic switching, NPU 3-core independent loading
+- **Temporal Tracking + Behavior Analysis** — IoU matching, auto-detection of loitering/running/staying
+- **Adaptive Frame Rate** — Dynamic 5–30 FPS based on density, power saving when idle
 - **Event-driven upload** — 96% bandwidth savings, only critical detections sent
-- **Dual-mode VLM** — text-only LLM or vision-language multimodal (Qwen2-VL)
-- **mTLS gRPC** — bidirectional streaming with mutual TLS authentication
+- **Dual-mode VLM** — Text-only LLM or multimodal (Qwen2-VL)
+- **Reasoning Chain + RAG** — 3-step reasoning (observe -> reason -> verify) + history retrieval
+- **Model Lifecycle Management** — Deploy/Uninstall/Rollback/A-B Test, gRPC ManageModel RPC
+- **Time-series Analytics Engine** — Metrics write/query/aggregate (FPS/Latency/Count)
+- **Anomaly Baseline** — Z-score detection, auto-learning history baseline
+- **mTLS gRPC** — Bidirectional streaming with mutual TLS authentication
+- **RTSP Source** — Network camera support (RTSP over TCP/UDP)
+- **Video Recording** — Event-triggered recording with ring buffer pre-record
 - **Observability** — Prometheus metrics, health probes, circuit breaker, alerting
-- **SQLite persistence** — detection history survives restarts, atomic backup, 7-day retention
+- **SQLite persistence** — Detection history survives restarts, atomic backup, 7-day retention
 - **Web dashboard** — FastAPI + htmx + WebSocket real-time monitoring, HTTP Basic Auth
-- **Multi-camera + Multi-edge** — single central manages multiple devices, parallel inference
-- **VLM batch inference** — accumulator with multi-turn conversation context
-- **Cloud storage** — S3/MinIO async upload, distributed tracing (OTel)
 - **Security hardening** — gRPC rate limiting, protobuf input validation, audit logging
-- **RTSP source** — network camera support via RTSP URL
-- **Video recording** — event-triggered recording with ring buffer
-- **NPU 3-core scheduling** — round-robin core assignment per camera
-- **Graceful shutdown** — VLM queue drain + configurable timeout
 
 ## Architecture
 
@@ -108,6 +110,14 @@ Total           35.1 ms  (~28.5 FPS)
 | Central VLM throughput | — | ~100 tok/s | ✅ |
 | MLX model load | < 3s | 755ms | ✅ |
 
+### Multi-model Comparison (RK3588 NPU Core 0, 1080p → 640×640)
+
+| Model | Frames/30s | Detections | Person Avg Conf | Person Range | Other Classes |
+|-------|------------|------------|-----------------|--------------|---------------|
+| YOLOv5s (8.5 MB) | 57 | 65 | 71.6% | 51.0–78.9% | book |
+| YOLOv5m (21 MB) | 23 | 24 | 90.6% | 89.2–92.7% | bed |
+| YOLOv8s (13 MB) | 26 | 26 | 85.0% | 83.2–87.4% | bed, tie, toothbrush |
+
 ## Quick Start
 
 ### Edge — Cross-compile for RK3588
@@ -156,20 +166,23 @@ neuro-pipeline/
 ├── rk3588-edge/                   # Edge device (C++17)
 │   ├── src/
 │   │   ├── hal/                   #   V4L2, MPP, RGA, DRM, RTSP (real + mock)
-│   │   ├── ai_inference/          #   RKNN engine, YOLO postprocessor, NPU scheduler
-│   │   ├── data_processing/       #   Zero-copy buffers, memory pool
+│   │   ├── ai_inference/          #   RKNN, YOLOv5/v8, Multi-model mgmt/scheduling
+│   │   ├── data_processing/       #   Zero-copy buffers, pool, temporal tracking, detection cache
 │   │   ├── communication/         #   gRPC client (streaming + bidi)
-│   │   └── app/                   #   Pipeline coordinator, video recorder
-│   ├── tests/                     #   GoogleTest (146 tests)
+│   │   └── app/                   #   Pipeline coordinator, adaptive FPS, recorder
+│   ├── tests/                     #   GoogleTest (211 tests)
 │   └── cmake/                     #   aarch64 toolchain
 ├── mac-central/                   # Central server (Python)
 │   ├── src/
 │   │   ├── communication/         #   gRPC async server, rate limiter
-│   │   ├── llm_vlm/               #   MLX LLM/VLM dual-mode engine
-│   │   ├── application_logic/     #   Orchestrator, circuit breaker
+│   │   ├── llm_vlm/               #   MLX LLM/VLM, reasoning chain, RAG retrieval
+│   │   ├── application_logic/     #   Orchestrator, behavior analysis, anomaly baseline
+│   │   ├── model_management/      #   Model registry, A/B testing
+│   │   ├── analytics/             #   Time-series engine, auto-labeling, ReID
+│   │   ├── reporting/             #   Report generator
 │   │   ├── storage/               #   SQLite persistence, cloud storage
 │   │   └── observability/         #   Metrics, tracing, alerting
-│   └── tests/                     #   pytest (247 tests: 209 unit + 38 e2e/chaos)
+│   └── tests/                     #   pytest (311 tests: 250 unit + 61 e2e/chaos)
 ├── proto/                         # Protobuf service definitions
 ├── extensions/
 │   ├── dashboard/                 # FastAPI + htmx monitoring UI
@@ -190,9 +203,9 @@ neuro-pipeline/
 
 | Component | Framework | Tests | Notes |
 |-----------|-----------|-------|-------|
-| C++ Edge (mock HAL) | GoogleTest | 146 | Buffer, pool, thread, HAL, YOLO, gRPC |
-| Python Central | pytest | 250 | 212 unit + 38 e2e/chaos (8 skipped) |
-| Total | — | 396+ | Cross-compile mock ON/OFF both pass |
+| C++ Edge (Mock HAL) | GoogleTest | 211 | Buffer, pool, HAL, YOLOv5/v8, multi-model, tracker, adaptive FPS |
+| Python Central | pytest | 311 | Rate limiting, health, circuit breaker, input validation, metrics, tracing, behavior, RAG |
+| Total | — | 522+ | Cross-compile mock ON/OFF both pass |
 
 ## Technology Stack
 
@@ -233,6 +246,7 @@ neuro-pipeline/
 | v1.1.0 | Scale + Multi-edge | Multi-camera, multi-device, VLM batch, Grafana, chaos tests |
 | v1.2.0 | Production Hardening | Exception hierarchy, config validation, graceful shutdown, RTSP, video recording |
 | v1.3.0 | Security + Activation | Rate limiting, input validation, dashboard auth, audit logging, dead code activation |
+| v2.0.0 | Intelligence | Multi-model hot switching (YOLOv5/v8), NPU 3-core scheduling, Temporal Tracking v2, Dynamic config |
 
 ## License
 
