@@ -1,7 +1,7 @@
 # Neuro-Pipeline Architecture Design
 
-**Version**: 1.3.0
-**Date**: 2026-02-16
+**Version**: 2.2.2
+**Date**: 2026-02-18
 **Author**: Teslavia
 
 ---
@@ -44,7 +44,7 @@
 ```
 
 #### Layer 1: Hardware Abstraction (HAL)
-- **Location**: `rk3588-edge/src/hal/`, `include/rk_hal/`
+- **Location**: `rk3588-edge/src/hal/`, `include/neuro/hal/`
 - **Components**:
   - `v4l2_camera.cpp` — V4L2 视频捕获，MMAP/DMABUF 模式
   - `mpp_decoder.cpp` — Rockchip MPP 硬件视频解码
@@ -58,17 +58,20 @@
   - `zero_copy_buffer.cpp` — 统一缓冲池，DMA-BUF fd 共享
   - `memory_pool.cpp` — 固定大小内存池，可预测分配
   - `thread_pool.cpp` — 工作线程池，并行处理
-- **Key Technologies**: DMA-BUF, mmap, RAII, std::shared_ptr
+  - `temporal_tracker.cpp` — (v2) 时序对象跟踪（IoU 匹配 + track ID 分配）
+  - `detection_cache.cpp` — (v2) 检测去重缓存（IoU + TTL）
+- **Key Technologies**: DMA-BUF, mmap, RAII, std::shared_ptr, IoU 匹配
 
 #### Layer 3: AI Inference
 - **Location**: `rk3588-edge/src/ai_inference/`
 - **Components**:
   - `rknn_engine.cpp` — RKNN 模型加载、NPU 核心管理
   - `yolo_postprocess.cpp` — YOLO 输出解析、NMS、边界框解码
+  - `yolov8_postprocess.cpp` — (v2) YOLOv8 DFL 解码、anchor-free 后处理
   - `npu_scheduler.cpp` — 多核 NPU 任务调度
-- **Key Technologies**: RKNN API 2.0, INT8 量化, NMS 算法
-
-#### Layer 4: Communication
+  - `multi_model_manager.cpp` — (v2) 多模型生命周期管理
+  - `multi_model_scheduler.cpp` — (v2) NPU 三核调度（核心 0/1/2 独立加载）
+- **Key Technologies**: RKNN API 2.0, INT8 量化, NMS 算法, DFL 解码
 - **Location**: `rk3588-edge/src/communication/`
 - **Components**:
   - `grpc_client.cpp` — gRPC 客户端，含重连逻辑
@@ -83,26 +86,57 @@
   - `pipeline_coordinator.cpp` — 编排数据流穿越各层
   - `config_manager.cpp` — 配置文件解析
 
-### 2.2 Mac Mini Central Server (5 Layers)
+### 2.2 Mac Mini Central Server (5 Layers + Model Management)
 
 ```
 ┌─────────────────────────────────────────────────────┐
 │              Layer 5: Application Logic              │
 │  central_orchestrator.py / dashboard (FastAPI+htmx)  │
 ├─────────────────────────────────────────────────────┤
+│         Layer 5.5: Model Management (v2)             │
+│    model_registry.py / ab_test_manager.py            │
+├─────────────────────────────────────────────────────┤
 │              Layer 4: Communication                  │
 │         grpc_server.py / stream_handler.py            │
 ├─────────────────────────────────────────────────────┤
 │              Layer 3: AI Inference                    │
-│   mlx_llm_inference.py / prompt_generator.py          │
+│   mlx_llm_inference.py / reasoning_chain.py (v2)     │
 ├─────────────────────────────────────────────────────┤
 │              Layer 2: Data Processing                │
-│         data_converter.py / SQLite + Metrics         │
+│   behavior_analyzer.py / anomaly_baseline.py (v2)    │
+│   analytics / reporting / SQLite + Metrics           │
 ├─────────────────────────────────────────────────────┤
 │       Layer 1: OS / Hardware (Apple Silicon)          │
 │          UMA / Neural Engine / GPU                    │
 └─────────────────────────────────────────────────────┘
 ```
+
+#### Layer 5.5: Model Management (v2)
+- **Location**: `mac-central/src/model_management/`
+- **Components**:
+  - `model_registry.py` — 模型注册表，版本管理，元数据存储
+  - `ab_test_manager.py` — A/B 测试管理，流量分割，指标收集
+- **Key Technologies**: 模型版本化，流量路由，统计显著性检验
+
+#### Layer 3: AI Inference (v2 Extensions)
+- **Location**: `mac-central/src/inference/`
+- **Components**:
+  - `mlx_llm_inference.py` — MLX LLM/VLM 双模态推理引擎
+  - `reasoning_chain.py` — (v2) 三步推理链（观察→推理→验证）
+  - `rag_retriever.py` — (v2) RAG 历史上下文检索增强
+  - `prompt_generator.py` — 提示词模板管理
+- **Key Technologies**: MLX, mlx-vlm, 向量检索, 多步推理
+
+#### Layer 2: Data Processing (v2 Extensions)
+- **Location**: `mac-central/src/pipeline/`, `mac-central/src/analytics/`
+- **Components**:
+  - `behavior_analyzer.py` — (v2) 行为分析引擎（徘徊/奔跑/逗留检测）
+  - `anomaly_baseline.py` — (v2) 异常基线检测（Z-score）
+  - `timeseries_engine.py` — (v2) 时序分析引擎（指标写入/聚合/查询）
+  - `auto_annotator.py` — (v2) 自动标注器（高置信度样本收集）
+  - `reid_engine.py` — (v2) 跨摄像头重识别
+  - `report_generator.py` — (v2) 报告生成器（定时汇总）
+- **Key Technologies**: 时序聚合, 特征向量, 异常检测
 
 ---
 
@@ -510,3 +544,77 @@ RK3588 Edge                                    Mac Mini Central
 - CRITICAL log for key failures (VLM circuit open, DB errors)
 - Optional webhook POST to external systems (configurable URL)
 - Cooldown mechanism: max 1 alert per type per 5 minutes
+
+---
+
+## v2.0.0–v2.2.2 Additions
+
+### v2.0.0: Multi-Model Intelligence
+
+#### Multi-Model Dynamic Switching (Edge)
+- `MultiModelManager`: 同时加载 YOLOv5s/v5m/v8s 到 NPU 核心 0/1/2
+- `MultiModelScheduler`: NPU 三核独立调度，gRPC 远程触发热切换
+- `SWITCH_MODEL_VARIANT` command: 无需重启，毫秒级切换
+- Benchmark: YOLOv5s avg 55% confidence, YOLOv8s avg 78% confidence
+
+#### Temporal Tracker v2 (Edge)
+- `TemporalTracker`: IoU 匹配跨帧追踪，分配唯一 `track_id`
+- 支持 BoundingBox.track_id 字段传递
+- 检测缓存去重（IoU + TTL）
+
+#### Adaptive FPS Controller (Edge)
+- `AdaptiveFPSController`: 根据检测密度动态调节 5–30 FPS
+- 空闲时降频省电，检测密集时自动升频
+- 可配置 ramp_up/ramp_down 帧数阈值
+
+#### Central Intelligence Modules
+- `BehaviorAnalyzer`: 行为分析引擎（徘徊/奔跑/逗留/拥挤检测）
+- `AnomalyBaseline`: Z-score 异常检测，自动学习历史基线
+- `ReasoningChain`: 三步推理链（观察→推理→验证）
+- `RAGRetriever`: RAG 历史上下文检索增强
+
+#### Model Management Layer
+- `ModelRegistry`: 模型注册表，版本管理，元数据存储
+- `ABTestManager`: A/B 测试管理，流量分割，指标收集
+
+#### Analytics & Reporting
+- `TimeSeriesEngine`: 时序分析引擎（指标写入/聚合/查询）
+- `AutoAnnotator`: 自动标注器（高置信度样本收集）
+- `ReIDEngine`: 跨摄像头重识别
+- `ReportGenerator`: 报告生成器（定时汇总）
+
+### v2.1.0: Model Cascade + Dashboard Framework
+
+#### Model Cascade
+- 多模型级联推理：轻量模型初筛 + 重量模型精检
+- 可配置级联策略和阈值
+
+#### V2 API Modularization
+- Dashboard 重构为模块化包结构
+- 独立路由模块: status, models, config, intelligence, tracking
+- V2 REST API 端点完整实现
+
+### v2.2.0: VLM-Guided Configuration
+
+#### VLM Configuration Guidance
+- `/api/v2/vlm/guidance`: 基于历史数据生成配置建议
+- 自动检测高置信度/拥挤场景，推荐阈值调整
+- 一键应用建议到运行时配置
+
+#### New Control Commands
+- `SET_DETECTION_REGION`: VLM 引导的 ROI 更新
+- `SET_SENSITIVITY`: VLM 引导的灵敏度调整
+
+### v2.2.1: Intelligence API Real Data
+
+#### Dashboard Integration
+- V2 Intelligence API 集成真实分析数据
+- BehaviorAnalyzer, AnomalyBaseline, RAGRetriever 实时查询
+- 移除 demo 数据 fallback
+
+### v2.2.2: C++ Header Refactoring
+
+#### Namespace Unification
+- 所有 C++ 头文件统一到 `neuro::` 命名空间
+- `include/neuro/` 目录结构重组
+- HAL, data_processing, ai_inference, communication 模块头文件
