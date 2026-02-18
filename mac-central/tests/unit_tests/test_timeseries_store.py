@@ -44,13 +44,15 @@ class TestTimeSeriesStore:
 
     def test_query_sum_aggregation(self, store):
         now = time.time()
-        store.record_timeseries("edge-001", "count", 1.0, now - 5)
-        store.record_timeseries("edge-001", "count", 2.0, now - 4)
-        store.record_timeseries("edge-001", "count", 3.0, now - 3)
+        # Align to 60-second bucket to avoid cross-boundary issues
+        base = int(now // 60) * 60 + 30  # Middle of a bucket
+        store.record_timeseries("edge-001", "count", 1.0, base - 5)
+        store.record_timeseries("edge-001", "count", 2.0, base - 4)
+        store.record_timeseries("edge-001", "count", 3.0, base - 3)
 
         rows = store.query_timeseries(
             "count", device_id="edge-001",
-            start_time=now - 10, end_time=now,
+            start_time=base - 10, end_time=base + 10,
             aggregation="sum", bucket_seconds=60,
         )
         assert len(rows) == 1
