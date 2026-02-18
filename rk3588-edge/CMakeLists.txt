@@ -163,6 +163,7 @@ set(AI_INFERENCE_SOURCES
   src/ai_inference/npu_scheduler.cpp
   src/ai_inference/multi_model_manager.cpp
   src/ai_inference/multi_model_scheduler.cpp
+  src/ai_inference/model_cascade.cpp
 )
 
 set(COMMUNICATION_SOURCES

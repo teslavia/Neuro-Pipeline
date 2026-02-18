@@ -77,6 +77,18 @@ class PipelineCoordinator {
       int npu_core = -1;                     // -1 = auto
     };
     std::vector<ModelConfig> models;
+
+    // v2.1: Model cascade config (light model -> heavy model for uncertain detections)
+    struct CascadeConfig {
+      bool enabled = false;
+      std::string light_model_id;    // Fast screening model (e.g., "yolov5s")
+      std::string heavy_model_id;    // Precise analysis model (e.g., "yolov8s")
+      float min_confidence = 0.3f;   // Min confidence to consider cascade
+      float max_confidence = 0.7f;   // Below this, trigger heavy model
+      int max_cascade_per_frame = 5; // Max ROIs to process per frame
+      float roi_padding = 0.1f;      // Padding around detection for ROI
+    };
+    CascadeConfig cascade;
   };
 
   explicit PipelineCoordinator(const Config& config);
