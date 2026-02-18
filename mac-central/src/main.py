@@ -324,6 +324,10 @@ async def main():
             timeseries_engine=timeseries_engine,
             auto_annotator=auto_annotator,
             report_generator=report_generator,
+            behavior_analyzer=behavior_analyzer,
+            anomaly_baseline=anomaly_baseline,
+            reasoning_chain=reasoning_chain,
+            rag_retriever=rag_retriever,
         )
         import uvicorn
         dashboard_config = uvicorn.Config(

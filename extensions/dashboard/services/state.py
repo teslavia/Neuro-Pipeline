@@ -34,6 +34,12 @@ timeseries_engine: Any = None
 auto_annotator: Any = None
 report_generator: Any = None
 
+# v2: Intelligence modules
+behavior_analyzer: Any = None
+anomaly_baseline: Any = None
+reasoning_chain: Any = None
+rag_retriever: Any = None
+
 
 # ── Setter Functions ──────────────────────────────────────
 
@@ -103,6 +109,30 @@ def set_report_generator(generator: Any) -> None:
     report_generator = generator
 
 
+def set_behavior_analyzer(analyzer: Any) -> None:
+    """Inject a BehaviorAnalyzer for behavior event queries."""
+    global behavior_analyzer
+    behavior_analyzer = analyzer
+
+
+def set_anomaly_baseline(baseline: Any) -> None:
+    """Inject an AnomalyBaseline for anomaly scoring."""
+    global anomaly_baseline
+    anomaly_baseline = baseline
+
+
+def set_reasoning_chain(chain: Any) -> None:
+    """Inject a ReasoningChain for multi-step inference."""
+    global reasoning_chain
+    reasoning_chain = chain
+
+
+def set_rag_retriever(retriever: Any) -> None:
+    """Inject a RAGRetriever for context retrieval."""
+    global rag_retriever
+    rag_retriever = retriever
+
+
 def inject_from_central(
     *,
     detection_store: Any = None,
@@ -116,6 +146,10 @@ def inject_from_central(
     timeseries_engine: Any = None,
     auto_annotator: Any = None,
     report_generator: Any = None,
+    behavior_analyzer: Any = None,
+    anomaly_baseline: Any = None,
+    reasoning_chain: Any = None,
+    rag_retriever: Any = None,
 ) -> None:
     """One-call injection from central server process.
 
@@ -156,3 +190,11 @@ def inject_from_central(
         set_auto_annotator(auto_annotator)
     if report_generator is not None:
         set_report_generator(report_generator)
+    if behavior_analyzer is not None:
+        set_behavior_analyzer(behavior_analyzer)
+    if anomaly_baseline is not None:
+        set_anomaly_baseline(anomaly_baseline)
+    if reasoning_chain is not None:
+        set_reasoning_chain(reasoning_chain)
+    if rag_retriever is not None:
+        set_rag_retriever(rag_retriever)

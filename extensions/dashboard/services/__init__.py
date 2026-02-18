@@ -15,6 +15,10 @@ from .state import (
     timeseries_engine,
     auto_annotator,
     report_generator,
+    behavior_analyzer,
+    anomaly_baseline,
+    reasoning_chain,
+    rag_retriever,
     set_detection_store,
     set_health_checker,
     set_session_manager,
@@ -26,6 +30,10 @@ from .state import (
     set_timeseries_engine,
     set_auto_annotator,
     set_report_generator,
+    set_behavior_analyzer,
+    set_anomaly_baseline,
+    set_reasoning_chain,
+    set_rag_retriever,
     inject_from_central,
 )
 from .demo_data import (
@@ -56,10 +64,17 @@ __all__ = [
     "ab_test_manager",
     "model_registry",
     "config_path",
+    # v2: Analytics
     "reid_engine",
     "timeseries_engine",
     "auto_annotator",
     "report_generator",
+    # v2: Intelligence
+    "behavior_analyzer",
+    "anomaly_baseline",
+    "reasoning_chain",
+    "rag_retriever",
+    # Setters
     "set_detection_store",
     "set_health_checker",
     "set_session_manager",
@@ -71,6 +86,10 @@ __all__ = [
     "set_timeseries_engine",
     "set_auto_annotator",
     "set_report_generator",
+    "set_behavior_analyzer",
+    "set_anomaly_baseline",
+    "set_reasoning_chain",
+    "set_rag_retriever",
     "inject_from_central",
     # Demo data
     "get_demo_models",
