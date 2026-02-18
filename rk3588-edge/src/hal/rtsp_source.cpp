@@ -1,10 +1,10 @@
-#include "rk_hal/rtsp_source.hpp"
+#include "neuro/hal/rtsp_source.hpp"
 
 #include <cstring>
 #include <iostream>
 #include <vector>
 
-#include "common/buffer.hpp"
+#include "neuro/core/buffer.hpp"
 
 #ifndef USE_MOCK_HAL
 
@@ -12,7 +12,7 @@
 // Real RTSP implementation using FFmpeg libavformat
 // ============================================================================
 
-namespace rk_hal {
+namespace neuro::hal {
 
 class RTSPSource::Impl {
  public:
@@ -33,15 +33,15 @@ class RTSPSource::Impl {
     running_ = false;
   }
 
-  std::shared_ptr<common::Buffer> CaptureFrame() {
+  std::shared_ptr<neuro::core::Buffer> CaptureFrame() {
     if (!running_) return nullptr;
     size_t frame_size = config_.width * config_.height * 3;
-    auto buf = common::BufferFactory::CreateDMABuffer(frame_size);
+    auto buf = neuro::core::BufferFactory::CreateDMABuffer(frame_size);
     std::memset(buf->Data(), 128, buf->Size());
     return buf;
   }
 
-  void ReleaseFrame(std::shared_ptr<common::Buffer>) {}
+  void ReleaseFrame(std::shared_ptr<neuro::core::Buffer>) {}
 
  private:
   Config config_;
@@ -56,7 +56,7 @@ class RTSPSource::Impl {
 // Mock RTSP implementation (reads synthetic frames)
 // ============================================================================
 
-namespace rk_hal {
+namespace neuro::hal {
 
 class RTSPSource::Impl {
  public:
@@ -71,15 +71,15 @@ class RTSPSource::Impl {
   bool Start() { running_ = true; return true; }
   void Stop() { running_ = false; }
 
-  std::shared_ptr<common::Buffer> CaptureFrame() {
+  std::shared_ptr<neuro::core::Buffer> CaptureFrame() {
     if (!running_) return nullptr;
     size_t frame_size = config_.width * config_.height * 3;
-    auto buf = common::BufferFactory::CreateDMABuffer(frame_size);
+    auto buf = neuro::core::BufferFactory::CreateDMABuffer(frame_size);
     std::memset(buf->Data(), 64 + (frame_count_++ % 128), buf->Size());
     return buf;
   }
 
-  void ReleaseFrame(std::shared_ptr<common::Buffer>) {}
+  void ReleaseFrame(std::shared_ptr<neuro::core::Buffer>) {}
 
  private:
   Config config_;
@@ -95,7 +95,7 @@ class RTSPSource::Impl {
 // RTSPSource public API
 // ============================================================================
 
-namespace rk_hal {
+namespace neuro::hal {
 
 RTSPSource::RTSPSource(const Config& config)
     : config_(config), impl_(std::make_unique<Impl>(config)) {}
@@ -111,11 +111,11 @@ bool RTSPSource::Initialize() {
 bool RTSPSource::Start() { return impl_->Start(); }
 void RTSPSource::Stop() { impl_->Stop(); }
 
-std::shared_ptr<common::Buffer> RTSPSource::CaptureFrame() {
+std::shared_ptr<neuro::core::Buffer> RTSPSource::CaptureFrame() {
   return impl_->CaptureFrame();
 }
 
-void RTSPSource::ReleaseFrame(std::shared_ptr<common::Buffer> frame) {
+void RTSPSource::ReleaseFrame(std::shared_ptr<neuro::core::Buffer> frame) {
   impl_->ReleaseFrame(std::move(frame));
 }
 

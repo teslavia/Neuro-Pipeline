@@ -1,4 +1,4 @@
-#include "rk_hal/v4l2_camera.hpp"
+#include "neuro/hal/v4l2_camera.hpp"
 
 #include <chrono>
 #include <cstring>
@@ -18,12 +18,12 @@
 
 #include <linux/videodev2.h>
 
-namespace rk_hal {
+namespace neuro::hal {
 
 namespace {
 
 /// Buffer wrapping a V4L2 MMAP buffer.
-class V4L2MmapBuffer : public common::Buffer {
+class V4L2MmapBuffer : public neuro::core::Buffer {
  public:
   V4L2MmapBuffer(void* data, size_t size, uint32_t index)
       : data_(data), size_(size), index_(index), metadata_{} {}
@@ -176,7 +176,7 @@ class V4L2Camera::Impl {
     return true;
   }
 
-  std::shared_ptr<common::Buffer> CaptureFrame() {
+  std::shared_ptr<neuro::core::Buffer> CaptureFrame() {
     if (!streaming_) return nullptr;
 
     // Poll with 2-second timeout
@@ -199,7 +199,7 @@ class V4L2Camera::Impl {
     auto frame = std::make_shared<V4L2MmapBuffer>(
         mmap_buffers_[buf.index].start, buf.bytesused, buf.index);
 
-    common::Buffer::Metadata meta;
+    neuro::core::Buffer::Metadata meta;
     meta.width = actual_width_;
     meta.height = actual_height_;
     meta.stride = actual_width_;  // NV12 Y-plane stride
@@ -211,7 +211,7 @@ class V4L2Camera::Impl {
     return frame;
   }
 
-  void ReleaseFrame(std::shared_ptr<common::Buffer> buffer) {
+  void ReleaseFrame(std::shared_ptr<neuro::core::Buffer> buffer) {
     auto* v4l2_buf = dynamic_cast<V4L2MmapBuffer*>(buffer.get());
     if (!v4l2_buf) return;
 
@@ -253,11 +253,11 @@ class V4L2Camera::Impl {
 // ============================================================================
 // Mock V4L2 implementation (generates synthetic NV12 frames)
 // ============================================================================
-namespace rk_hal {
+namespace neuro::hal {
 
 namespace {
 
-class MockFrameBuffer : public common::Buffer {
+class MockFrameBuffer : public neuro::core::Buffer {
  public:
   MockFrameBuffer(size_t size) : data_(size), metadata_{} {}
 
@@ -296,7 +296,7 @@ class V4L2Camera::Impl {
     return true;
   }
 
-  std::shared_ptr<common::Buffer> CaptureFrame() {
+  std::shared_ptr<neuro::core::Buffer> CaptureFrame() {
     if (!streaming_) return nullptr;
 
     auto frame = std::make_shared<MockFrameBuffer>(frame_size_);
@@ -314,7 +314,7 @@ class V4L2Camera::Impl {
     // UV plane: neutral gray (128)
     std::memset(data.data() + y_size, 128, y_size / 2);
 
-    common::Buffer::Metadata meta;
+    neuro::core::Buffer::Metadata meta;
     meta.width = config_.width;
     meta.height = config_.height;
     meta.stride = config_.width;
@@ -327,7 +327,7 @@ class V4L2Camera::Impl {
     return frame;
   }
 
-  void ReleaseFrame(std::shared_ptr<common::Buffer> /*buffer*/) {}
+  void ReleaseFrame(std::shared_ptr<neuro::core::Buffer> /*buffer*/) {}
 
   void Stop() {
     streaming_ = false;
@@ -345,7 +345,7 @@ class V4L2Camera::Impl {
 
 #endif  // USE_MOCK_HAL
 
-namespace rk_hal {
+namespace neuro::hal {
 
 V4L2Camera::V4L2Camera(const Config& config)
     : impl_(std::make_unique<Impl>(config)), config_(config) {}
@@ -357,11 +357,11 @@ V4L2Camera& V4L2Camera::operator=(V4L2Camera&&) noexcept = default;
 bool V4L2Camera::Initialize() { return impl_->Initialize(); }
 bool V4L2Camera::Start() { return impl_->Start(); }
 
-std::shared_ptr<common::Buffer> V4L2Camera::CaptureFrame() {
+std::shared_ptr<neuro::core::Buffer> V4L2Camera::CaptureFrame() {
   return impl_->CaptureFrame();
 }
 
-void V4L2Camera::ReleaseFrame(std::shared_ptr<common::Buffer> buffer) {
+void V4L2Camera::ReleaseFrame(std::shared_ptr<neuro::core::Buffer> buffer) {
   impl_->ReleaseFrame(std::move(buffer));
 }
 

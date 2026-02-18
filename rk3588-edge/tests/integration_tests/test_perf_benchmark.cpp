@@ -1,9 +1,9 @@
 #include <gtest/gtest.h>
 #include <chrono>
 #include <thread>
-#include "common/pipeline_coordinator.hpp"
+#include "neuro/app/pipeline_coordinator.hpp"
 
-using namespace app;
+using namespace neuro::app;
 
 #ifndef USE_MOCK_HAL
 TEST(PerfBenchmark, DISABLED_E2ELatency) {

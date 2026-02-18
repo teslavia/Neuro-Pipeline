@@ -1,4 +1,4 @@
-#include "rk_hal/mpp_decoder.hpp"
+#include "neuro/hal/mpp_decoder.hpp"
 
 #include <cstring>
 #include <iostream>
@@ -18,7 +18,7 @@ namespace {
 
 /// Buffer wrapping an MPP decoded frame. Holds MppFrame reference to keep
 /// the underlying buffer alive until released.
-class MPPFrameBuffer : public common::Buffer {
+class MPPFrameBuffer : public neuro::core::Buffer {
  public:
   MPPFrameBuffer(MppFrame frame, void* data, size_t size, int fd)
       : frame_(frame), data_(data), size_(size), fd_(fd), metadata_{} {}
@@ -46,7 +46,7 @@ class MPPFrameBuffer : public common::Buffer {
 
 }  // namespace
 
-namespace rk_hal {
+namespace neuro::hal {
 
 class MPPDecoder::Impl {
  public:
@@ -88,7 +88,7 @@ class MPPDecoder::Impl {
     return true;
   }
 
-  std::shared_ptr<common::Buffer> Decode(const uint8_t* data, size_t size) {
+  std::shared_ptr<neuro::core::Buffer> Decode(const uint8_t* data, size_t size) {
     if (!ctx_ || !mpi_ || !data || size == 0) return nullptr;
 
     // Create packet from input data
@@ -135,7 +135,7 @@ class MPPDecoder::Impl {
 
     auto buffer = std::make_shared<MPPFrameBuffer>(frame, ptr, buf_size, fd);
 
-    common::Buffer::Metadata meta;
+    neuro::core::Buffer::Metadata meta;
     meta.width = width;
     meta.height = height;
     meta.stride = hor_stride;
@@ -167,11 +167,11 @@ class MPPDecoder::Impl {
 // ============================================================================
 // Mock MPP implementation (returns synthetic NV12 frames)
 // ============================================================================
-namespace rk_hal {
+namespace neuro::hal {
 
 namespace {
 
-class MockDecodedBuffer : public common::Buffer {
+class MockDecodedBuffer : public neuro::core::Buffer {
  public:
   MockDecodedBuffer(size_t size) : data_(size), metadata_{} {}
 
@@ -202,7 +202,7 @@ class MPPDecoder::Impl {
     return true;
   }
 
-  std::shared_ptr<common::Buffer> Decode(const uint8_t* data, size_t size) {
+  std::shared_ptr<neuro::core::Buffer> Decode(const uint8_t* data, size_t size) {
     if (!data || size == 0) return nullptr;
 
     // Generate synthetic NV12 frame
@@ -224,7 +224,7 @@ class MPPDecoder::Impl {
     // UV plane: neutral
     std::memset(buf.data() + y_size, 128, y_size / 2);
 
-    common::Buffer::Metadata meta;
+    neuro::core::Buffer::Metadata meta;
     meta.width = config_.width;
     meta.height = config_.height;
     meta.stride = config_.width;
@@ -246,7 +246,7 @@ class MPPDecoder::Impl {
 
 #endif  // USE_MOCK_HAL
 
-namespace rk_hal {
+namespace neuro::hal {
 
 MPPDecoder::MPPDecoder(const Config& config)
     : impl_(std::make_unique<Impl>(config)), config_(config) {}
@@ -255,7 +255,7 @@ MPPDecoder::~MPPDecoder() = default;
 
 bool MPPDecoder::Initialize() { return impl_->Initialize(); }
 
-std::shared_ptr<common::Buffer> MPPDecoder::Decode(const uint8_t* data, size_t size) {
+std::shared_ptr<neuro::core::Buffer> MPPDecoder::Decode(const uint8_t* data, size_t size) {
   return impl_->Decode(data, size);
 }
 

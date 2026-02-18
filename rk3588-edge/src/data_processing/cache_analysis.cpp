@@ -1,10 +1,10 @@
-#include "common/cache_analysis.hpp"
+#include "neuro/pipeline/cache_analysis.hpp"
 
 #include <algorithm>
 #include <chrono>
 #include <numeric>
 
-namespace data_processing {
+namespace neuro::pipeline {
 
 uint64_t CacheAnalysis::SumRowMajor(const std::vector<uint32_t>& matrix,
                                      size_t rows, size_t cols) {

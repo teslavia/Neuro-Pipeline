@@ -1,9 +1,9 @@
-#include "common/memory_pool.hpp"
+#include "neuro/core/memory_pool.hpp"
 
 #include <cstring>
 #include <stdexcept>
 
-namespace data_processing {
+namespace neuro::core {
 
 MemoryPool::MemoryPool(size_t block_size, size_t block_count,
                        uint64_t phys_base_addr, size_t alignment)

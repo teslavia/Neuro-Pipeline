@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
-#include "common/pipeline_coordinator.hpp"
+#include "neuro/app/pipeline_coordinator.hpp"
 
-using namespace app;
+using namespace neuro::app;
 
 // --- Config defaults ---
 

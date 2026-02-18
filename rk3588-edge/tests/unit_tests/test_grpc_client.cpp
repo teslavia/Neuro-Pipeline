@@ -1,11 +1,11 @@
-#include "communication/grpc_client.hpp"
+#include "neuro/comm/grpc_client.hpp"
 #include "neuro_pipeline.pb.h"
 #include <gtest/gtest.h>
 #include <thread>
 #include <chrono>
 #include <vector>
 
-using namespace communication;
+using namespace neuro::comm;
 
 class GRPCClientTest : public ::testing::Test {
 protected:

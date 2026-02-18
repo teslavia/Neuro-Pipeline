@@ -1,13 +1,13 @@
 #include <gtest/gtest.h>
-#include "rk_hal/rtsp_source.hpp"
+#include "neuro/hal/rtsp_source.hpp"
 
 TEST(RTSPSourceTest, InitializeAndCapture) {
-  rk_hal::RTSPSource::Config cfg;
+  neuro::hal::RTSPSource::Config cfg;
   cfg.url = "rtsp://192.168.1.100:8554/stream";
   cfg.width = 640;
   cfg.height = 480;
 
-  rk_hal::RTSPSource source(cfg);
+  neuro::hal::RTSPSource source(cfg);
   EXPECT_TRUE(source.Initialize());
   EXPECT_TRUE(source.IsOpen());
   EXPECT_TRUE(source.Start());
@@ -21,12 +21,12 @@ TEST(RTSPSourceTest, InitializeAndCapture) {
 }
 
 TEST(RTSPSourceTest, CaptureWithoutStart) {
-  rk_hal::RTSPSource::Config cfg;
+  neuro::hal::RTSPSource::Config cfg;
   cfg.url = "rtsp://localhost/test";
   cfg.width = 320;
   cfg.height = 240;
 
-  rk_hal::RTSPSource source(cfg);
+  neuro::hal::RTSPSource source(cfg);
   EXPECT_TRUE(source.Initialize());
   // Don't call Start()
   auto frame = source.CaptureFrame();
@@ -34,23 +34,23 @@ TEST(RTSPSourceTest, CaptureWithoutStart) {
 }
 
 TEST(RTSPSourceTest, Dimensions) {
-  rk_hal::RTSPSource::Config cfg;
+  neuro::hal::RTSPSource::Config cfg;
   cfg.url = "rtsp://localhost/test";
   cfg.width = 1920;
   cfg.height = 1080;
 
-  rk_hal::RTSPSource source(cfg);
+  neuro::hal::RTSPSource source(cfg);
   EXPECT_EQ(source.Width(), 1920u);
   EXPECT_EQ(source.Height(), 1080u);
 }
 
 TEST(RTSPSourceTest, MultipleFrames) {
-  rk_hal::RTSPSource::Config cfg;
+  neuro::hal::RTSPSource::Config cfg;
   cfg.url = "rtsp://localhost/test";
   cfg.width = 320;
   cfg.height = 240;
 
-  rk_hal::RTSPSource source(cfg);
+  neuro::hal::RTSPSource source(cfg);
   source.Initialize();
   source.Start();
 

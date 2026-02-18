@@ -2,11 +2,11 @@
 
 #include <cstring>
 
-#include "rk_hal/dmabuf_sim.hpp"
+#include "neuro/hal/dmabuf_sim.hpp"
 
 namespace {
 
-using rk_hal::DmaBufSim;
+using neuro::hal::DmaBufSim;
 
 // ---- Allocation ----
 

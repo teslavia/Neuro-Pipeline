@@ -3,11 +3,11 @@
 #include <numeric>
 #include <vector>
 
-#include "common/cache_analysis.hpp"
+#include "neuro/pipeline/cache_analysis.hpp"
 
 namespace {
 
-using data_processing::CacheAnalysis;
+using neuro::pipeline::CacheAnalysis;
 
 // ---- Correctness Tests ----
 

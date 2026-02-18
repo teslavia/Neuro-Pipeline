@@ -5,7 +5,7 @@
 #include <thread>
 #include <vector>
 
-#include "common/mmap_ipc.hpp"
+#include "neuro/pipeline/mmap_ipc.hpp"
 
 namespace {
 
@@ -15,17 +15,17 @@ class MmapIPCTest : public ::testing::Test {
  protected:
   void SetUp() override {
     // Clean up any leftover shared memory from previous failed tests
-    data_processing::MmapSharedMemory::Unlink(kTestShmName);
+    neuro::pipeline::MmapSharedMemory::Unlink(kTestShmName);
   }
 
   void TearDown() override {
-    data_processing::MmapSharedMemory::Unlink(kTestShmName);
+    neuro::pipeline::MmapSharedMemory::Unlink(kTestShmName);
   }
 };
 
 TEST_F(MmapIPCTest, CreateAndValidate) {
-  data_processing::MmapSharedMemory shm(
-      kTestShmName, 4096, data_processing::MmapSharedMemory::Mode::kCreate);
+  neuro::pipeline::MmapSharedMemory shm(
+      kTestShmName, 4096, neuro::pipeline::MmapSharedMemory::Mode::kCreate);
 
   EXPECT_TRUE(shm.IsValid());
   EXPECT_EQ(shm.Size(), 4096u);
@@ -34,8 +34,8 @@ TEST_F(MmapIPCTest, CreateAndValidate) {
 }
 
 TEST_F(MmapIPCTest, WriteAndReadBack) {
-  data_processing::MmapSharedMemory shm(
-      kTestShmName, 1024, data_processing::MmapSharedMemory::Mode::kCreate);
+  neuro::pipeline::MmapSharedMemory shm(
+      kTestShmName, 1024, neuro::pipeline::MmapSharedMemory::Mode::kCreate);
 
   const char* message = "Hello from mmap IPC!";
   size_t msg_len = std::strlen(message) + 1;
@@ -50,8 +50,8 @@ TEST_F(MmapIPCTest, WriteAndReadBack) {
 }
 
 TEST_F(MmapIPCTest, WriteAtOffset) {
-  data_processing::MmapSharedMemory shm(
-      kTestShmName, 256, data_processing::MmapSharedMemory::Mode::kCreate);
+  neuro::pipeline::MmapSharedMemory shm(
+      kTestShmName, 256, neuro::pipeline::MmapSharedMemory::Mode::kCreate);
 
   uint32_t val1 = 0xDEADBEEF;
   uint32_t val2 = 0xCAFEBABE;
@@ -68,8 +68,8 @@ TEST_F(MmapIPCTest, WriteAtOffset) {
 }
 
 TEST_F(MmapIPCTest, BoundaryProtection) {
-  data_processing::MmapSharedMemory shm(
-      kTestShmName, 16, data_processing::MmapSharedMemory::Mode::kCreate);
+  neuro::pipeline::MmapSharedMemory shm(
+      kTestShmName, 16, neuro::pipeline::MmapSharedMemory::Mode::kCreate);
 
   // Write more than size — should be clamped
   std::vector<uint8_t> large_data(100, 0xAA);
@@ -88,8 +88,8 @@ TEST_F(MmapIPCTest, BoundaryProtection) {
 }
 
 TEST_F(MmapIPCTest, ReadBeyondSizeReturnsZero) {
-  data_processing::MmapSharedMemory shm(
-      kTestShmName, 16, data_processing::MmapSharedMemory::Mode::kCreate);
+  neuro::pipeline::MmapSharedMemory shm(
+      kTestShmName, 16, neuro::pipeline::MmapSharedMemory::Mode::kCreate);
 
   char buf[4] = {};
   // Offset beyond size
@@ -100,8 +100,8 @@ TEST_F(MmapIPCTest, ReadBeyondSizeReturnsZero) {
 TEST_F(MmapIPCTest, CreatorConsumerSharing) {
   // Creator writes data
   {
-    data_processing::MmapSharedMemory creator(
-        kTestShmName, 256, data_processing::MmapSharedMemory::Mode::kCreate);
+    neuro::pipeline::MmapSharedMemory creator(
+        kTestShmName, 256, neuro::pipeline::MmapSharedMemory::Mode::kCreate);
 
     uint64_t frame_id = 12345;
     float confidence = 0.95f;
@@ -109,11 +109,12 @@ TEST_F(MmapIPCTest, CreatorConsumerSharing) {
     creator.Write(&confidence, sizeof(confidence), sizeof(frame_id));
 
     // Consumer opens same shared memory and reads
-    data_processing::MmapSharedMemory consumer(
-        kTestShmName, 0, data_processing::MmapSharedMemory::Mode::kOpen);
+    neuro::pipeline::MmapSharedMemory consumer(
+        kTestShmName, 0, neuro::pipeline::MmapSharedMemory::Mode::kOpen);
 
     EXPECT_TRUE(consumer.IsValid());
-    EXPECT_EQ(consumer.Size(), 256u);
+    // macOS rounds up to page size (16384), so check >= instead of ==
+    EXPECT_GE(consumer.Size(), 256u);
 
     uint64_t read_frame = 0;
     float read_conf = 0.0f;
@@ -126,8 +127,8 @@ TEST_F(MmapIPCTest, CreatorConsumerSharing) {
 }
 
 TEST_F(MmapIPCTest, DirectMemoryAccess) {
-  data_processing::MmapSharedMemory shm(
-      kTestShmName, 4096, data_processing::MmapSharedMemory::Mode::kCreate);
+  neuro::pipeline::MmapSharedMemory shm(
+      kTestShmName, 4096, neuro::pipeline::MmapSharedMemory::Mode::kCreate);
 
   // Write directly via Data() pointer
   auto* ptr = static_cast<uint8_t*>(shm.Data());
@@ -142,21 +143,21 @@ TEST_F(MmapIPCTest, DirectMemoryAccess) {
 }
 
 TEST_F(MmapIPCTest, MoveSemantics) {
-  data_processing::MmapSharedMemory shm1(
-      kTestShmName, 512, data_processing::MmapSharedMemory::Mode::kCreate);
+  neuro::pipeline::MmapSharedMemory shm1(
+      kTestShmName, 512, neuro::pipeline::MmapSharedMemory::Mode::kCreate);
 
   EXPECT_TRUE(shm1.IsValid());
 
   // Move construct
-  data_processing::MmapSharedMemory shm2(std::move(shm1));
+  neuro::pipeline::MmapSharedMemory shm2(std::move(shm1));
   EXPECT_TRUE(shm2.IsValid());
   EXPECT_FALSE(shm1.IsValid());  // NOLINT: testing moved-from state
   EXPECT_EQ(shm2.Size(), 512u);
 }
 
 TEST_F(MmapIPCTest, ConcurrentReadWrite) {
-  data_processing::MmapSharedMemory shm(
-      kTestShmName, 4096, data_processing::MmapSharedMemory::Mode::kCreate);
+  neuro::pipeline::MmapSharedMemory shm(
+      kTestShmName, 4096, neuro::pipeline::MmapSharedMemory::Mode::kCreate);
 
   auto* shared = static_cast<std::atomic<int>*>(shm.Data());
   shared->store(0);

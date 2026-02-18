@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include "common/multi_model_manager.hpp"
+#include "neuro/inference/multi_model_manager.hpp"
 
 namespace {
 
@@ -12,7 +12,7 @@ namespace {
 constexpr const char* kMockPath = "models/mock.rknn";
 
 TEST(MultiModelManagerTest, LoadAndListModels) {
-  ai_inference::MultiModelManager mgr(3);
+  neuro::inference::MultiModelManager mgr(3);
 
   EXPECT_TRUE(mgr.LoadModel("yolov5s", kMockPath, 0));
   EXPECT_TRUE(mgr.LoadModel("yolov8n", kMockPath, 1));
@@ -24,7 +24,7 @@ TEST(MultiModelManagerTest, LoadAndListModels) {
 }
 
 TEST(MultiModelManagerTest, MaxModelsLimit) {
-  ai_inference::MultiModelManager mgr(2);
+  neuro::inference::MultiModelManager mgr(2);
 
   EXPECT_TRUE(mgr.LoadModel("m1", kMockPath, 0));
   EXPECT_TRUE(mgr.LoadModel("m2", kMockPath, 1));
@@ -33,7 +33,7 @@ TEST(MultiModelManagerTest, MaxModelsLimit) {
 }
 
 TEST(MultiModelManagerTest, UnloadModel) {
-  ai_inference::MultiModelManager mgr(3);
+  neuro::inference::MultiModelManager mgr(3);
 
   EXPECT_TRUE(mgr.LoadModel("m1", kMockPath));
   EXPECT_TRUE(mgr.LoadModel("m2", kMockPath));
@@ -45,7 +45,7 @@ TEST(MultiModelManagerTest, UnloadModel) {
 }
 
 TEST(MultiModelManagerTest, SwitchActiveModel) {
-  ai_inference::MultiModelManager mgr(3);
+  neuro::inference::MultiModelManager mgr(3);
 
   mgr.LoadModel("m1", kMockPath, 0);
   mgr.LoadModel("m2", kMockPath, 1);
@@ -62,7 +62,7 @@ TEST(MultiModelManagerTest, SwitchActiveModel) {
 }
 
 TEST(MultiModelManagerTest, DuplicateModelId) {
-  ai_inference::MultiModelManager mgr(3);
+  neuro::inference::MultiModelManager mgr(3);
 
   EXPECT_TRUE(mgr.LoadModel("dup", kMockPath));
   EXPECT_FALSE(mgr.LoadModel("dup", kMockPath));

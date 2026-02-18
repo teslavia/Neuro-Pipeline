@@ -1,8 +1,8 @@
-#include "common/detection_cache.hpp"
+#include "neuro/pipeline/detection_cache.hpp"
 
 #include <algorithm>
 
-namespace data_processing {
+namespace neuro::pipeline {
 
 bool DetectionCache::IsNovel(const std::string& class_name, float confidence,
                               float x_min, float y_min,

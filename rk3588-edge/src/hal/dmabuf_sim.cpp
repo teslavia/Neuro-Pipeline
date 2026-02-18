@@ -1,6 +1,6 @@
-#include "rk_hal/dmabuf_sim.hpp"
+#include "neuro/hal/dmabuf_sim.hpp"
 
-namespace rk_hal {
+namespace neuro::hal {
 
 DmaBufSim::DmaBufSim(uint64_t phys_base)
     : phys_base_(phys_base), phys_next_(phys_base), next_fd_(100) {}

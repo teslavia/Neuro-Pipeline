@@ -4,11 +4,11 @@
 #include <string>
 #include <vector>
 
-#include "common/virtual_device_io.hpp"
+#include "neuro/pipeline/virtual_device_io.hpp"
 
 namespace {
 
-using data_processing::VirtualDeviceIO;
+using neuro::pipeline::VirtualDeviceIO;
 
 // ---- Registration ----
 

@@ -1,4 +1,4 @@
-#include "rk_hal/rga_processor.hpp"
+#include "neuro/hal/rga_processor.hpp"
 
 #include <cstring>
 #include <iostream>
@@ -12,13 +12,13 @@
 #include <rga/im2d.hpp>
 #include <rga/im2d_buffer.h>
 
-#include "rk_hal/drm_allocator.hpp"
+#include "neuro/hal/drm_allocator.hpp"
 
 namespace {
 
-class RGAOutputBuffer : public common::Buffer {
+class RGAOutputBuffer : public neuro::core::Buffer {
  public:
-  RGAOutputBuffer(std::shared_ptr<common::Buffer> backing)
+  RGAOutputBuffer(std::shared_ptr<neuro::core::Buffer> backing)
       : backing_(std::move(backing)) {}
 
   void* Data() override { return backing_->Data(); }
@@ -29,12 +29,12 @@ class RGAOutputBuffer : public common::Buffer {
   void SyncForDevice(bool for_device) override { backing_->SyncForDevice(for_device); }
 
  private:
-  std::shared_ptr<common::Buffer> backing_;
+  std::shared_ptr<neuro::core::Buffer> backing_;
 };
 
 }  // namespace
 
-namespace rk_hal {
+namespace neuro::hal {
 
 class RGAProcessor::Impl {
  public:
@@ -55,7 +55,7 @@ class RGAProcessor::Impl {
     return true;
   }
 
-  std::shared_ptr<common::Buffer> Process(std::shared_ptr<common::Buffer> input) {
+  std::shared_ptr<neuro::core::Buffer> Process(std::shared_ptr<neuro::core::Buffer> input) {
     if (!input) return nullptr;
 
     // Allocate output buffer (RGB888, dst dimensions)
@@ -110,7 +110,7 @@ class RGAProcessor::Impl {
       return nullptr;
     }
 
-    common::Buffer::Metadata meta;
+    neuro::core::Buffer::Metadata meta;
     meta.width = config_.dst_width;
     meta.height = config_.dst_height;
     meta.stride = config_.dst_width * 3;
@@ -122,8 +122,8 @@ class RGAProcessor::Impl {
     return std::make_shared<RGAOutputBuffer>(std::move(dst_buf));
   }
 
-  std::shared_ptr<common::Buffer> Resize(
-      std::shared_ptr<common::Buffer> input,
+  std::shared_ptr<neuro::core::Buffer> Resize(
+      std::shared_ptr<neuro::core::Buffer> input,
       uint32_t dst_width, uint32_t dst_height) {
     if (!input) return nullptr;
 
@@ -159,7 +159,7 @@ class RGAProcessor::Impl {
       return nullptr;
     }
 
-    common::Buffer::Metadata meta;
+    neuro::core::Buffer::Metadata meta;
     meta.width = dst_width;
     meta.height = dst_height;
     meta.stride = dst_width * bpp;
@@ -171,8 +171,8 @@ class RGAProcessor::Impl {
     return dst_buf;
   }
 
-  std::shared_ptr<common::Buffer> ConvertFormat(
-      std::shared_ptr<common::Buffer> input, uint32_t dst_format) {
+  std::shared_ptr<neuro::core::Buffer> ConvertFormat(
+      std::shared_ptr<neuro::core::Buffer> input, uint32_t dst_format) {
     if (!input) return nullptr;
 
     const auto& src_meta = input->GetMetadata();
@@ -220,7 +220,7 @@ class RGAProcessor::Impl {
       return nullptr;
     }
 
-    common::Buffer::Metadata meta = src_meta;
+    neuro::core::Buffer::Metadata meta = src_meta;
     meta.stride = src_meta.width * bpp;
     meta.format = dst_format;
     dst_buf->SetMetadata(meta);
@@ -240,11 +240,11 @@ class RGAProcessor::Impl {
 // ============================================================================
 // Mock RGA implementation (CPU software fallback)
 // ============================================================================
-namespace rk_hal {
+namespace neuro::hal {
 
 namespace {
 
-class MockRGABuffer : public common::Buffer {
+class MockRGABuffer : public neuro::core::Buffer {
  public:
   MockRGABuffer(size_t size) : data_(size), metadata_{} {}
 
@@ -319,7 +319,7 @@ class RGAProcessor::Impl {
     return true;
   }
 
-  std::shared_ptr<common::Buffer> Process(std::shared_ptr<common::Buffer> input) {
+  std::shared_ptr<neuro::core::Buffer> Process(std::shared_ptr<neuro::core::Buffer> input) {
     if (!input) return nullptr;
 
     // Step 1: NV12 → RGB888 at source resolution
@@ -335,7 +335,7 @@ class RGAProcessor::Impl {
               static_cast<uint8_t*>(output->Data()),
               config_.dst_width, config_.dst_height);
 
-    common::Buffer::Metadata meta;
+    neuro::core::Buffer::Metadata meta;
     meta.width = config_.dst_width;
     meta.height = config_.dst_height;
     meta.stride = config_.dst_width * 3;
@@ -347,8 +347,8 @@ class RGAProcessor::Impl {
     return output;
   }
 
-  std::shared_ptr<common::Buffer> Resize(
-      std::shared_ptr<common::Buffer> input,
+  std::shared_ptr<neuro::core::Buffer> Resize(
+      std::shared_ptr<neuro::core::Buffer> input,
       uint32_t dst_width, uint32_t dst_height) {
     if (!input) return nullptr;
 
@@ -359,7 +359,7 @@ class RGAProcessor::Impl {
               src_meta.width, src_meta.height,
               static_cast<uint8_t*>(output->Data()), dst_width, dst_height);
 
-    common::Buffer::Metadata meta = src_meta;
+    neuro::core::Buffer::Metadata meta = src_meta;
     meta.width = dst_width;
     meta.height = dst_height;
     meta.stride = dst_width * 3;
@@ -368,8 +368,8 @@ class RGAProcessor::Impl {
     return output;
   }
 
-  std::shared_ptr<common::Buffer> ConvertFormat(
-      std::shared_ptr<common::Buffer> input, uint32_t dst_format) {
+  std::shared_ptr<neuro::core::Buffer> ConvertFormat(
+      std::shared_ptr<neuro::core::Buffer> input, uint32_t dst_format) {
     if (!input) return nullptr;
 
     const auto& src_meta = input->GetMetadata();
@@ -379,7 +379,7 @@ class RGAProcessor::Impl {
               static_cast<uint8_t*>(output->Data()),
               src_meta.width, src_meta.height);
 
-    common::Buffer::Metadata meta = src_meta;
+    neuro::core::Buffer::Metadata meta = src_meta;
     meta.stride = src_meta.width * 3;
     meta.format = dst_format;
     output->SetMetadata(meta);
@@ -395,7 +395,7 @@ class RGAProcessor::Impl {
 
 #endif  // USE_MOCK_HAL
 
-namespace rk_hal {
+namespace neuro::hal {
 
 RGAProcessor::RGAProcessor(const Config& config)
     : impl_(std::make_unique<Impl>(config)), config_(config) {}
@@ -404,19 +404,19 @@ RGAProcessor::~RGAProcessor() = default;
 
 bool RGAProcessor::Initialize() { return impl_->Initialize(); }
 
-std::shared_ptr<common::Buffer> RGAProcessor::Process(
-    std::shared_ptr<common::Buffer> input) {
+std::shared_ptr<neuro::core::Buffer> RGAProcessor::Process(
+    std::shared_ptr<neuro::core::Buffer> input) {
   return impl_->Process(std::move(input));
 }
 
-std::shared_ptr<common::Buffer> RGAProcessor::Resize(
-    std::shared_ptr<common::Buffer> input,
+std::shared_ptr<neuro::core::Buffer> RGAProcessor::Resize(
+    std::shared_ptr<neuro::core::Buffer> input,
     uint32_t dst_width, uint32_t dst_height) {
   return impl_->Resize(std::move(input), dst_width, dst_height);
 }
 
-std::shared_ptr<common::Buffer> RGAProcessor::ConvertFormat(
-    std::shared_ptr<common::Buffer> input, uint32_t dst_format) {
+std::shared_ptr<neuro::core::Buffer> RGAProcessor::ConvertFormat(
+    std::shared_ptr<neuro::core::Buffer> input, uint32_t dst_format) {
   return impl_->ConvertFormat(std::move(input), dst_format);
 }
 

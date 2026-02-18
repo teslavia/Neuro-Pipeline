@@ -1,5 +1,5 @@
-#include "communication/grpc_client.hpp"
-#include "common/logger.hpp"
+#include "neuro/comm/grpc_client.hpp"
+#include "neuro/core/logger.hpp"
 #include <fstream>
 #include <sstream>
 #include <thread>
@@ -15,7 +15,7 @@ std::string ReadFile(const std::string& path) {
 }
 }  // namespace
 
-namespace communication {
+namespace neuro::comm {
 
 GRPCClient::GRPCClient(const Config& config) : config_(config) {}
 

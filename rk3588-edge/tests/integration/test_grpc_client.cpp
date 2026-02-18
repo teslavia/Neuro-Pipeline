@@ -1,14 +1,14 @@
-#include "communication/grpc_client.hpp"
+#include "neuro/comm/grpc_client.hpp"
 #include "neuro_pipeline.pb.h"
 #include <chrono>
 #include <iostream>
 #include <thread>
 
 int main() {
-    communication::GRPCClient::Config config;
+    neuro::comm::GRPCClient::Config config;
     config.server_address = "localhost:50051";
 
-    communication::GRPCClient client(config);
+    neuro::comm::GRPCClient client(config);
 
     std::cout << "[1/4] Connecting to server..." << std::endl;
     if (!client.Connect()) {

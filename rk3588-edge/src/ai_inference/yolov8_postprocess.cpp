@@ -1,12 +1,12 @@
-#include "common/yolov8_postprocess.hpp"
+#include "neuro/inference/yolov8_postprocess.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <fstream>
 
-#include "common/yolo_postprocess.hpp"  // Reuse NMS
+#include "neuro/inference/yolo_postprocess.hpp"  // Reuse NMS
 
-namespace ai_inference {
+namespace neuro::inference {
 
 namespace {
 constexpr int kStrides[3] = {8, 16, 32};
@@ -35,12 +35,12 @@ void YOLOv8PostProcessor::ComputeDFL(const float* tensor, int dfl_len,
   }
 }
 
-std::vector<common::DetectionBox> YOLOv8PostProcessor::Process(
+std::vector<neuro::core::DetectionBox> YOLOv8PostProcessor::Process(
     const std::vector<std::vector<float>>& raw_outputs,
     uint32_t /*original_width*/, uint32_t /*original_height*/) {
   if (raw_outputs.empty()) return {};
 
-  std::vector<common::DetectionBox> candidates;
+  std::vector<neuro::core::DetectionBox> candidates;
   const int nc = static_cast<int>(config_.num_classes);
   const int dfl_len = config_.dfl_len;
 

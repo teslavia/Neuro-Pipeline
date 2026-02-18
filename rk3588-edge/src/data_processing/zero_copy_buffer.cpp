@@ -1,9 +1,9 @@
-#include "common/buffer.hpp"
+#include "neuro/core/buffer.hpp"
 
 #include <cstring>
 #include <vector>
 
-namespace common {
+namespace neuro::core {
 
 /// Heap-backed buffer implementation (for development/testing without DMA).
 class HeapBuffer : public Buffer {
@@ -39,4 +39,4 @@ std::shared_ptr<Buffer> BufferFactory::CreateMappedBuffer(void* data, size_t siz
   return std::make_shared<HeapBuffer>(data, size);
 }
 
-}  // namespace common
+}  // namespace neuro::core

@@ -1,24 +1,24 @@
 #include <gtest/gtest.h>
 
-#include "common/adaptive_fps.hpp"
+#include "neuro/pipeline/adaptive_fps.hpp"
 
 namespace {
 
 TEST(AdaptiveFPSTest, StartsAtIdleFPS) {
-  app::AdaptiveFPSController::Config cfg;
+  neuro::pipeline::AdaptiveFPSController::Config cfg;
   cfg.idle_fps = 10;
   cfg.active_fps = 30;
-  app::AdaptiveFPSController controller(cfg);
+  neuro::pipeline::AdaptiveFPSController controller(cfg);
 
   EXPECT_EQ(controller.GetTargetFPS(), 10u);
 }
 
 TEST(AdaptiveFPSTest, RampsUpOnDetection) {
-  app::AdaptiveFPSController::Config cfg;
+  neuro::pipeline::AdaptiveFPSController::Config cfg;
   cfg.idle_fps = 10;
   cfg.active_fps = 30;
   cfg.ramp_up_frames = 1;
-  app::AdaptiveFPSController controller(cfg);
+  neuro::pipeline::AdaptiveFPSController controller(cfg);
 
   EXPECT_EQ(controller.GetTargetFPS(), 10u);
 
@@ -28,12 +28,12 @@ TEST(AdaptiveFPSTest, RampsUpOnDetection) {
 }
 
 TEST(AdaptiveFPSTest, RampsDownOnIdle) {
-  app::AdaptiveFPSController::Config cfg;
+  neuro::pipeline::AdaptiveFPSController::Config cfg;
   cfg.idle_fps = 10;
   cfg.active_fps = 30;
   cfg.ramp_up_frames = 1;
   cfg.ramp_down_frames = 10;
-  app::AdaptiveFPSController controller(cfg);
+  neuro::pipeline::AdaptiveFPSController controller(cfg);
 
   // Ramp up first
   controller.Update(5);
@@ -47,14 +47,14 @@ TEST(AdaptiveFPSTest, RampsDownOnIdle) {
 }
 
 TEST(AdaptiveFPSTest, ClampsToMinMax) {
-  app::AdaptiveFPSController::Config cfg;
+  neuro::pipeline::AdaptiveFPSController::Config cfg;
   cfg.min_fps = 5;
   cfg.max_fps = 30;
   cfg.idle_fps = 10;
   cfg.active_fps = 30;
   cfg.ramp_up_frames = 1;
   cfg.ramp_down_frames = 1;
-  app::AdaptiveFPSController controller(cfg);
+  neuro::pipeline::AdaptiveFPSController controller(cfg);
 
   // After detection, should not exceed max
   controller.Update(10);
@@ -66,11 +66,11 @@ TEST(AdaptiveFPSTest, ClampsToMinMax) {
 }
 
 TEST(AdaptiveFPSTest, ResetRestoresDefault) {
-  app::AdaptiveFPSController::Config cfg;
+  neuro::pipeline::AdaptiveFPSController::Config cfg;
   cfg.idle_fps = 10;
   cfg.active_fps = 30;
   cfg.ramp_up_frames = 1;
-  app::AdaptiveFPSController controller(cfg);
+  neuro::pipeline::AdaptiveFPSController controller(cfg);
 
   controller.Update(5);
   EXPECT_NE(controller.GetTargetFPS(), cfg.idle_fps);

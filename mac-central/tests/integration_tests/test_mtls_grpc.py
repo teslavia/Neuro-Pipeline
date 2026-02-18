@@ -60,7 +60,7 @@ async def test_insecure_health_check(insecure_server):
         neuro_pipeline_pb2.HealthCheckRequest(client_id="test-insecure")
     )
     assert resp.status == neuro_pipeline_pb2.HealthCheckResponse.SERVING
-    assert resp.version == "2.2.0"
+    assert resp.version == "2.2.1"
 
 
 # ── mTLS mode ──────────────────────────────────────────────────────────────

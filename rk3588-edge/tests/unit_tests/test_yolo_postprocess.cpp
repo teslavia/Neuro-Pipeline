@@ -3,7 +3,7 @@
 #include <cmath>
 #include <vector>
 
-#include "common/yolo_postprocess.hpp"
+#include "neuro/inference/yolo_postprocess.hpp"
 
 namespace {
 
@@ -20,69 +20,69 @@ class YOLOPostProcessTest : public ::testing::Test {
     config_.input_width = 640;
     config_.input_height = 640;
   }
-  ai_inference::YOLOPostProcessor::Config config_{};
+  neuro::inference::YOLOPostProcessor::Config config_{};
 };
 
 TEST_F(YOLOPostProcessTest, ComputeIoUIdenticalBoxes) {
-  common::DetectionBox a{0, "person", 0.9f, 0.1f, 0.1f, 0.5f, 0.5f};
-  common::DetectionBox b = a;
-  float iou = ai_inference::YOLOPostProcessor::ComputeIoU(a, b);
+  neuro::core::DetectionBox a{0, "person", 0.9f, 0.1f, 0.1f, 0.5f, 0.5f};
+  neuro::core::DetectionBox b = a;
+  float iou = neuro::inference::YOLOPostProcessor::ComputeIoU(a, b);
   EXPECT_FLOAT_EQ(iou, 1.0f);
 }
 
 TEST_F(YOLOPostProcessTest, ComputeIoUNoOverlap) {
-  common::DetectionBox a{0, "person", 0.9f, 0.0f, 0.0f, 0.3f, 0.3f};
-  common::DetectionBox b{0, "person", 0.8f, 0.5f, 0.5f, 0.8f, 0.8f};
-  float iou = ai_inference::YOLOPostProcessor::ComputeIoU(a, b);
+  neuro::core::DetectionBox a{0, "person", 0.9f, 0.0f, 0.0f, 0.3f, 0.3f};
+  neuro::core::DetectionBox b{0, "person", 0.8f, 0.5f, 0.5f, 0.8f, 0.8f};
+  float iou = neuro::inference::YOLOPostProcessor::ComputeIoU(a, b);
   EXPECT_FLOAT_EQ(iou, 0.0f);
 }
 
 TEST_F(YOLOPostProcessTest, ComputeIoUPartialOverlap) {
-  common::DetectionBox a{0, "person", 0.9f, 0.0f, 0.0f, 0.4f, 0.4f};
-  common::DetectionBox b{0, "person", 0.8f, 0.2f, 0.2f, 0.6f, 0.6f};
-  float iou = ai_inference::YOLOPostProcessor::ComputeIoU(a, b);
+  neuro::core::DetectionBox a{0, "person", 0.9f, 0.0f, 0.0f, 0.4f, 0.4f};
+  neuro::core::DetectionBox b{0, "person", 0.8f, 0.2f, 0.2f, 0.6f, 0.6f};
+  float iou = neuro::inference::YOLOPostProcessor::ComputeIoU(a, b);
   EXPECT_GT(iou, 0.0f);
   EXPECT_LT(iou, 1.0f);
 }
 
 TEST_F(YOLOPostProcessTest, NMSEmptyInput) {
-  std::vector<common::DetectionBox> boxes;
-  auto result = ai_inference::YOLOPostProcessor::NMS(boxes, 0.45f);
+  std::vector<neuro::core::DetectionBox> boxes;
+  auto result = neuro::inference::YOLOPostProcessor::NMS(boxes, 0.45f);
   EXPECT_TRUE(result.empty());
 }
 
 TEST_F(YOLOPostProcessTest, NMSSuppressesOverlapping) {
-  std::vector<common::DetectionBox> boxes = {
+  std::vector<neuro::core::DetectionBox> boxes = {
       {0, "person", 0.9f, 0.1f, 0.1f, 0.5f, 0.5f},
       {0, "person", 0.8f, 0.12f, 0.12f, 0.52f, 0.52f},
       {0, "person", 0.7f, 0.6f, 0.6f, 0.9f, 0.9f},
   };
 
-  auto result = ai_inference::YOLOPostProcessor::NMS(boxes, 0.45f);
+  auto result = neuro::inference::YOLOPostProcessor::NMS(boxes, 0.45f);
   EXPECT_EQ(result.size(), 2u);
   EXPECT_FLOAT_EQ(result[0].confidence, 0.9f);
   EXPECT_FLOAT_EQ(result[1].confidence, 0.7f);
 }
 
 TEST_F(YOLOPostProcessTest, NMSPreservesDifferentClasses) {
-  std::vector<common::DetectionBox> boxes = {
+  std::vector<neuro::core::DetectionBox> boxes = {
       {0, "person", 0.9f, 0.1f, 0.1f, 0.5f, 0.5f},
       {1, "car", 0.8f, 0.1f, 0.1f, 0.5f, 0.5f},
   };
 
-  auto result = ai_inference::YOLOPostProcessor::NMS(boxes, 0.45f);
+  auto result = neuro::inference::YOLOPostProcessor::NMS(boxes, 0.45f);
   EXPECT_EQ(result.size(), 2u);
 }
 
 TEST_F(YOLOPostProcessTest, ProcessEmptyOutputReturnsEmpty) {
-  ai_inference::YOLOPostProcessor processor(config_);
+  neuro::inference::YOLOPostProcessor processor(config_);
   std::vector<std::vector<float>> empty_outputs;
   auto result = processor.Process(empty_outputs, 1920, 1080);
   EXPECT_TRUE(result.empty());
 }
 
 TEST_F(YOLOPostProcessTest, ProcessWrongSizeOutputReturnsEmpty) {
-  ai_inference::YOLOPostProcessor processor(config_);
+  neuro::inference::YOLOPostProcessor processor(config_);
   // Wrong size tensor — should be skipped
   std::vector<std::vector<float>> bad_outputs = {{1.0f, 2.0f, 3.0f}};
   auto result = processor.Process(bad_outputs, 1920, 1080);
@@ -118,7 +118,7 @@ TEST_F(YOLOPostProcessTest, ProcessDecodesHighConfidenceDetection) {
 
   std::vector<std::vector<float>> outputs = {p3, p4, p5};
 
-  ai_inference::YOLOPostProcessor processor(config_);
+  neuro::inference::YOLOPostProcessor processor(config_);
   auto result = processor.Process(outputs, 640, 640);
 
   ASSERT_GE(result.size(), 1u);
@@ -147,7 +147,7 @@ TEST_F(YOLOPostProcessTest, ProcessFiltersLowConfidence) {
 
   std::vector<std::vector<float>> outputs = {p3, p4, p5};
 
-  ai_inference::YOLOPostProcessor processor(config_);
+  neuro::inference::YOLOPostProcessor processor(config_);
   auto result = processor.Process(outputs, 640, 640);
 
   EXPECT_TRUE(result.empty());
@@ -175,7 +175,7 @@ TEST_F(YOLOPostProcessTest, ProcessScalesToOriginalImage) {
 
   std::vector<std::vector<float>> outputs = {p3, p4, p5};
 
-  ai_inference::YOLOPostProcessor processor(config_);
+  neuro::inference::YOLOPostProcessor processor(config_);
 
   // Process with 1920×1080 original image
   auto result = processor.Process(outputs, 1920, 1080);

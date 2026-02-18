@@ -1,6 +1,6 @@
-#include "common/thread_pool.hpp"
+#include "neuro/core/thread_pool.hpp"
 
-namespace data_processing {
+namespace neuro::core {
 
 ThreadPool::ThreadPool(size_t num_threads, size_t max_queue_size)
     : max_queue_size_(max_queue_size) {

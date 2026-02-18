@@ -1,4 +1,4 @@
-#include "rk_hal/drm_allocator.hpp"
+#include "neuro/hal/drm_allocator.hpp"
 
 #include <cstring>
 #include <iostream>
@@ -70,7 +70,7 @@ struct drm_prime_handle {
 namespace {
 
 /// Buffer backed by a DRM dumb buffer with DMA-BUF export.
-class DRMBuffer : public common::Buffer {
+class DRMBuffer : public neuro::core::Buffer {
  public:
   DRMBuffer(int drm_fd, uint32_t handle, int dmabuf_fd,
             void* mapped, size_t size)
@@ -121,7 +121,7 @@ class DRMBuffer : public common::Buffer {
 
 }  // namespace
 
-namespace rk_hal {
+namespace neuro::hal {
 
 class DRMAllocator::Impl {
  public:
@@ -148,7 +148,7 @@ class DRMAllocator::Impl {
     return false;
   }
 
-  std::shared_ptr<common::Buffer> Allocate(size_t size) {
+  std::shared_ptr<neuro::core::Buffer> Allocate(size_t size) {
     if (drm_fd_ < 0) return nullptr;
 
     // Create dumb buffer
@@ -185,7 +185,7 @@ class DRMAllocator::Impl {
         drm_fd_, create.handle, prime.fd, mapped, create.size);
   }
 
-  std::shared_ptr<common::Buffer> Import(int dmabuf_fd, size_t size) {
+  std::shared_ptr<neuro::core::Buffer> Import(int dmabuf_fd, size_t size) {
     if (drm_fd_ < 0 || dmabuf_fd < 0) return nullptr;
 
     // Import DMA-BUF fd to get a GEM handle
@@ -224,14 +224,14 @@ class DRMAllocator::Impl {
 // ============================================================================
 // Mock implementation using DmaBufSim (Mac / x86 development)
 // ============================================================================
-#include "rk_hal/dmabuf_sim.hpp"
+#include "neuro/hal/dmabuf_sim.hpp"
 
 namespace {
 
 /// Mock buffer backed by DmaBufSim heap allocation.
-class MockDRMBuffer : public common::Buffer {
+class MockDRMBuffer : public neuro::core::Buffer {
  public:
-  MockDRMBuffer(rk_hal::DmaBufSim* sim, int fd, void* data, size_t size)
+  MockDRMBuffer(neuro::hal::DmaBufSim* sim, int fd, void* data, size_t size)
       : sim_(sim), fd_(fd), data_(data), size_(size), metadata_{} {}
 
   ~MockDRMBuffer() override {
@@ -248,7 +248,7 @@ class MockDRMBuffer : public common::Buffer {
   void SyncForDevice(bool /*for_device*/) override {}
 
  private:
-  rk_hal::DmaBufSim* sim_;
+  neuro::hal::DmaBufSim* sim_;
   int fd_;
   void* data_;
   size_t size_;
@@ -257,7 +257,7 @@ class MockDRMBuffer : public common::Buffer {
 
 }  // namespace
 
-namespace rk_hal {
+namespace neuro::hal {
 
 class DRMAllocator::Impl {
  public:
@@ -269,7 +269,7 @@ class DRMAllocator::Impl {
     return true;
   }
 
-  std::shared_ptr<common::Buffer> Allocate(size_t size) {
+  std::shared_ptr<neuro::core::Buffer> Allocate(size_t size) {
     int fd = sim_->Allocate(size);
     if (fd < 0) return nullptr;
     void* data = sim_->Mmap(fd);
@@ -280,7 +280,7 @@ class DRMAllocator::Impl {
     return std::make_shared<MockDRMBuffer>(sim_.get(), fd, data, size);
   }
 
-  std::shared_ptr<common::Buffer> Import(int dmabuf_fd, size_t /*size*/) {
+  std::shared_ptr<neuro::core::Buffer> Import(int dmabuf_fd, size_t /*size*/) {
     void* data = sim_->Import(dmabuf_fd);
     if (!data) return nullptr;
     auto info = sim_->GetBufferInfo(dmabuf_fd);
@@ -300,11 +300,11 @@ DRMAllocator::~DRMAllocator() = default;
 
 bool DRMAllocator::Initialize() { return impl_->Initialize(); }
 
-std::shared_ptr<common::Buffer> DRMAllocator::Allocate(size_t size) {
+std::shared_ptr<neuro::core::Buffer> DRMAllocator::Allocate(size_t size) {
   return impl_->Allocate(size);
 }
 
-std::shared_ptr<common::Buffer> DRMAllocator::Import(int dmabuf_fd, size_t size) {
+std::shared_ptr<neuro::core::Buffer> DRMAllocator::Import(int dmabuf_fd, size_t size) {
   return impl_->Import(dmabuf_fd, size);
 }
 

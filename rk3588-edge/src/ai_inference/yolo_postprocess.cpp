@@ -1,11 +1,11 @@
-#include "common/yolo_postprocess.hpp"
+#include "neuro/inference/yolo_postprocess.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <fstream>
 #include <numeric>
 
-namespace ai_inference {
+namespace neuro::inference {
 
 namespace {
 
@@ -29,12 +29,12 @@ YOLOPostProcessor::YOLOPostProcessor(const Config& config)
   LoadClassNames();
 }
 
-std::vector<common::DetectionBox> YOLOPostProcessor::Process(
+std::vector<neuro::core::DetectionBox> YOLOPostProcessor::Process(
     const std::vector<std::vector<float>>& raw_outputs,
     uint32_t original_width, uint32_t original_height) {
   if (raw_outputs.empty()) return {};
 
-  std::vector<common::DetectionBox> candidates;
+  std::vector<neuro::core::DetectionBox> candidates;
   const int nc = static_cast<int>(config_.num_classes);
   const int prop_size = 5 + nc;  // x, y, w, h, obj_conf, class_scores...
 
@@ -111,8 +111,8 @@ std::vector<common::DetectionBox> YOLOPostProcessor::Process(
   return NMS(candidates, config_.nms_threshold);
 }
 
-float YOLOPostProcessor::ComputeIoU(const common::DetectionBox& a,
-                                     const common::DetectionBox& b) {
+float YOLOPostProcessor::ComputeIoU(const neuro::core::DetectionBox& a,
+                                     const neuro::core::DetectionBox& b) {
   float x1 = std::max(a.x_min, b.x_min);
   float y1 = std::max(a.y_min, b.y_min);
   float x2 = std::min(a.x_max, b.x_max);
@@ -128,8 +128,8 @@ float YOLOPostProcessor::ComputeIoU(const common::DetectionBox& a,
   return intersection / union_area;
 }
 
-std::vector<common::DetectionBox> YOLOPostProcessor::NMS(
-    std::vector<common::DetectionBox>& boxes,
+std::vector<neuro::core::DetectionBox> YOLOPostProcessor::NMS(
+    std::vector<neuro::core::DetectionBox>& boxes,
     float nms_threshold) {
   if (boxes.empty()) return {};
 
@@ -140,7 +140,7 @@ std::vector<common::DetectionBox> YOLOPostProcessor::NMS(
             });
 
   std::vector<bool> suppressed(boxes.size(), false);
-  std::vector<common::DetectionBox> result;
+  std::vector<neuro::core::DetectionBox> result;
 
   for (size_t i = 0; i < boxes.size(); ++i) {
     if (suppressed[i]) continue;

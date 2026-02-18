@@ -1,9 +1,9 @@
-#include "common/npu_scheduler.hpp"
+#include "neuro/inference/npu_scheduler.hpp"
 
 #include <algorithm>
 #include <limits>
 
-namespace ai_inference {
+namespace neuro::inference {
 
 NPUScheduler::NPUScheduler(Strategy strategy) : strategy_(strategy) {
   for (auto& count : active_tasks_) {

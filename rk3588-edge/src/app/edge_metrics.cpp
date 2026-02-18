@@ -1,10 +1,10 @@
-#include "common/edge_metrics.hpp"
+#include "neuro/pipeline/edge_metrics.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <sstream>
 
-namespace common {
+namespace neuro::pipeline {
 
 EdgeMetrics& EdgeMetrics::Instance() {
   static EdgeMetrics instance;
