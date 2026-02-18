@@ -5,7 +5,7 @@ import pytest
 import pytest_asyncio
 from unittest.mock import AsyncMock, MagicMock
 
-from src.llm_vlm.reasoning_chain import ReasoningChain, ReasoningResult
+from src.inference.reasoning_chain import ReasoningChain, ReasoningResult
 
 
 class MockEngine:

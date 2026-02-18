@@ -5,7 +5,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from pathlib import Path
 
-from src.application_logic.central_orchestrator import (
+from src.pipeline.central_orchestrator import (
     CentralOrchestrator,
     VLMTriggerRule,
 )

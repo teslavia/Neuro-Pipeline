@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.llm_vlm.prompt_generator import PromptGenerator
+from src.inference.prompt_generator import PromptGenerator
 
 
 class TestPromptGenerator:

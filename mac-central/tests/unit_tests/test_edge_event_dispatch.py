@@ -23,7 +23,7 @@ class FakeEdgeEvent:
 @pytest.fixture
 def orchestrator():
     """Create a minimal CentralOrchestrator for testing."""
-    from application_logic.central_orchestrator import CentralOrchestrator
+    from pipeline.central_orchestrator import CentralOrchestrator
     orch = CentralOrchestrator.__new__(CentralOrchestrator)
     orch._alert_manager = None
     orch._event_count = 0
@@ -38,7 +38,7 @@ async def test_health_update_dispatches_metrics(orchestrator):
         device_id="edge-001",
         metadata={"fps": "28.5", "frames_processed": "1000"},
     )
-    with patch("application_logic.central_orchestrator.update_edge_metrics") as mock_update:
+    with patch("pipeline.central_orchestrator.update_edge_metrics") as mock_update:
         await orchestrator.handle_edge_event(event)
         mock_update.assert_called_once_with("edge-001", {"fps": "28.5", "frames_processed": "1000"})
 
@@ -76,7 +76,7 @@ async def test_unknown_event_type_no_crash(orchestrator):
 async def test_empty_metadata_handled(orchestrator):
     """Events with empty metadata should not crash."""
     event = FakeEdgeEvent(type=1, device_id="edge-004", metadata={})
-    with patch("application_logic.central_orchestrator.update_edge_metrics") as mock_update:
+    with patch("pipeline.central_orchestrator.update_edge_metrics") as mock_update:
         await orchestrator.handle_edge_event(event)
         mock_update.assert_called_once_with("edge-004", {})
 
@@ -85,6 +85,6 @@ async def test_empty_metadata_handled(orchestrator):
 async def test_missing_device_id(orchestrator):
     """Events without device_id should still dispatch."""
     event = FakeEdgeEvent(type=1, device_id="", metadata={"fps": "30"})
-    with patch("application_logic.central_orchestrator.update_edge_metrics") as mock_update:
+    with patch("pipeline.central_orchestrator.update_edge_metrics") as mock_update:
         await orchestrator.handle_edge_event(event)
         mock_update.assert_called_once_with("", {"fps": "30"})

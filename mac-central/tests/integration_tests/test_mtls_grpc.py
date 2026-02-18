@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from src.generated import neuro_pipeline_pb2, neuro_pipeline_pb2_grpc
 from src.communication.grpc_server import NeuroPipelineServer
-from src.application_logic.central_orchestrator import CentralOrchestrator
+from src.pipeline.central_orchestrator import CentralOrchestrator
 from src.config import TLSConfig
 
 

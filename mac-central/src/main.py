@@ -9,7 +9,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from src.communication.grpc_server import NeuroPipelineServer
-from src.application_logic.central_orchestrator import CentralOrchestrator, VLMTriggerRule
+from src.pipeline.central_orchestrator import CentralOrchestrator, VLMTriggerRule
 from src.communication.device_session import DeviceSessionManager
 from src.config import AppConfig
 from src.observability.circuit_breaker import CircuitBreaker
@@ -171,13 +171,13 @@ async def main():
     # v2: Behavior analyzer
     behavior_analyzer = None
     if True:  # always available, lightweight
-        from src.application_logic.behavior_analyzer import BehaviorAnalyzer
+        from src.pipeline.behavior_analyzer import BehaviorAnalyzer
         behavior_analyzer = BehaviorAnalyzer(detection_store=store)
 
     # v2: Reasoning chain
     reasoning_chain = None
     if cfg.reasoning.enabled:
-        from src.llm_vlm.reasoning_chain import ReasoningChain
+        from src.inference.reasoning_chain import ReasoningChain
         reasoning_chain = ReasoningChain(
             max_steps=cfg.reasoning.max_steps,
             timeout_per_step=cfg.reasoning.timeout_per_step,
@@ -187,7 +187,7 @@ async def main():
     # v2: RAG retriever
     rag_retriever = None
     if cfg.rag.enabled:
-        from src.llm_vlm.rag_retriever import RAGRetriever
+        from src.inference.rag_retriever import RAGRetriever
         rag_retriever = RAGRetriever(
             detection_store=store,
             max_items=cfg.rag.max_history_items,
@@ -198,7 +198,7 @@ async def main():
     # v2: Anomaly baseline
     anomaly_baseline = None
     if cfg.anomaly.enabled:
-        from src.application_logic.anomaly_baseline import AnomalyBaseline
+        from src.pipeline.anomaly_baseline import AnomalyBaseline
         anomaly_baseline = AnomalyBaseline(
             detection_store=store,
             baseline_window_hours=cfg.anomaly.baseline_window_hours,

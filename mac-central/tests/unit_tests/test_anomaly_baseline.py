@@ -5,7 +5,7 @@ import math
 import pytest
 from pathlib import Path
 
-from src.application_logic.anomaly_baseline import (
+from src.pipeline.anomaly_baseline import (
     AnomalyBaseline, BaselineStats, AnomalyScore,
 )
 from src.storage.detection_store import DetectionStore
