@@ -3,6 +3,8 @@
 This module provides foundational utilities:
 - version: Unified version management
 - exceptions: Centralized exception hierarchy
+- plugin: Extensible plugin system
+- events: Publish-subscribe event bus
 """
 
 from .version import (
@@ -21,6 +23,20 @@ from .exceptions import (
     StorageError,
     CommunicationError,
 )
+from .plugin import (
+    PluginInfo,
+    PipelinePlugin,
+    PluginManager,
+    get_plugin_manager,
+)
+from .events import (
+    Event,
+    EventType,
+    EventBus,
+    EventHandler,
+    get_event_bus,
+    reset_event_bus,
+)
 
 __all__ = [
     # Version
@@ -37,4 +53,16 @@ __all__ = [
     "InferenceError",
     "StorageError",
     "CommunicationError",
+    # Plugin
+    "PluginInfo",
+    "PipelinePlugin",
+    "PluginManager",
+    "get_plugin_manager",
+    # Events
+    "Event",
+    "EventType",
+    "EventBus",
+    "EventHandler",
+    "get_event_bus",
+    "reset_event_bus",
 ]
