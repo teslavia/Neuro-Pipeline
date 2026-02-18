@@ -76,11 +76,18 @@ class V4L2Camera::Impl {
       std::cerr << "[V4L2] QUERYCAP failed" << std::endl;
       return false;
     }
-    if (!(cap.capabilities & V4L2_CAP_VIDEO_CAPTURE)) {
-      std::cerr << "[V4L2] Device does not support capture" << std::endl;
+
+    // Use device_caps if V4L2_CAP_DEVICE_CAPS is set (kernel 3.3+)
+    __u32 caps = cap.capabilities;
+    if (caps & V4L2_CAP_DEVICE_CAPS) {
+      caps = cap.device_caps;
+    }
+
+    if (!(caps & V4L2_CAP_VIDEO_CAPTURE)) {
+      std::cerr << "[V4L2] Device does not support capture (caps=0x" << std::hex << caps << std::dec << ")" << std::endl;
       return false;
     }
-    if (!(cap.capabilities & V4L2_CAP_STREAMING)) {
+    if (!(caps & V4L2_CAP_STREAMING)) {
       std::cerr << "[V4L2] Device does not support streaming" << std::endl;
       return false;
     }
