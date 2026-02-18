@@ -237,7 +237,7 @@ async def main():
     # v2: Report generator
     report_generator = None
     if cfg.reporting.enabled:
-        from src.reporting.report_generator import ReportGenerator
+        from src.analytics.report_generator import ReportGenerator
         report_generator = ReportGenerator(
             detection_store=store,
             cloud_storage=cloud,
