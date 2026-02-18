@@ -21,7 +21,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "mac-central" / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "mac-central"))
 
-from src.application_logic.central_orchestrator import CentralOrchestrator, VLMTriggerRule
+from src.pipeline.central_orchestrator import CentralOrchestrator, VLMTriggerRule
 from src.communication.device_session import DeviceSessionManager
 from src.storage.detection_store import DetectionStore
 

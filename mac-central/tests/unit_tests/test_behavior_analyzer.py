@@ -5,7 +5,7 @@ import pytest
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from src.application_logic.behavior_analyzer import (
+from src.pipeline.behavior_analyzer import (
     BehaviorAnalyzer, BehaviorType, BehaviorEvent,
 )
 from src.storage.detection_store import DetectionStore

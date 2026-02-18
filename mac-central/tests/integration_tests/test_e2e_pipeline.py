@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from src.generated import neuro_pipeline_pb2, neuro_pipeline_pb2_grpc
 from src.communication.grpc_server import NeuroPipelineServer
-from src.application_logic.central_orchestrator import CentralOrchestrator, VLMTriggerRule
+from src.pipeline.central_orchestrator import CentralOrchestrator, VLMTriggerRule
 from src.storage.detection_store import DetectionStore
 
 
@@ -147,7 +147,8 @@ async def test_e2e_recent_events_in_memory(e2e_stack):
 @pytest.mark.asyncio
 async def test_e2e_dashboard_reads_sqlite(e2e_stack):
     """Dashboard /api/events/history returns data from the same SQLite store."""
-    from extensions.dashboard.app import app, set_detection_store
+    from extensions.dashboard.app import app
+    from extensions.dashboard.services import set_detection_store
 
     store = e2e_stack["store"]
     # Insert directly to ensure data exists

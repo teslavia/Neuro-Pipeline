@@ -179,3 +179,26 @@ anomaly:
   baseline_window_hours: 168.0
   z_score_threshold: 3.0
   min_samples: 50
+
+# v2: Cross-camera re-identification
+reid:
+  enabled: false
+  similarity_threshold: 0.85
+  time_window_seconds: 300.0
+
+# v2: Time series analysis
+timeseries:
+  enabled: false
+  aggregation_interval: 60
+
+# v2: Auto annotation
+auto_annotator:
+  enabled: false
+  min_confidence: 0.9
+  output_dir: "data/annotations"
+
+# v2: Report generation
+reporting:
+  enabled: false
+  output_dir: "data/reports"
+  schedule_hours: 24.0

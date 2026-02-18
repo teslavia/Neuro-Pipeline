@@ -13,7 +13,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "mac-central" / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "mac-central"))
 
-from src.reporting.report_generator import ReportGenerator
+from src.analytics.report_generator import ReportGenerator
 from src.analytics.timeseries_engine import TimeSeriesEngine
 from src.analytics.auto_annotator import AutoAnnotator
 from src.analytics.reid_engine import ReIDEngine

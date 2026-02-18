@@ -14,11 +14,11 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "mac-central" / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "mac-central"))
 
-from src.application_logic.central_orchestrator import CentralOrchestrator, VLMTriggerRule
-from src.application_logic.behavior_analyzer import BehaviorAnalyzer, BehaviorType
-from src.application_logic.anomaly_baseline import AnomalyBaseline
-from src.llm_vlm.reasoning_chain import ReasoningChain
-from src.llm_vlm.rag_retriever import RAGRetriever
+from src.pipeline.central_orchestrator import CentralOrchestrator, VLMTriggerRule
+from src.pipeline.behavior_analyzer import BehaviorAnalyzer, BehaviorType
+from src.pipeline.anomaly_baseline import AnomalyBaseline
+from src.inference.reasoning_chain import ReasoningChain
+from src.inference.rag_retriever import RAGRetriever
 from src.model_management.model_registry import ModelRegistry, ModelStatus
 from src.model_management.ab_test_manager import ABTestManager
 from src.storage.detection_store import DetectionStore

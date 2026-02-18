@@ -101,7 +101,8 @@ class TestDashboardHistoryAPI:
 
     @pytest.mark.asyncio
     async def test_history_endpoint_returns_sqlite_data(self, db_path):
-        from extensions.dashboard.app import app, set_detection_store
+        from extensions.dashboard.app import app
+        from extensions.dashboard.services import set_detection_store
 
         store = DetectionStore(db_path)
         store.record(_make_event(100, ts=time.time()))
@@ -123,7 +124,8 @@ class TestDashboardHistoryAPI:
 
     @pytest.mark.asyncio
     async def test_history_endpoint_no_store(self):
-        from extensions.dashboard.app import app, set_detection_store
+        from extensions.dashboard.app import app
+        from extensions.dashboard.services import set_detection_store
 
         set_detection_store(None)
         from httpx import AsyncClient, ASGITransport

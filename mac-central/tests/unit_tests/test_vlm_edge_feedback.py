@@ -4,7 +4,7 @@ import pytest
 import json
 from unittest.mock import MagicMock, AsyncMock, patch
 
-from src.application_logic.central_orchestrator import CentralOrchestrator
+from src.pipeline.central_orchestrator import CentralOrchestrator
 
 
 class TestVLMEdgeFeedback:
@@ -31,7 +31,7 @@ class TestVLMEdgeFeedback:
 
     def test_edge_config_prompt_template(self):
         """Verify edge_config_suggestion template exists and formats."""
-        from src.llm_vlm.prompt_generator import PromptGenerator, TEMPLATES
+        from src.inference.prompt_generator import PromptGenerator, TEMPLATES
         assert "edge_config_suggestion" in TEMPLATES
 
         gen = PromptGenerator()

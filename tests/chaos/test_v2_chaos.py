@@ -15,9 +15,9 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "mac-central" / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "mac-central"))
 
-from src.application_logic.anomaly_baseline import AnomalyBaseline
-from src.llm_vlm.rag_retriever import RAGRetriever
-from src.llm_vlm.reasoning_chain import ReasoningChain
+from src.pipeline.anomaly_baseline import AnomalyBaseline
+from src.inference.rag_retriever import RAGRetriever
+from src.inference.reasoning_chain import ReasoningChain
 from src.model_management.ab_test_manager import ABTestManager
 from src.analytics.reid_engine import ReIDEngine
 from src.storage.detection_store import DetectionStore

@@ -5,7 +5,7 @@ import json
 import pytest
 from pathlib import Path
 
-from src.reporting.report_generator import ReportGenerator, EventReport
+from src.analytics.report_generator import ReportGenerator, EventReport
 from src.storage.detection_store import DetectionStore
 
 

@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.llm_vlm.mlx_llm_inference import MLXInferenceEngine
+from src.inference.mlx_llm_inference import MLXInferenceEngine
 
 
 class TestBatchInference:

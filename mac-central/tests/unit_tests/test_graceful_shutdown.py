@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import pytest_asyncio
 
-from src.application_logic.central_orchestrator import CentralOrchestrator
+from src.pipeline.central_orchestrator import CentralOrchestrator
 
 
 @pytest_asyncio.fixture

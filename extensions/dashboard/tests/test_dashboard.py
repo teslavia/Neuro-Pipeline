@@ -2,20 +2,21 @@
 import pytest
 from httpx import AsyncClient, ASGITransport
 
-from extensions.dashboard.app import (
-    app, _events, set_session_manager, set_detection_store, _ws_clients,
+from extensions.dashboard.app import app
+from extensions.dashboard.services import (
+    events, ws_clients, set_session_manager, set_detection_store,
 )
 
 
 @pytest.fixture(autouse=True)
 def _reset_state():
     """Clear global state between tests."""
-    _events.clear()
-    _ws_clients.clear()
+    events.clear()
+    ws_clients.clear()
     set_session_manager(None)
     set_detection_store(None)
     yield
-    _events.clear()
+    events.clear()
 
 
 @pytest.fixture

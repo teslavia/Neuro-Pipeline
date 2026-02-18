@@ -3,7 +3,7 @@
 import pytest
 import pytest_asyncio
 from pathlib import Path
-from src.llm_vlm.mlx_llm_inference import MLXInferenceEngine
+from src.inference.mlx_llm_inference import MLXInferenceEngine
 
 try:
     import mlx_lm  # noqa: F401

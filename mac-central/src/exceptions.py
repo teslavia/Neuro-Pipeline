@@ -1,25 +1,23 @@
-"""Custom exception hierarchy for Neuro-Pipeline."""
+"""Backward-compatible exception imports.
 
+This module re-exports exceptions from src.core.exceptions for
+backward compatibility. New code should import from src.core.exceptions.
+"""
 
-class NeuroPipelineError(Exception):
-    """Base exception for all Neuro-Pipeline errors."""
+from src.core.exceptions import (
+    NeuroPipelineError,
+    ConfigError,
+    ModelLoadError,
+    InferenceError,
+    StorageError,
+    CommunicationError,
+)
 
-
-class ConfigError(NeuroPipelineError):
-    """Configuration validation or loading error."""
-
-
-class ModelLoadError(NeuroPipelineError):
-    """Model loading or initialization error."""
-
-
-class InferenceError(NeuroPipelineError):
-    """Inference execution error."""
-
-
-class StorageError(NeuroPipelineError):
-    """Database or cloud storage operation error."""
-
-
-class CommunicationError(NeuroPipelineError):
-    """gRPC or network communication error."""
+__all__ = [
+    "NeuroPipelineError",
+    "ConfigError",
+    "ModelLoadError",
+    "InferenceError",
+    "StorageError",
+    "CommunicationError",
+]

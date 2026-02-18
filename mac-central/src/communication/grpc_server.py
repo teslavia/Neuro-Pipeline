@@ -16,6 +16,7 @@ except ImportError:
 
 from src.generated import neuro_pipeline_pb2, neuro_pipeline_pb2_grpc
 from src.observability.metrics import grpc_requests_total, grpc_latency, edge_connections, control_commands_total, grpc_validation_errors
+from src.core import __version__
 
 
 class NeuroPipelineServicer(neuro_pipeline_pb2_grpc.NeuroPipelineServiceServicer):
@@ -191,7 +192,7 @@ class NeuroPipelineServicer(neuro_pipeline_pb2_grpc.NeuroPipelineServiceServicer
             else neuro_pipeline_pb2.HealthCheckResponse.NOT_SERVING
         )
         return neuro_pipeline_pb2.HealthCheckResponse(
-            status=status, version="2.2.0"
+            status=status, version=__version__
         )
 
     async def RegisterDevice(self, request, context: grpc.aio.ServicerContext):

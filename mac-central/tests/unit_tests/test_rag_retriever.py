@@ -4,7 +4,7 @@ import time
 import pytest
 from pathlib import Path
 
-from src.llm_vlm.rag_retriever import RAGRetriever, RAGContext
+from src.inference.rag_retriever import RAGRetriever, RAGContext
 from src.storage.detection_store import DetectionStore
 
 

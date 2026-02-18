@@ -9,7 +9,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from src.communication.grpc_server import NeuroPipelineServer
-from src.application_logic.central_orchestrator import CentralOrchestrator, VLMTriggerRule
+from src.pipeline.central_orchestrator import CentralOrchestrator, VLMTriggerRule
 from src.communication.device_session import DeviceSessionManager
 from src.config import AppConfig
 from src.observability.circuit_breaker import CircuitBreaker
@@ -17,6 +17,7 @@ from src.observability.alerting import AlertManager, AlertRule, AlertSeverity, A
 from src.observability.metrics import edge_device_status
 from src.storage.detection_store import DetectionStore
 from src.storage.cloud_storage import CloudStorageClient
+from src.core import __version__
 
 
 def setup_logging(cfg) -> None:
@@ -79,7 +80,7 @@ async def main():
     model_path = Path(args.model_path or cfg.central.model_path)
 
     logger.info("=" * 60)
-    logger.info("  Neuro-Pipeline Central Server v2.2.0")
+    logger.info(f"  Neuro-Pipeline Central Server v{__version__}")
     logger.info("=" * 60)
     logger.info(f"Host: {host}:{port}  TLS: {cfg.tls.enabled}")
     logger.info(f"Model: {model_path}  Mode: {cfg.central.inference_mode}")
@@ -170,13 +171,13 @@ async def main():
     # v2: Behavior analyzer
     behavior_analyzer = None
     if True:  # always available, lightweight
-        from src.application_logic.behavior_analyzer import BehaviorAnalyzer
+        from src.pipeline.behavior_analyzer import BehaviorAnalyzer
         behavior_analyzer = BehaviorAnalyzer(detection_store=store)
 
     # v2: Reasoning chain
     reasoning_chain = None
     if cfg.reasoning.enabled:
-        from src.llm_vlm.reasoning_chain import ReasoningChain
+        from src.inference.reasoning_chain import ReasoningChain
         reasoning_chain = ReasoningChain(
             max_steps=cfg.reasoning.max_steps,
             timeout_per_step=cfg.reasoning.timeout_per_step,
@@ -186,7 +187,7 @@ async def main():
     # v2: RAG retriever
     rag_retriever = None
     if cfg.rag.enabled:
-        from src.llm_vlm.rag_retriever import RAGRetriever
+        from src.inference.rag_retriever import RAGRetriever
         rag_retriever = RAGRetriever(
             detection_store=store,
             max_items=cfg.rag.max_history_items,
@@ -197,7 +198,7 @@ async def main():
     # v2: Anomaly baseline
     anomaly_baseline = None
     if cfg.anomaly.enabled:
-        from src.application_logic.anomaly_baseline import AnomalyBaseline
+        from src.pipeline.anomaly_baseline import AnomalyBaseline
         anomaly_baseline = AnomalyBaseline(
             detection_store=store,
             baseline_window_hours=cfg.anomaly.baseline_window_hours,
@@ -205,6 +206,43 @@ async def main():
             min_samples=cfg.anomaly.min_samples,
         )
         logger.info(f"Anomaly baseline: z>{cfg.anomaly.z_score_threshold}, window={cfg.anomaly.baseline_window_hours}h")
+
+    # v2: ReID engine (cross-camera re-identification)
+    reid_engine = None
+    if cfg.reid.enabled:
+        from src.analytics.reid_engine import ReIDEngine
+        reid_engine = ReIDEngine(
+            similarity_threshold=cfg.reid.similarity_threshold,
+            time_window_seconds=cfg.reid.time_window_seconds,
+        )
+        logger.info(f"ReID engine: threshold={cfg.reid.similarity_threshold}, window={cfg.reid.time_window_seconds}s")
+
+    # v2: Time series engine
+    timeseries_engine = None
+    if cfg.timeseries.enabled:
+        from src.analytics.timeseries_engine import TimeSeriesEngine
+        timeseries_engine = TimeSeriesEngine(detection_store=store)
+        logger.info(f"Time series engine: interval={cfg.timeseries.aggregation_interval}s")
+
+    # v2: Auto annotator
+    auto_annotator = None
+    if cfg.auto_annotator.enabled:
+        from src.analytics.auto_annotator import AutoAnnotator
+        auto_annotator = AutoAnnotator(
+            detection_store=store,
+            min_confidence=cfg.auto_annotator.min_confidence,
+        )
+        logger.info(f"Auto annotator: min_confidence={cfg.auto_annotator.min_confidence}")
+
+    # v2: Report generator
+    report_generator = None
+    if cfg.reporting.enabled:
+        from src.analytics.report_generator import ReportGenerator
+        report_generator = ReportGenerator(
+            detection_store=store,
+            cloud_storage=cloud,
+        )
+        logger.info(f"Report generator: schedule={cfg.reporting.schedule_hours}h")
 
     orchestrator = CentralOrchestrator(
         model_path,
@@ -281,6 +319,15 @@ async def main():
             orchestrator=orchestrator,
             health_checker=None,
             ab_test_manager=ab_test_manager,
+            model_registry=model_registry,
+            reid_engine=reid_engine,
+            timeseries_engine=timeseries_engine,
+            auto_annotator=auto_annotator,
+            report_generator=report_generator,
+            behavior_analyzer=behavior_analyzer,
+            anomaly_baseline=anomaly_baseline,
+            reasoning_chain=reasoning_chain,
+            rag_retriever=rag_retriever,
         )
         import uvicorn
         dashboard_config = uvicorn.Config(

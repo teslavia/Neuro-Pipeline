@@ -16,9 +16,9 @@ try:
 except ImportError:
     logger = logging.getLogger(__name__)
 
-from src.llm_vlm.mlx_llm_inference import MLXInferenceEngine
-from src.llm_vlm.prompt_generator import PromptGenerator
-from src.llm_vlm.vlm_config_guide import VLMConfigGuide
+from src.inference.mlx_llm_inference import MLXInferenceEngine
+from src.inference.prompt_generator import PromptGenerator
+from src.inference.vlm_config_guide import VLMConfigGuide
 from src.observability.metrics import (
     detections_total,
     vlm_requests_total,

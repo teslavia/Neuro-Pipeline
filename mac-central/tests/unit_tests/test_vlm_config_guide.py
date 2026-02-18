@@ -1,7 +1,7 @@
 """Unit tests for VLMConfigGuide."""
 
 import pytest
-from src.llm_vlm.vlm_config_guide import (
+from src.inference.vlm_config_guide import (
     ConfigAdjustment,
     ConfigAdjustmentType,
     DetectionRegion,
