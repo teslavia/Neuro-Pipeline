@@ -1,8 +1,8 @@
 #include <gtest/gtest.h>
-#include "rk_hal/v4l2_camera.hpp"
-#include "rk_hal/drm_allocator.hpp"
+#include "neuro/hal/v4l2_camera.hpp"
+#include "neuro/hal/drm_allocator.hpp"
 
-using namespace rk_hal;
+using namespace neuro::hal;
 
 TEST(HALBasic, V4L2CameraConfig) {
   V4L2Camera::Config cfg;

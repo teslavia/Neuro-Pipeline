@@ -3,7 +3,7 @@
 #include <cmath>
 #include <vector>
 
-#include "common/yolov8_postprocess.hpp"
+#include "neuro/inference/yolov8_postprocess.hpp"
 
 namespace {
 
@@ -17,11 +17,11 @@ class YOLOv8PostProcessTest : public ::testing::Test {
     config_.input_height = 640;
     config_.dfl_len = 16;
   }
-  ai_inference::YOLOv8PostProcessor::Config config_{};
+  neuro::inference::YOLOv8PostProcessor::Config config_{};
 };
 
 TEST_F(YOLOv8PostProcessTest, ProcessEmptyOutputReturnsEmpty) {
-  ai_inference::YOLOv8PostProcessor processor(config_);
+  neuro::inference::YOLOv8PostProcessor processor(config_);
   std::vector<std::vector<float>> empty;
   auto result = processor.Process(empty, 1920, 1080);
   EXPECT_TRUE(result.empty());
@@ -29,14 +29,14 @@ TEST_F(YOLOv8PostProcessTest, ProcessEmptyOutputReturnsEmpty) {
 
 TEST_F(YOLOv8PostProcessTest, ProcessSingleOutputReturnsEmpty) {
   // Only 1 tensor — need at least 6 (2 per scale)
-  ai_inference::YOLOv8PostProcessor processor(config_);
+  neuro::inference::YOLOv8PostProcessor processor(config_);
   std::vector<std::vector<float>> one = {{1.0f}};
   auto result = processor.Process(one, 1920, 1080);
   EXPECT_TRUE(result.empty());
 }
 
 TEST_F(YOLOv8PostProcessTest, ProcessWrongSizeTensorsReturnsEmpty) {
-  ai_inference::YOLOv8PostProcessor processor(config_);
+  neuro::inference::YOLOv8PostProcessor processor(config_);
   // 6 tensors but wrong sizes
   std::vector<std::vector<float>> bad(6, {1.0f, 2.0f});
   auto result = processor.Process(bad, 1920, 1080);
@@ -44,7 +44,7 @@ TEST_F(YOLOv8PostProcessTest, ProcessWrongSizeTensorsReturnsEmpty) {
 }
 
 TEST_F(YOLOv8PostProcessTest, ProcessFiltersLowConfidence) {
-  ai_inference::YOLOv8PostProcessor processor(config_);
+  neuro::inference::YOLOv8PostProcessor processor(config_);
 
   const int dfl_len = 16;
   const int nc = 80;
@@ -69,7 +69,7 @@ TEST_F(YOLOv8PostProcessTest, ProcessFiltersLowConfidence) {
 }
 
 TEST_F(YOLOv8PostProcessTest, ProcessDecodesHighConfidenceDetection) {
-  ai_inference::YOLOv8PostProcessor processor(config_);
+  neuro::inference::YOLOv8PostProcessor processor(config_);
 
   const int dfl_len = 16;
   const int nc = 80;
@@ -121,7 +121,7 @@ TEST_F(YOLOv8PostProcessTest, ProcessDecodesHighConfidenceDetection) {
 }
 
 TEST_F(YOLOv8PostProcessTest, NameReturnsYOLOv8) {
-  ai_inference::YOLOv8PostProcessor processor(config_);
+  neuro::inference::YOLOv8PostProcessor processor(config_);
   EXPECT_EQ(processor.Name(), "YOLOv8");
 }
 

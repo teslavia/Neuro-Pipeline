@@ -4,11 +4,11 @@
 #include <cstring>
 #include <vector>
 
-#include "common/neon_image_ops.hpp"
+#include "neuro/pipeline/neon_image_ops.hpp"
 
 namespace {
 
-using data_processing::NeonImageOps;
+using neuro::pipeline::NeonImageOps;
 
 // ---- RgbToBgr ----
 

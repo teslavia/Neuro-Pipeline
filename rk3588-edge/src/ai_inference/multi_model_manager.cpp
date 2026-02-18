@@ -1,12 +1,12 @@
-#include "common/multi_model_manager.hpp"
+#include "neuro/inference/multi_model_manager.hpp"
 
 #include <algorithm>
 
-#include "common/logger.hpp"
-#include "common/postprocessor_base.hpp"
-#include "common/rknn_engine.hpp"
+#include "neuro/core/logger.hpp"
+#include "neuro/inference/postprocessor_base.hpp"
+#include "neuro/inference/rknn_engine.hpp"
 
-namespace ai_inference {
+namespace neuro::inference {
 
 MultiModelManager::MultiModelManager(size_t max_models)
     : max_models_(max_models) {}

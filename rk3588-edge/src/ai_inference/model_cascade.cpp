@@ -1,13 +1,13 @@
-#include "common/model_cascade.hpp"
+#include "neuro/inference/model_cascade.hpp"
 
 #include <algorithm>
 #include <chrono>
 #include <utility>
 
-#include "common/buffer.hpp"
-#include "common/logger.hpp"
+#include "neuro/core/buffer.hpp"
+#include "neuro/core/logger.hpp"
 
-namespace ai_inference {
+namespace neuro::inference {
 
 ModelCascade::ModelCascade(const CascadeConfig& config)
     : config_(config) {
@@ -17,7 +17,7 @@ ModelCascade::ModelCascade(const CascadeConfig& config)
 }
 
 bool ModelCascade::ShouldCascade(
-    const std::vector<common::DetectionBox>& detections) const {
+    const std::vector<neuro::core::DetectionBox>& detections) const {
   if (detections.empty()) {
     return false;
   }
@@ -44,12 +44,12 @@ bool ModelCascade::ShouldCascade(
   return cascade_candidates >= config_.min_detections;
 }
 
-std::vector<std::pair<common::DetectionBox, std::vector<uint8_t>>> ModelCascade::ExtractROIs(
+std::vector<std::pair<neuro::core::DetectionBox, std::vector<uint8_t>>> ModelCascade::ExtractROIs(
     const uint8_t* frame_data,
-    const std::vector<common::DetectionBox>& detections,
+    const std::vector<neuro::core::DetectionBox>& detections,
     int frame_width, int frame_height,
     int model_size) const {
-  std::vector<std::pair<common::DetectionBox, std::vector<uint8_t>>> rois;
+  std::vector<std::pair<neuro::core::DetectionBox, std::vector<uint8_t>>> rois;
   int roi_count = 0;
 
   for (const auto& det : detections) {
@@ -85,7 +85,7 @@ std::vector<std::pair<common::DetectionBox, std::vector<uint8_t>>> ModelCascade:
 std::vector<uint8_t> ModelCascade::CropResizeROI(
     const uint8_t* frame_data,
     int frame_width, int frame_height,
-    const common::DetectionBox& roi_bounds,
+    const neuro::core::DetectionBox& roi_bounds,
     int target_size) const {
   // Convert normalized coordinates to pixel coordinates with padding
   int x1 = static_cast<int>(roi_bounds.x_min * frame_width * (1.0f - config_.roi_padding));
@@ -134,10 +134,10 @@ std::vector<uint8_t> ModelCascade::CropResizeROI(
   return roi;
 }
 
-common::DetectionBox ModelCascade::MapToOriginalFrame(
-    const common::DetectionBox& roi_detection,
-    const common::DetectionBox& roi_bounds) const {
-  common::DetectionBox mapped = roi_detection;
+neuro::core::DetectionBox ModelCascade::MapToOriginalFrame(
+    const neuro::core::DetectionBox& roi_detection,
+    const neuro::core::DetectionBox& roi_bounds) const {
+  neuro::core::DetectionBox mapped = roi_detection;
 
   // ROI coordinates are normalized within the cropped region
   // Map back to original frame normalized coordinates
@@ -163,19 +163,19 @@ common::DetectionBox ModelCascade::MapToOriginalFrame(
   return mapped;
 }
 
-std::vector<common::DetectionBox> ModelCascade::MergeDetections(
-    const std::vector<common::DetectionBox>& light,
-    const std::vector<common::DetectionBox>& heavy) const {
+std::vector<neuro::core::DetectionBox> ModelCascade::MergeDetections(
+    const std::vector<neuro::core::DetectionBox>& light,
+    const std::vector<neuro::core::DetectionBox>& heavy) const {
   if (!config_.merge_results) {
     // Return heavy model results only
     return heavy;
   }
 
-  std::vector<common::DetectionBox> merged;
+  std::vector<neuro::core::DetectionBox> merged;
 
   // Add heavy detections with weight
   for (const auto& det : heavy) {
-    common::DetectionBox weighted = det;
+    neuro::core::DetectionBox weighted = det;
     weighted.confidence = det.confidence * config_.heavy_weight;
     merged.push_back(weighted);
   }
@@ -231,12 +231,12 @@ CascadeResult ModelCascade::ProcessFrame(
   // Run light model inference
   auto light_start = Clock::now();
 
-  std::vector<common::DetectionBox> light_dets;
+  std::vector<neuro::core::DetectionBox> light_dets;
   int model_size = static_cast<int>(light_slot->engine->InputWidth());
 
   // Create a mapped buffer for the input data
   size_t input_size = model_size * model_size * 3;
-  auto input_buffer = common::BufferFactory::CreateMappedBuffer(
+  auto input_buffer = neuro::core::BufferFactory::CreateMappedBuffer(
       const_cast<uint8_t*>(frame_data), input_size);
 
   // Run inference
@@ -272,7 +272,7 @@ CascadeResult ModelCascade::ProcessFrame(
   auto heavy_start = Clock::now();
 
   int heavy_model_size = static_cast<int>(heavy_slot->engine->InputWidth());
-  std::vector<common::DetectionBox> heavy_dets;
+  std::vector<neuro::core::DetectionBox> heavy_dets;
 
   // Extract ROIs
   auto rois = ExtractROIs(frame_data, light_dets, frame_width, frame_height, heavy_model_size);
@@ -280,7 +280,7 @@ CascadeResult ModelCascade::ProcessFrame(
 
   // Run heavy model on each ROI
   for (const auto& [roi_bounds, roi_data] : rois) {
-    auto roi_buffer = common::BufferFactory::CreateMappedBuffer(
+    auto roi_buffer = neuro::core::BufferFactory::CreateMappedBuffer(
         const_cast<uint8_t*>(roi_data.data()), roi_data.size());
 
     if (heavy_slot->engine->Infer(roi_buffer)) {

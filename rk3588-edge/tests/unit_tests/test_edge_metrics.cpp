@@ -1,22 +1,22 @@
 #include <gtest/gtest.h>
-#include "common/edge_metrics.hpp"
+#include "neuro/pipeline/edge_metrics.hpp"
 
 class EdgeMetricsTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    common::EdgeMetrics::Instance().Reset();
+    neuro::pipeline::EdgeMetrics::Instance().Reset();
   }
 };
 
 TEST_F(EdgeMetricsTest, CountersStartAtZero) {
-  auto& m = common::EdgeMetrics::Instance();
+  auto& m = neuro::pipeline::EdgeMetrics::Instance();
   EXPECT_EQ(m.GetFramesProcessed(), 0u);
   EXPECT_EQ(m.GetDetectionsTotal(), 0u);
   EXPECT_EQ(m.GetInferenceErrors(), 0u);
 }
 
 TEST_F(EdgeMetricsTest, IncrementCounters) {
-  auto& m = common::EdgeMetrics::Instance();
+  auto& m = neuro::pipeline::EdgeMetrics::Instance();
   m.IncrementFramesProcessed(5);
   m.IncrementDetectionsTotal(3);
   m.IncrementInferenceErrors(1);
@@ -26,13 +26,13 @@ TEST_F(EdgeMetricsTest, IncrementCounters) {
 }
 
 TEST_F(EdgeMetricsTest, GaugesDefaultZero) {
-  auto& m = common::EdgeMetrics::Instance();
+  auto& m = neuro::pipeline::EdgeMetrics::Instance();
   EXPECT_DOUBLE_EQ(m.GetFPS(), 0.0);
   EXPECT_DOUBLE_EQ(m.GetNPUUtilization(), 0.0);
 }
 
 TEST_F(EdgeMetricsTest, SetGauges) {
-  auto& m = common::EdgeMetrics::Instance();
+  auto& m = neuro::pipeline::EdgeMetrics::Instance();
   m.SetFPS(29.5);
   m.SetNPUUtilization(72.3);
   EXPECT_DOUBLE_EQ(m.GetFPS(), 29.5);
@@ -40,7 +40,7 @@ TEST_F(EdgeMetricsTest, SetGauges) {
 }
 
 TEST_F(EdgeMetricsTest, HistogramRecording) {
-  auto& m = common::EdgeMetrics::Instance();
+  auto& m = neuro::pipeline::EdgeMetrics::Instance();
   m.RecordInferenceLatencyMs(10.0);
   m.RecordInferenceLatencyMs(20.0);
   m.RecordInferenceLatencyMs(30.0);
@@ -53,7 +53,7 @@ TEST_F(EdgeMetricsTest, HistogramRecording) {
 }
 
 TEST_F(EdgeMetricsTest, RgaHistogram) {
-  auto& m = common::EdgeMetrics::Instance();
+  auto& m = neuro::pipeline::EdgeMetrics::Instance();
   m.RecordRgaLatencyMs(5.0);
   auto snap = m.GetRgaLatency();
   EXPECT_EQ(snap.count, 1u);
@@ -61,7 +61,7 @@ TEST_F(EdgeMetricsTest, RgaHistogram) {
 }
 
 TEST_F(EdgeMetricsTest, SnapshotContainsAllKeys) {
-  auto& m = common::EdgeMetrics::Instance();
+  auto& m = neuro::pipeline::EdgeMetrics::Instance();
   m.IncrementFramesProcessed(100);
   m.SetFPS(30.0);
   auto snap = m.Snapshot();
@@ -79,7 +79,7 @@ TEST_F(EdgeMetricsTest, SnapshotContainsAllKeys) {
 }
 
 TEST_F(EdgeMetricsTest, ResetClearsAll) {
-  auto& m = common::EdgeMetrics::Instance();
+  auto& m = neuro::pipeline::EdgeMetrics::Instance();
   m.IncrementFramesProcessed(10);
   m.SetFPS(30.0);
   m.RecordInferenceLatencyMs(15.0);

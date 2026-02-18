@@ -1,9 +1,9 @@
-#include "common/video_recorder.hpp"
+#include "neuro/pipeline/video_recorder.hpp"
 
 #include <algorithm>
 #include <iostream>
 
-namespace common {
+namespace neuro::pipeline {
 
 VideoRecorder::VideoRecorder(const Config& config)
     : config_(config),
@@ -12,7 +12,7 @@ VideoRecorder::VideoRecorder(const Config& config)
 
 VideoRecorder::~VideoRecorder() = default;
 
-void VideoRecorder::PushFrame(std::shared_ptr<Buffer> frame) {
+void VideoRecorder::PushFrame(std::shared_ptr<core::Buffer> frame) {
   std::lock_guard<std::mutex> lock(mu_);
 
   if (recording_.load()) {

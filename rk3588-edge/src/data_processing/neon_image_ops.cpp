@@ -1,4 +1,4 @@
-#include "common/neon_image_ops.hpp"
+#include "neuro/pipeline/neon_image_ops.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -11,7 +11,7 @@
 #define USE_NEON 0
 #endif
 
-namespace data_processing {
+namespace neuro::pipeline {
 
 void NeonImageOps::RgbToBgr(const uint8_t* src, uint8_t* dst,
                              size_t pixel_count) {

@@ -4,30 +4,30 @@
 #include <thread>
 #include <vector>
 
-#include "common/npu_scheduler.hpp"
+#include "neuro/inference/npu_scheduler.hpp"
 
 namespace {
 
 class NPUSchedulerTest : public ::testing::Test {
  protected:
-  static constexpr int kCore0 = ai_inference::NPUScheduler::kCore0;
-  static constexpr int kCore1 = ai_inference::NPUScheduler::kCore1;
-  static constexpr int kCore2 = ai_inference::NPUScheduler::kCore2;
-  static constexpr int kAllCores = ai_inference::NPUScheduler::kAllCores;
+  static constexpr int kCore0 = neuro::inference::NPUScheduler::kCore0;
+  static constexpr int kCore1 = neuro::inference::NPUScheduler::kCore1;
+  static constexpr int kCore2 = neuro::inference::NPUScheduler::kCore2;
+  static constexpr int kAllCores = neuro::inference::NPUScheduler::kAllCores;
 };
 
 // ---- Construction ----
 
 TEST_F(NPUSchedulerTest, DefaultStrategyIsRoundRobin) {
-  ai_inference::NPUScheduler sched;
+  neuro::inference::NPUScheduler sched;
   EXPECT_EQ(sched.GetStrategy(),
-            ai_inference::NPUScheduler::Strategy::kRoundRobin);
+            neuro::inference::NPUScheduler::Strategy::kRoundRobin);
   EXPECT_EQ(sched.TotalSubmitted(), 0u);
 }
 
 TEST_F(NPUSchedulerTest, InitialActiveTasksAreZero) {
-  ai_inference::NPUScheduler sched;
-  for (int i = 0; i < ai_inference::NPUScheduler::kNumCores; ++i) {
+  neuro::inference::NPUScheduler sched;
+  for (int i = 0; i < neuro::inference::NPUScheduler::kNumCores; ++i) {
     EXPECT_EQ(sched.ActiveTasks(i), 0);
   }
 }
@@ -35,8 +35,8 @@ TEST_F(NPUSchedulerTest, InitialActiveTasksAreZero) {
 // ---- Round Robin ----
 
 TEST_F(NPUSchedulerTest, RoundRobinCyclesThroughCores) {
-  ai_inference::NPUScheduler sched(
-      ai_inference::NPUScheduler::Strategy::kRoundRobin);
+  neuro::inference::NPUScheduler sched(
+      neuro::inference::NPUScheduler::Strategy::kRoundRobin);
 
   // First cycle
   EXPECT_EQ(sched.SelectCore(), kCore0);
@@ -50,8 +50,8 @@ TEST_F(NPUSchedulerTest, RoundRobinCyclesThroughCores) {
 }
 
 TEST_F(NPUSchedulerTest, RoundRobinOnlyProducesValidMasks) {
-  ai_inference::NPUScheduler sched(
-      ai_inference::NPUScheduler::Strategy::kRoundRobin);
+  neuro::inference::NPUScheduler sched(
+      neuro::inference::NPUScheduler::Strategy::kRoundRobin);
 
   std::set<int> valid_masks = {kCore0, kCore1, kCore2};
   for (int i = 0; i < 100; ++i) {
@@ -64,8 +64,8 @@ TEST_F(NPUSchedulerTest, RoundRobinOnlyProducesValidMasks) {
 // ---- Single Core ----
 
 TEST_F(NPUSchedulerTest, SingleCoreAlwaysReturnsCore0) {
-  ai_inference::NPUScheduler sched(
-      ai_inference::NPUScheduler::Strategy::kSingleCore);
+  neuro::inference::NPUScheduler sched(
+      neuro::inference::NPUScheduler::Strategy::kSingleCore);
 
   for (int i = 0; i < 10; ++i) {
     EXPECT_EQ(sched.SelectCore(), kCore0);
@@ -75,8 +75,8 @@ TEST_F(NPUSchedulerTest, SingleCoreAlwaysReturnsCore0) {
 // ---- Triple Core ----
 
 TEST_F(NPUSchedulerTest, TripleCoreAlwaysReturnsAllCores) {
-  ai_inference::NPUScheduler sched(
-      ai_inference::NPUScheduler::Strategy::kTripleCore);
+  neuro::inference::NPUScheduler sched(
+      neuro::inference::NPUScheduler::Strategy::kTripleCore);
 
   for (int i = 0; i < 10; ++i) {
     EXPECT_EQ(sched.SelectCore(), kAllCores);
@@ -86,8 +86,8 @@ TEST_F(NPUSchedulerTest, TripleCoreAlwaysReturnsAllCores) {
 // ---- Load Balance ----
 
 TEST_F(NPUSchedulerTest, LoadBalancePicksLeastLoaded) {
-  ai_inference::NPUScheduler sched(
-      ai_inference::NPUScheduler::Strategy::kLoadBalance);
+  neuro::inference::NPUScheduler sched(
+      neuro::inference::NPUScheduler::Strategy::kLoadBalance);
 
   // All idle → should pick core 0 (first with min load)
   EXPECT_EQ(sched.SelectCore(), kCore0);
@@ -103,8 +103,8 @@ TEST_F(NPUSchedulerTest, LoadBalancePicksLeastLoaded) {
 }
 
 TEST_F(NPUSchedulerTest, LoadBalanceUpdatesAfterTaskEnd) {
-  ai_inference::NPUScheduler sched(
-      ai_inference::NPUScheduler::Strategy::kLoadBalance);
+  neuro::inference::NPUScheduler sched(
+      neuro::inference::NPUScheduler::Strategy::kLoadBalance);
 
   // Load cores 1 and 2
   sched.NotifyTaskStart(1);
@@ -126,8 +126,8 @@ TEST_F(NPUSchedulerTest, LoadBalanceUpdatesAfterTaskEnd) {
 }
 
 TEST_F(NPUSchedulerTest, LoadBalanceTieBreaksToLowestIndex) {
-  ai_inference::NPUScheduler sched(
-      ai_inference::NPUScheduler::Strategy::kLoadBalance);
+  neuro::inference::NPUScheduler sched(
+      neuro::inference::NPUScheduler::Strategy::kLoadBalance);
 
   // All cores at equal load
   sched.NotifyTaskStart(0);
@@ -141,7 +141,7 @@ TEST_F(NPUSchedulerTest, LoadBalanceTieBreaksToLowestIndex) {
 // ---- Task Tracking ----
 
 TEST_F(NPUSchedulerTest, NotifyTaskStartIncrements) {
-  ai_inference::NPUScheduler sched;
+  neuro::inference::NPUScheduler sched;
 
   sched.NotifyTaskStart(0);
   sched.NotifyTaskStart(0);
@@ -153,7 +153,7 @@ TEST_F(NPUSchedulerTest, NotifyTaskStartIncrements) {
 }
 
 TEST_F(NPUSchedulerTest, NotifyTaskEndDecrements) {
-  ai_inference::NPUScheduler sched;
+  neuro::inference::NPUScheduler sched;
 
   sched.NotifyTaskStart(1);
   sched.NotifyTaskStart(1);
@@ -164,7 +164,7 @@ TEST_F(NPUSchedulerTest, NotifyTaskEndDecrements) {
 }
 
 TEST_F(NPUSchedulerTest, InvalidCoreIndexIsIgnored) {
-  ai_inference::NPUScheduler sched;
+  neuro::inference::NPUScheduler sched;
 
   // Out-of-range indices should be silently ignored
   sched.NotifyTaskStart(-1);
@@ -173,7 +173,7 @@ TEST_F(NPUSchedulerTest, InvalidCoreIndexIsIgnored) {
   sched.NotifyTaskEnd(3);
 
   // No crashes, all counters at 0
-  for (int i = 0; i < ai_inference::NPUScheduler::kNumCores; ++i) {
+  for (int i = 0; i < neuro::inference::NPUScheduler::kNumCores; ++i) {
     EXPECT_EQ(sched.ActiveTasks(i), 0);
   }
   EXPECT_EQ(sched.ActiveTasks(-1), 0);
@@ -183,7 +183,7 @@ TEST_F(NPUSchedulerTest, InvalidCoreIndexIsIgnored) {
 // ---- TotalSubmitted Counter ----
 
 TEST_F(NPUSchedulerTest, TotalSubmittedIncrementsOnSelect) {
-  ai_inference::NPUScheduler sched;
+  neuro::inference::NPUScheduler sched;
   EXPECT_EQ(sched.TotalSubmitted(), 0u);
 
   sched.SelectCore();
@@ -196,26 +196,26 @@ TEST_F(NPUSchedulerTest, TotalSubmittedIncrementsOnSelect) {
 // ---- Strategy Switch ----
 
 TEST_F(NPUSchedulerTest, SetStrategyChangesAtRuntime) {
-  ai_inference::NPUScheduler sched(
-      ai_inference::NPUScheduler::Strategy::kRoundRobin);
+  neuro::inference::NPUScheduler sched(
+      neuro::inference::NPUScheduler::Strategy::kRoundRobin);
 
   EXPECT_EQ(sched.GetStrategy(),
-            ai_inference::NPUScheduler::Strategy::kRoundRobin);
+            neuro::inference::NPUScheduler::Strategy::kRoundRobin);
 
-  sched.SetStrategy(ai_inference::NPUScheduler::Strategy::kTripleCore);
+  sched.SetStrategy(neuro::inference::NPUScheduler::Strategy::kTripleCore);
   EXPECT_EQ(sched.GetStrategy(),
-            ai_inference::NPUScheduler::Strategy::kTripleCore);
+            neuro::inference::NPUScheduler::Strategy::kTripleCore);
   EXPECT_EQ(sched.SelectCore(), kAllCores);
 
-  sched.SetStrategy(ai_inference::NPUScheduler::Strategy::kSingleCore);
+  sched.SetStrategy(neuro::inference::NPUScheduler::Strategy::kSingleCore);
   EXPECT_EQ(sched.SelectCore(), kCore0);
 }
 
 // ---- Concurrency ----
 
 TEST_F(NPUSchedulerTest, ConcurrentSelectCoreIsThreadSafe) {
-  ai_inference::NPUScheduler sched(
-      ai_inference::NPUScheduler::Strategy::kRoundRobin);
+  neuro::inference::NPUScheduler sched(
+      neuro::inference::NPUScheduler::Strategy::kRoundRobin);
 
   constexpr int kThreads = 4;
   constexpr int kIterations = 1000;
@@ -240,8 +240,8 @@ TEST_F(NPUSchedulerTest, ConcurrentSelectCoreIsThreadSafe) {
 }
 
 TEST_F(NPUSchedulerTest, ConcurrentLoadBalanceIsThreadSafe) {
-  ai_inference::NPUScheduler sched(
-      ai_inference::NPUScheduler::Strategy::kLoadBalance);
+  neuro::inference::NPUScheduler sched(
+      neuro::inference::NPUScheduler::Strategy::kLoadBalance);
 
   constexpr int kThreads = 4;
   constexpr int kIterations = 500;
@@ -249,7 +249,7 @@ TEST_F(NPUSchedulerTest, ConcurrentLoadBalanceIsThreadSafe) {
 
   for (int t = 0; t < kThreads; ++t) {
     threads.emplace_back([&sched, t]() {
-      int core = t % ai_inference::NPUScheduler::kNumCores;
+      int core = t % neuro::inference::NPUScheduler::kNumCores;
       for (int i = 0; i < kIterations; ++i) {
         sched.NotifyTaskStart(core);
         sched.SelectCore();
@@ -263,7 +263,7 @@ TEST_F(NPUSchedulerTest, ConcurrentLoadBalanceIsThreadSafe) {
   }
 
   // All tasks ended → all active counts should be 0
-  for (int i = 0; i < ai_inference::NPUScheduler::kNumCores; ++i) {
+  for (int i = 0; i < neuro::inference::NPUScheduler::kNumCores; ++i) {
     EXPECT_EQ(sched.ActiveTasks(i), 0);
   }
 }

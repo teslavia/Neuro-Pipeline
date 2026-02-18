@@ -1,4 +1,4 @@
-#include "common/mmap_ipc.hpp"
+#include "neuro/pipeline/mmap_ipc.hpp"
 
 #include <fcntl.h>
 #include <sys/mman.h>
@@ -10,7 +10,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace data_processing {
+namespace neuro::pipeline {
 
 MmapSharedMemory::MmapSharedMemory(const std::string& name, size_t size, Mode mode)
     : name_(name), size_(size), mode_(mode), data_(nullptr), fd_(-1),

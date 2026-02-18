@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "common/memory_pool.hpp"
+#include "neuro/core/memory_pool.hpp"
 
 namespace {
 
@@ -11,21 +11,21 @@ class MemoryPoolTest : public ::testing::Test {
 };
 
 TEST_F(MemoryPoolTest, InitialStateHasFullCapacity) {
-  data_processing::MemoryPool pool(kBlockSize, kBlockCount);
+  neuro::core::MemoryPool pool(kBlockSize, kBlockCount);
   EXPECT_EQ(pool.Available(), kBlockCount);
   EXPECT_EQ(pool.Capacity(), kBlockCount);
   EXPECT_EQ(pool.BlockSize(), kBlockSize);
 }
 
 TEST_F(MemoryPoolTest, AllocateReducesAvailable) {
-  data_processing::MemoryPool pool(kBlockSize, kBlockCount);
+  neuro::core::MemoryPool pool(kBlockSize, kBlockCount);
   void* ptr = pool.Allocate();
   ASSERT_NE(ptr, nullptr);
   EXPECT_EQ(pool.Available(), kBlockCount - 1);
 }
 
 TEST_F(MemoryPoolTest, FreeRestoresAvailable) {
-  data_processing::MemoryPool pool(kBlockSize, kBlockCount);
+  neuro::core::MemoryPool pool(kBlockSize, kBlockCount);
   void* ptr = pool.Allocate();
   ASSERT_NE(ptr, nullptr);
   pool.Free(ptr);
@@ -33,7 +33,7 @@ TEST_F(MemoryPoolTest, FreeRestoresAvailable) {
 }
 
 TEST_F(MemoryPoolTest, ExhaustPoolReturnsNull) {
-  data_processing::MemoryPool pool(kBlockSize, kBlockCount);
+  neuro::core::MemoryPool pool(kBlockSize, kBlockCount);
   for (size_t i = 0; i < kBlockCount; ++i) {
     ASSERT_NE(pool.Allocate(), nullptr);
   }
@@ -42,7 +42,7 @@ TEST_F(MemoryPoolTest, ExhaustPoolReturnsNull) {
 }
 
 TEST_F(MemoryPoolTest, AllocatedBlocksAreWritable) {
-  data_processing::MemoryPool pool(kBlockSize, 1);
+  neuro::core::MemoryPool pool(kBlockSize, 1);
   void* ptr = pool.Allocate();
   ASSERT_NE(ptr, nullptr);
 
@@ -59,13 +59,13 @@ TEST_F(MemoryPoolTest, AllocatedBlocksAreWritable) {
 }
 
 TEST_F(MemoryPoolTest, FreeInvalidPointerThrows) {
-  data_processing::MemoryPool pool(kBlockSize, kBlockCount);
+  neuro::core::MemoryPool pool(kBlockSize, kBlockCount);
   int dummy = 0;
   EXPECT_THROW(pool.Free(&dummy), std::invalid_argument);
 }
 
 TEST_F(MemoryPoolTest, FreeNullptrIsNoOp) {
-  data_processing::MemoryPool pool(kBlockSize, kBlockCount);
+  neuro::core::MemoryPool pool(kBlockSize, kBlockCount);
   pool.Free(nullptr);  // Should not throw
   EXPECT_EQ(pool.Available(), kBlockCount);
 }
@@ -73,20 +73,20 @@ TEST_F(MemoryPoolTest, FreeNullptrIsNoOp) {
 // ---- Physical / Virtual Address Simulation Tests ----
 
 TEST_F(MemoryPoolTest, PhysBaseAddrDefault) {
-  data_processing::MemoryPool pool(kBlockSize, kBlockCount);
+  neuro::core::MemoryPool pool(kBlockSize, kBlockCount);
   EXPECT_EQ(pool.PhysBaseAddr(), 0x10000000u);
   EXPECT_EQ(pool.PhysEndAddr(), 0x10000000u + kBlockSize * kBlockCount);
 }
 
 TEST_F(MemoryPoolTest, PhysBaseAddrCustom) {
   constexpr uint64_t kCustomBase = 0x80000000;
-  data_processing::MemoryPool pool(kBlockSize, kBlockCount, kCustomBase);
+  neuro::core::MemoryPool pool(kBlockSize, kBlockCount, kCustomBase);
   EXPECT_EQ(pool.PhysBaseAddr(), kCustomBase);
   EXPECT_EQ(pool.PhysEndAddr(), kCustomBase + kBlockSize * kBlockCount);
 }
 
 TEST_F(MemoryPoolTest, ContainsVirtForAllocatedBlock) {
-  data_processing::MemoryPool pool(kBlockSize, kBlockCount);
+  neuro::core::MemoryPool pool(kBlockSize, kBlockCount);
   void* ptr = pool.Allocate();
   ASSERT_NE(ptr, nullptr);
 
@@ -100,7 +100,7 @@ TEST_F(MemoryPoolTest, ContainsVirtForAllocatedBlock) {
 }
 
 TEST_F(MemoryPoolTest, ContainsVirtRejectsForeignPointer) {
-  data_processing::MemoryPool pool(kBlockSize, kBlockCount);
+  neuro::core::MemoryPool pool(kBlockSize, kBlockCount);
   int dummy = 0;
   EXPECT_FALSE(pool.ContainsVirt(&dummy));
   EXPECT_FALSE(pool.ContainsVirt(nullptr));
@@ -108,7 +108,7 @@ TEST_F(MemoryPoolTest, ContainsVirtRejectsForeignPointer) {
 
 TEST_F(MemoryPoolTest, ContainsPhysInsideRange) {
   constexpr uint64_t kBase = 0x10000000;
-  data_processing::MemoryPool pool(kBlockSize, kBlockCount, kBase);
+  neuro::core::MemoryPool pool(kBlockSize, kBlockCount, kBase);
 
   EXPECT_TRUE(pool.ContainsPhys(kBase));
   EXPECT_TRUE(pool.ContainsPhys(kBase + 1));
@@ -117,7 +117,7 @@ TEST_F(MemoryPoolTest, ContainsPhysInsideRange) {
 
 TEST_F(MemoryPoolTest, ContainsPhysRejectsOutside) {
   constexpr uint64_t kBase = 0x10000000;
-  data_processing::MemoryPool pool(kBlockSize, kBlockCount, kBase);
+  neuro::core::MemoryPool pool(kBlockSize, kBlockCount, kBase);
 
   EXPECT_FALSE(pool.ContainsPhys(kBase - 1));
   EXPECT_FALSE(pool.ContainsPhys(kBase + kBlockSize * kBlockCount));
@@ -126,7 +126,7 @@ TEST_F(MemoryPoolTest, ContainsPhysRejectsOutside) {
 
 TEST_F(MemoryPoolTest, VirtToPhysRoundTrip) {
   constexpr uint64_t kBase = 0x20000000;
-  data_processing::MemoryPool pool(kBlockSize, kBlockCount, kBase);
+  neuro::core::MemoryPool pool(kBlockSize, kBlockCount, kBase);
 
   void* ptr = pool.Allocate();
   ASSERT_NE(ptr, nullptr);
@@ -144,7 +144,7 @@ TEST_F(MemoryPoolTest, VirtToPhysRoundTrip) {
 
 TEST_F(MemoryPoolTest, VirtToPhysConsecutiveBlocks) {
   constexpr uint64_t kBase = 0x10000000;
-  data_processing::MemoryPool pool(kBlockSize, kBlockCount, kBase);
+  neuro::core::MemoryPool pool(kBlockSize, kBlockCount, kBase);
 
   // Allocate all blocks and verify their physical addresses are within range
   std::vector<void*> ptrs;
@@ -166,7 +166,7 @@ TEST_F(MemoryPoolTest, VirtToPhysConsecutiveBlocks) {
 }
 
 TEST_F(MemoryPoolTest, VirtToPhysInvalidReturnsZero) {
-  data_processing::MemoryPool pool(kBlockSize, kBlockCount);
+  neuro::core::MemoryPool pool(kBlockSize, kBlockCount);
   int dummy = 0;
   EXPECT_EQ(pool.VirtToPhys(&dummy), 0u);
   EXPECT_EQ(pool.VirtToPhys(nullptr), 0u);
@@ -174,7 +174,7 @@ TEST_F(MemoryPoolTest, VirtToPhysInvalidReturnsZero) {
 
 TEST_F(MemoryPoolTest, PhysToVirtInvalidReturnsNull) {
   constexpr uint64_t kBase = 0x10000000;
-  data_processing::MemoryPool pool(kBlockSize, kBlockCount, kBase);
+  neuro::core::MemoryPool pool(kBlockSize, kBlockCount, kBase);
 
   EXPECT_EQ(pool.PhysToVirt(0), nullptr);
   EXPECT_EQ(pool.PhysToVirt(kBase - 1), nullptr);
@@ -183,7 +183,7 @@ TEST_F(MemoryPoolTest, PhysToVirtInvalidReturnsNull) {
 
 TEST_F(MemoryPoolTest, PhysToVirtInteriorOffset) {
   constexpr uint64_t kBase = 0x10000000;
-  data_processing::MemoryPool pool(kBlockSize, kBlockCount, kBase);
+  neuro::core::MemoryPool pool(kBlockSize, kBlockCount, kBase);
 
   void* ptr = pool.Allocate();
   ASSERT_NE(ptr, nullptr);
@@ -200,7 +200,7 @@ TEST_F(MemoryPoolTest, PhysToVirtInteriorOffset) {
 
 TEST_F(MemoryPoolTest, WriteViaVirtReadViaPhys) {
   constexpr uint64_t kBase = 0x30000000;
-  data_processing::MemoryPool pool(kBlockSize, 1, kBase);
+  neuro::core::MemoryPool pool(kBlockSize, 1, kBase);
 
   void* ptr = pool.Allocate();
   ASSERT_NE(ptr, nullptr);
@@ -226,7 +226,7 @@ TEST_F(MemoryPoolTest, WriteViaVirtReadViaPhys) {
 // ---- Stats Tests ----
 
 TEST_F(MemoryPoolTest, StatsTrackAllocationsAndFrees) {
-  data_processing::MemoryPool pool(kBlockSize, kBlockCount);
+  neuro::core::MemoryPool pool(kBlockSize, kBlockCount);
   void* p1 = pool.Allocate();
   void* p2 = pool.Allocate();
   pool.Free(p1);
@@ -240,7 +240,7 @@ TEST_F(MemoryPoolTest, StatsTrackAllocationsAndFrees) {
 }
 
 TEST_F(MemoryPoolTest, StatsPeakUsage) {
-  data_processing::MemoryPool pool(kBlockSize, kBlockCount);
+  neuro::core::MemoryPool pool(kBlockSize, kBlockCount);
   std::vector<void*> ptrs;
   for (size_t i = 0; i < 5; ++i) {
     ptrs.push_back(pool.Allocate());
@@ -256,7 +256,7 @@ TEST_F(MemoryPoolTest, StatsPeakUsage) {
 }
 
 TEST_F(MemoryPoolTest, AlignmentParameter) {
-  data_processing::MemoryPool pool(kBlockSize, kBlockCount, 0x10000000, 64);
+  neuro::core::MemoryPool pool(kBlockSize, kBlockCount, 0x10000000, 64);
   EXPECT_EQ(pool.Alignment(), 64u);
   void* ptr = pool.Allocate();
   ASSERT_NE(ptr, nullptr);

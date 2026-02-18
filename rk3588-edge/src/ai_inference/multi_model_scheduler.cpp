@@ -1,14 +1,14 @@
-#include "common/multi_model_scheduler.hpp"
+#include "neuro/inference/multi_model_scheduler.hpp"
 
 #include <chrono>
 #include <future>
 
-#include "common/logger.hpp"
-#include "common/multi_model_manager.hpp"
-#include "common/rknn_engine.hpp"
-#include "common/postprocessor_base.hpp"
+#include "neuro/core/logger.hpp"
+#include "neuro/inference/multi_model_manager.hpp"
+#include "neuro/inference/rknn_engine.hpp"
+#include "neuro/inference/postprocessor_base.hpp"
 
-namespace ai_inference {
+namespace neuro::inference {
 
 MultiModelScheduler::MultiModelScheduler(MultiModelManager& manager)
     : manager_(manager) {}
@@ -45,11 +45,11 @@ bool MultiModelScheduler::BindModelToCore(const std::string& model_id,
   return true;
 }
 
-std::map<std::string, std::vector<common::DetectionBox>>
+std::map<std::string, std::vector<neuro::core::DetectionBox>>
 MultiModelScheduler::InferParallel(
-    const std::shared_ptr<common::Buffer>& frame,
+    const std::shared_ptr<neuro::core::Buffer>& frame,
     uint32_t original_width, uint32_t original_height) {
-  std::map<std::string, std::vector<common::DetectionBox>> results;
+  std::map<std::string, std::vector<neuro::core::DetectionBox>> results;
 
   std::vector<ModelBinding> local_bindings;
   {
@@ -63,14 +63,14 @@ MultiModelScheduler::InferParallel(
 
   // Launch parallel inference for each binding
   using FutureResult =
-      std::future<std::pair<std::string, std::vector<common::DetectionBox>>>;
+      std::future<std::pair<std::string, std::vector<neuro::core::DetectionBox>>>;
   std::vector<FutureResult> futures;
 
   for (const auto& binding : local_bindings) {
     futures.push_back(std::async(
         std::launch::async,
         [this, &frame, original_width, original_height,
-         binding]() -> std::pair<std::string, std::vector<common::DetectionBox>> {
+         binding]() -> std::pair<std::string, std::vector<neuro::core::DetectionBox>> {
           auto* slot = manager_.GetModel(binding.model_id);
           if (!slot || !slot->engine) {
             LOG_ERROR("MultiModelScheduler",
@@ -88,7 +88,7 @@ MultiModelScheduler::InferParallel(
             return {binding.model_id, {}};
           }
 
-          std::vector<common::DetectionBox> detections;
+          std::vector<neuro::core::DetectionBox> detections;
           if (slot->postprocessor) {
             detections = slot->postprocessor->Process(
                 slot->engine->GetOutputs(), original_width, original_height);

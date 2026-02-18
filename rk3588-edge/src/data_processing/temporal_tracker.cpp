@@ -1,17 +1,17 @@
-#include "common/temporal_tracker.hpp"
+#include "neuro/pipeline/temporal_tracker.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
 
-#include "common/logger.hpp"
+#include "neuro/core/logger.hpp"
 
-namespace data_processing {
+namespace neuro::pipeline {
 
 TemporalTracker::TemporalTracker(const Config& config) : config_(config) {}
 
 std::vector<uint64_t> TemporalTracker::Update(
-    const std::vector<common::DetectionBox>& detections, uint64_t frame_id) {
+    const std::vector<neuro::core::DetectionBox>& detections, uint64_t frame_id) {
   std::vector<uint64_t> assigned_ids(detections.size(), 0);
   const size_t num_existing_tracks = tracks_.size();
   std::vector<bool> track_matched(num_existing_tracks, false);
@@ -153,7 +153,7 @@ size_t TemporalTracker::ActiveTrackCount() const {
   return tracks_.size();
 }
 
-float TemporalTracker::ComputeIoU(const common::DetectionBox& a,
+float TemporalTracker::ComputeIoU(const neuro::core::DetectionBox& a,
                                    const TrackedObject& b) {
   float inter_x_min = std::max(a.x_min, b.x_min);
   float inter_y_min = std::max(a.y_min, b.y_min);

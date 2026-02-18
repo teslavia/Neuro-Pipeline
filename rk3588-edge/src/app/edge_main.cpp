@@ -4,10 +4,10 @@
 #include <string>
 #include <thread>
 
-#include "common/constants.hpp"
-#include "common/pipeline_coordinator.hpp"
-#include "app/config_manager.hpp"
-#include "common/logger.hpp"
+#include "neuro/core/constants.hpp"
+#include "neuro/app/pipeline_coordinator.hpp"
+#include "neuro/pipeline/config_manager.hpp"
+#include "neuro/core/logger.hpp"
 
 namespace {
 volatile std::sig_atomic_t g_shutdown_requested = 0;
@@ -21,7 +21,7 @@ void SignalHandler(int signal) {
 
 int main(int argc, char* argv[]) {
   std::cout << "============================================" << std::endl;
-  std::cout << "  Neuro-Pipeline Edge " << common::kEdgeVersion << std::endl;
+  std::cout << "  Neuro-Pipeline Edge " << neuro::core::kEdgeVersion << std::endl;
   std::cout << "  RK3588 NPU Inference Engine" << std::endl;
   std::cout << "============================================" << std::endl;
 
@@ -30,11 +30,11 @@ int main(int argc, char* argv[]) {
   std::signal(SIGTERM, SignalHandler);
 
   // Initialize logger (JSON format for structured logging)
-  common::Logger::Init("info", "json");
+  neuro::core::Logger::Init("info", "json");
 
   try {
     // Parse command-line arguments
-    app::PipelineCoordinator::Config config;
+    neuro::app::PipelineCoordinator::Config config;
     config.model_path = "/opt/neuro-pipeline/models/yolov5s-640-640.rknn";
     std::string config_file;
 
@@ -70,7 +70,7 @@ int main(int argc, char* argv[]) {
 
     // Load config file if specified (CLI args override config file values)
     if (!config_file.empty()) {
-      app::ConfigManager cfg;
+      neuro::pipeline::ConfigManager cfg;
       if (cfg.LoadFromFile(config_file)) {
         if (config.video_source.empty())
           config.video_source = cfg.Get("edge.video_source");
@@ -103,10 +103,10 @@ int main(int argc, char* argv[]) {
         config.enable_multi_model = cfg.GetBool("edge.enable_multi_model", config.enable_multi_model);
 
         // Multi-camera config: cameras.0.device, cameras.0.width, etc.
-        for (int i = 0; i < static_cast<int>(common::kMaxCameras); ++i) {
+        for (int i = 0; i < static_cast<int>(neuro::core::kMaxCameras); ++i) {
           std::string prefix = "cameras." + std::to_string(i);
           if (!cfg.Has(prefix + ".device")) break;
-          app::PipelineCoordinator::CameraConfig cam;
+          neuro::app::PipelineCoordinator::CameraConfig cam;
           cam.device = cfg.Get(prefix + ".device", "/dev/video0");
           cam.width = cfg.GetInt(prefix + ".width", config.width);
           cam.height = cfg.GetInt(prefix + ".height", config.height);
@@ -119,7 +119,7 @@ int main(int argc, char* argv[]) {
         for (int i = 0; i < 10; ++i) {
           std::string prefix = "edge.models." + std::to_string(i);
           if (!cfg.Has(prefix + ".model_id")) break;
-          app::PipelineCoordinator::Config::ModelConfig mc;
+          neuro::app::PipelineCoordinator::Config::ModelConfig mc;
           mc.model_id = cfg.Get(prefix + ".model_id");
           mc.model_path = cfg.Get(prefix + ".model_path");
           mc.postprocessor = cfg.Get(prefix + ".postprocessor", "yolov5");
@@ -130,9 +130,9 @@ int main(int argc, char* argv[]) {
     }
 
     // Set device_id for structured logging
-    common::Logger::SetDeviceId(config.device_id);
+    neuro::core::Logger::SetDeviceId(config.device_id);
 
-    app::PipelineCoordinator coordinator(config);
+    neuro::app::PipelineCoordinator coordinator(config);
 
     if (!coordinator.Initialize()) {
       std::cerr << "[FATAL] Failed to initialize pipeline" << std::endl;

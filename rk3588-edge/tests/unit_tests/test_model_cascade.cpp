@@ -2,17 +2,17 @@
 
 #include <vector>
 
-#include "common/model_cascade.hpp"
-#include "common/types.hpp"
+#include "neuro/inference/model_cascade.hpp"
+#include "neuro/core/types.hpp"
 
-namespace ai_inference {
+namespace neuro::inference {
 namespace {
 
 // Helper to create a detection box
-common::DetectionBox MakeDetection(uint32_t class_id, float confidence,
+neuro::core::DetectionBox MakeDetection(uint32_t class_id, float confidence,
                                     float x_min, float y_min,
                                     float x_max, float y_max) {
-  common::DetectionBox det;
+  neuro::core::DetectionBox det;
   det.class_id = class_id;
   det.confidence = confidence;
   det.x_min = x_min;
@@ -43,14 +43,14 @@ class ModelCascadeTest : public ::testing::Test {
 // Test ShouldCascade with empty detections
 TEST_F(ModelCascadeTest, ShouldCascade_EmptyDetections) {
   ModelCascade cascade(config_);
-  std::vector<common::DetectionBox> empty;
+  std::vector<neuro::core::DetectionBox> empty;
   EXPECT_FALSE(cascade.ShouldCascade(empty));
 }
 
 // Test ShouldCascade with high confidence (no cascade needed)
 TEST_F(ModelCascadeTest, ShouldCascade_HighConfidence) {
   ModelCascade cascade(config_);
-  std::vector<common::DetectionBox> detections = {
+  std::vector<neuro::core::DetectionBox> detections = {
       MakeDetection(0, 0.85f, 0.1f, 0.1f, 0.3f, 0.3f)  // High confidence
   };
   EXPECT_FALSE(cascade.ShouldCascade(detections));
@@ -59,7 +59,7 @@ TEST_F(ModelCascadeTest, ShouldCascade_HighConfidence) {
 // Test ShouldCascade with low confidence (cascade needed)
 TEST_F(ModelCascadeTest, ShouldCascade_MediumConfidence) {
   ModelCascade cascade(config_);
-  std::vector<common::DetectionBox> detections = {
+  std::vector<neuro::core::DetectionBox> detections = {
       MakeDetection(0, 0.5f, 0.1f, 0.1f, 0.3f, 0.3f)  // Medium confidence
   };
   EXPECT_TRUE(cascade.ShouldCascade(detections));
@@ -68,7 +68,7 @@ TEST_F(ModelCascadeTest, ShouldCascade_MediumConfidence) {
 // Test ShouldCascade with very low confidence (below threshold)
 TEST_F(ModelCascadeTest, ShouldCascade_VeryLowConfidence) {
   ModelCascade cascade(config_);
-  std::vector<common::DetectionBox> detections = {
+  std::vector<neuro::core::DetectionBox> detections = {
       MakeDetection(0, 0.2f, 0.1f, 0.1f, 0.3f, 0.3f)  // Very low confidence
   };
   EXPECT_FALSE(cascade.ShouldCascade(detections));  // Below min_confidence
@@ -79,7 +79,7 @@ TEST_F(ModelCascadeTest, ShouldCascade_ClassFilter) {
   config_.target_classes = {0, 1};  // Only cascade for class 0 and 1
   ModelCascade cascade(config_);
 
-  std::vector<common::DetectionBox> detections = {
+  std::vector<neuro::core::DetectionBox> detections = {
       MakeDetection(2, 0.5f, 0.1f, 0.1f, 0.3f, 0.3f)  // Class 2, medium confidence
   };
   EXPECT_FALSE(cascade.ShouldCascade(detections));  // Filtered out by class
@@ -90,12 +90,12 @@ TEST_F(ModelCascadeTest, ShouldCascade_MinDetections) {
   config_.min_detections = 2;
   ModelCascade cascade(config_);
 
-  std::vector<common::DetectionBox> single = {
+  std::vector<neuro::core::DetectionBox> single = {
       MakeDetection(0, 0.5f, 0.1f, 0.1f, 0.3f, 0.3f)
   };
   EXPECT_FALSE(cascade.ShouldCascade(single));  // Only 1 detection
 
-  std::vector<common::DetectionBox> multiple = {
+  std::vector<neuro::core::DetectionBox> multiple = {
       MakeDetection(0, 0.5f, 0.1f, 0.1f, 0.3f, 0.3f),
       MakeDetection(0, 0.4f, 0.5f, 0.5f, 0.7f, 0.7f)
   };
@@ -106,10 +106,10 @@ TEST_F(ModelCascadeTest, ShouldCascade_MinDetections) {
 TEST_F(ModelCascadeTest, MergeDetections_Overlapping) {
   ModelCascade cascade(config_);
 
-  std::vector<common::DetectionBox> light = {
+  std::vector<neuro::core::DetectionBox> light = {
       MakeDetection(0, 0.5f, 0.1f, 0.1f, 0.3f, 0.3f)
   };
-  std::vector<common::DetectionBox> heavy = {
+  std::vector<neuro::core::DetectionBox> heavy = {
       MakeDetection(0, 0.9f, 0.11f, 0.11f, 0.29f, 0.29f)  // Overlaps with light
   };
 
@@ -125,10 +125,10 @@ TEST_F(ModelCascadeTest, MergeDetections_Overlapping) {
 TEST_F(ModelCascadeTest, MergeDetections_NonOverlapping) {
   ModelCascade cascade(config_);
 
-  std::vector<common::DetectionBox> light = {
+  std::vector<neuro::core::DetectionBox> light = {
       MakeDetection(0, 0.5f, 0.1f, 0.1f, 0.3f, 0.3f)
   };
-  std::vector<common::DetectionBox> heavy = {
+  std::vector<neuro::core::DetectionBox> heavy = {
       MakeDetection(0, 0.9f, 0.6f, 0.6f, 0.8f, 0.8f)  // Far from light
   };
 
@@ -143,10 +143,10 @@ TEST_F(ModelCascadeTest, MergeDetections_NoMerge) {
   config_.merge_results = false;
   ModelCascade cascade(config_);
 
-  std::vector<common::DetectionBox> light = {
+  std::vector<neuro::core::DetectionBox> light = {
       MakeDetection(0, 0.5f, 0.1f, 0.1f, 0.3f, 0.3f)
   };
-  std::vector<common::DetectionBox> heavy = {
+  std::vector<neuro::core::DetectionBox> heavy = {
       MakeDetection(0, 0.9f, 0.6f, 0.6f, 0.8f, 0.8f)
   };
 

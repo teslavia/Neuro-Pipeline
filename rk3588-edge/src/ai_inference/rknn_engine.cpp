@@ -1,4 +1,4 @@
-#include "common/rknn_engine.hpp"
+#include "neuro/inference/rknn_engine.hpp"
 
 #include <cstring>
 #include <fstream>
@@ -12,7 +12,7 @@
 // ============================================================================
 #include <rknn_api.h>
 
-namespace ai_inference {
+namespace neuro::inference {
 
 class RKNNEngine::Impl {
  public:
@@ -105,7 +105,7 @@ class RKNNEngine::Impl {
     }
   }
 
-  bool Infer(std::shared_ptr<common::Buffer> input,
+  bool Infer(std::shared_ptr<neuro::core::Buffer> input,
              std::vector<std::vector<float>>& outputs) {
     if (!ctx_ || !input) return false;
 
@@ -189,7 +189,7 @@ class RKNNEngine::Impl {
 #include <cmath>
 #include <random>
 
-namespace ai_inference {
+namespace neuro::inference {
 
 class RKNNEngine::Impl {
  public:
@@ -210,7 +210,7 @@ class RKNNEngine::Impl {
     return true;
   }
 
-  bool Infer(std::shared_ptr<common::Buffer> input,
+  bool Infer(std::shared_ptr<neuro::core::Buffer> input,
              std::vector<std::vector<float>>& outputs) {
     if (!input) return false;
 
@@ -274,7 +274,7 @@ class RKNNEngine::Impl {
 
 #endif  // USE_MOCK_HAL
 
-namespace ai_inference {
+namespace neuro::inference {
 
 RKNNEngine::RKNNEngine(const Config& config)
     : impl_(std::make_unique<Impl>(config)), config_(config) {}
@@ -287,7 +287,7 @@ bool RKNNEngine::Initialize() {
   return true;
 }
 
-bool RKNNEngine::Infer(std::shared_ptr<common::Buffer> input) {
+bool RKNNEngine::Infer(std::shared_ptr<neuro::core::Buffer> input) {
   return impl_->Infer(std::move(input), outputs_);
 }
 

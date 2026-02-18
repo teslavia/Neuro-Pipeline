@@ -1,9 +1,9 @@
-#include "common/virtual_device_io.hpp"
+#include "neuro/pipeline/virtual_device_io.hpp"
 
 #include <algorithm>
 #include <cstring>
 
-namespace data_processing {
+namespace neuro::pipeline {
 
 VirtualDeviceIO::VirtualDeviceIO() : next_fd_(10) {}
 

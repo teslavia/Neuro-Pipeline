@@ -4,7 +4,7 @@
 #include <fstream>
 #include <string>
 
-#include "app/config_manager.hpp"
+#include "neuro/pipeline/config_manager.hpp"
 
 namespace {
 
@@ -24,7 +24,7 @@ TEST(ConfigManagerTest, NestedSections) {
       "  recording:\n"
       "    enabled: true\n"
       "    pre_seconds: 10\n");
-  app::ConfigManager cfg;
+  neuro::pipeline::ConfigManager cfg;
   ASSERT_TRUE(cfg.LoadFromFile(path));
   EXPECT_EQ(cfg.Get("edge.device_id"), "edge-001");
   EXPECT_EQ(cfg.Get("edge.recording.enabled"), "true");
@@ -38,7 +38,7 @@ TEST(ConfigManagerTest, ListItemsSingleLine) {
       "  cameras:\n"
       "    - device: /dev/video0\n"
       "    - device: /dev/video1\n");
-  app::ConfigManager cfg;
+  neuro::pipeline::ConfigManager cfg;
   ASSERT_TRUE(cfg.LoadFromFile(path));
   EXPECT_EQ(cfg.Get("edge.cameras.0.device"), "/dev/video0");
   EXPECT_EQ(cfg.Get("edge.cameras.1.device"), "/dev/video1");
@@ -57,7 +57,7 @@ TEST(ConfigManagerTest, MultiLineListItems) {
       "      model_path: /opt/models/yolov8s.rknn\n"
       "      postprocessor: yolov8\n"
       "      npu_core: 2\n");
-  app::ConfigManager cfg;
+  neuro::pipeline::ConfigManager cfg;
   ASSERT_TRUE(cfg.LoadFromFile(path));
 
   // First model
@@ -81,7 +81,7 @@ TEST(ConfigManagerTest, ListFollowedByRegularKey) {
       "    - model_id: yolov5s\n"
       "      model_path: /opt/yolov5s.rknn\n"
       "  fps: 30\n");
-  app::ConfigManager cfg;
+  neuro::pipeline::ConfigManager cfg;
   ASSERT_TRUE(cfg.LoadFromFile(path));
   EXPECT_EQ(cfg.Get("edge.models.0.model_id"), "yolov5s");
   EXPECT_EQ(cfg.Get("edge.models.0.model_path"), "/opt/yolov5s.rknn");
@@ -93,7 +93,7 @@ TEST(ConfigManagerTest, QuotedEmptyString) {
       "edge:\n"
       "  ca_cert: \"\"\n"
       "  device_id: edge-001\n");
-  app::ConfigManager cfg;
+  neuro::pipeline::ConfigManager cfg;
   ASSERT_TRUE(cfg.LoadFromFile(path));
   EXPECT_EQ(cfg.Get("edge.ca_cert"), "");
   EXPECT_TRUE(cfg.Has("edge.ca_cert"));

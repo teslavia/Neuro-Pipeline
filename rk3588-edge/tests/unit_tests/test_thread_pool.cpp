@@ -6,23 +6,23 @@
 #include <thread>
 #include <vector>
 
-#include "common/thread_pool.hpp"
+#include "neuro/core/thread_pool.hpp"
 
 namespace {
 
 TEST(ThreadPoolTest, ConstructAndDestruct) {
-  data_processing::ThreadPool pool(4);
+  neuro::core::ThreadPool pool(4);
   EXPECT_EQ(pool.Size(), 4u);
 }
 
 TEST(ThreadPoolTest, SubmitSingleTask) {
-  data_processing::ThreadPool pool(2);
+  neuro::core::ThreadPool pool(2);
   auto future = pool.Submit([]() { return 42; });
   EXPECT_EQ(future.get(), 42);
 }
 
 TEST(ThreadPoolTest, SubmitMultipleTasks) {
-  data_processing::ThreadPool pool(4);
+  neuro::core::ThreadPool pool(4);
   std::vector<std::future<int>> futures;
 
   for (int i = 0; i < 100; ++i) {
@@ -35,7 +35,7 @@ TEST(ThreadPoolTest, SubmitMultipleTasks) {
 }
 
 TEST(ThreadPoolTest, ConcurrentAccess) {
-  data_processing::ThreadPool pool(4);
+  neuro::core::ThreadPool pool(4);
   std::atomic<int> counter{0};
   std::vector<std::future<void>> futures;
 
@@ -51,14 +51,14 @@ TEST(ThreadPoolTest, ConcurrentAccess) {
 }
 
 TEST(ThreadPoolTest, ShutdownIsIdempotent) {
-  data_processing::ThreadPool pool(2);
+  neuro::core::ThreadPool pool(2);
   pool.Shutdown();
   pool.Shutdown();  // Should not crash
 }
 
 TEST(ThreadPoolTest, PendingTasksCount) {
   // Use 1 thread and block it so tasks queue up
-  data_processing::ThreadPool pool(1);
+  neuro::core::ThreadPool pool(1);
   std::promise<void> blocker;
   auto block_future = blocker.get_future();
 
@@ -79,7 +79,7 @@ TEST(ThreadPoolTest, PendingTasksCount) {
 }
 
 TEST(ThreadPoolTest, MaxQueueSizeRejectsOverflow) {
-  data_processing::ThreadPool pool(1, 2);  // max 2 queued tasks
+  neuro::core::ThreadPool pool(1, 2);  // max 2 queued tasks
   std::promise<void> blocker;
   auto block_future = blocker.get_future();
 

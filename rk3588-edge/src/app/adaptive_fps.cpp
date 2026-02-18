@@ -1,10 +1,10 @@
-#include "common/adaptive_fps.hpp"
+#include "neuro/pipeline/adaptive_fps.hpp"
 
 #include <algorithm>
 
-#include "common/logger.hpp"
+#include "neuro/core/logger.hpp"
 
-namespace app {
+namespace neuro::pipeline {
 
 AdaptiveFPSController::AdaptiveFPSController(const Config& config)
     : config_(config), current_fps_(config.idle_fps) {}
