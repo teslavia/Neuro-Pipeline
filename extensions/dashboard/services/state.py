@@ -1,0 +1,116 @@
+"""Global state management for dashboard services.
+
+This module provides centralized state management and dependency injection
+for the dashboard application. All services can be injected from the central
+server process for production use, or run standalone with demo data.
+"""
+
+import time
+from typing import Any, Optional
+
+from fastapi import WebSocket
+
+
+# ── In-Memory State ──────────────────────────────────────
+
+events: list[dict] = []
+ws_clients: list[WebSocket] = []
+start_time: float = time.time()
+
+
+# ── Injected Services ──────────────────────────────────────
+
+detection_store: Any = None
+health_checker: Any = None
+session_manager: Any = None
+orchestrator: Any = None
+ab_test_manager: Any = None
+model_registry: Any = None
+config_path: Optional[str] = None
+
+
+# ── Setter Functions ──────────────────────────────────────
+
+def set_detection_store(store: Any) -> None:
+    """Inject a DetectionStore instance for history queries."""
+    global detection_store
+    detection_store = store
+
+
+def set_health_checker(checker: Any) -> None:
+    """Inject a HealthChecker instance for probes."""
+    global health_checker
+    health_checker = checker
+
+
+def set_session_manager(manager: Any) -> None:
+    """Inject a DeviceSessionManager for multi-device queries."""
+    global session_manager
+    session_manager = manager
+
+
+def set_orchestrator(orch: Any) -> None:
+    """Inject a CentralOrchestrator for command dispatch."""
+    global orchestrator
+    orchestrator = orch
+
+
+def set_ab_test_manager(manager: Any) -> None:
+    """Inject an ABTestManager for A/B testing."""
+    global ab_test_manager
+    ab_test_manager = manager
+
+
+def set_model_registry(registry: Any) -> None:
+    """Inject a ModelRegistry for model management."""
+    global model_registry
+    model_registry = registry
+
+
+def set_config_path(path: str) -> None:
+    """Set the path to the config.yaml file."""
+    global config_path
+    config_path = path
+
+
+def inject_from_central(
+    *,
+    detection_store: Any = None,
+    session_manager: Any = None,
+    orchestrator: Any = None,
+    health_checker: Any = None,
+    ab_test_manager: Any = None,
+    model_registry: Any = None,
+    config_path: Optional[str] = None,
+) -> None:
+    """One-call injection from central server process.
+
+    This is the main entry point for the central server to inject
+    all required services into the dashboard.
+
+    Usage:
+        from extensions.dashboard.services.state import inject_from_central
+        inject_from_central(
+            detection_store=store,
+            session_manager=sessions,
+            orchestrator=orch,
+            health_checker=checker,
+            ab_test_manager=ab_test,
+            model_registry=registry,
+            config_path="config.yaml",
+        )
+    """
+    if detection_store is not None:
+        set_detection_store(detection_store)
+    if session_manager is not None:
+        set_session_manager(session_manager)
+    if orchestrator is not None:
+        set_orchestrator(orchestrator)
+    if health_checker is not None:
+        set_health_checker(health_checker)
+    if ab_test_manager is not None:
+        set_ab_test_manager(ab_test_manager)
+    if model_registry is not None:
+        set_model_registry(model_registry)
+    if config_path is not None:
+        set_config_path(config_path)
