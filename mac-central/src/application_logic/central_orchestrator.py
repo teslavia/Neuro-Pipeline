@@ -18,6 +18,7 @@ except ImportError:
 
 from src.llm_vlm.mlx_llm_inference import MLXInferenceEngine
 from src.llm_vlm.prompt_generator import PromptGenerator
+from src.llm_vlm.vlm_config_guide import VLMConfigGuide
 from src.observability.metrics import (
     detections_total,
     vlm_requests_total,
@@ -57,12 +58,14 @@ class CentralOrchestrator:
         reasoning_chain=None,
         rag_retriever=None,
         anomaly_baseline=None,
+        vlm_config_guide: Optional[VLMConfigGuide] = None,
     ) -> None:
         self.model_path = model_path
         self.inference_engine: Optional[MLXInferenceEngine] = None
         self.prompt_generator = PromptGenerator()
         self._event_count = 0
         self._command_queue: asyncio.Queue = asyncio.Queue()
+        self._command_id_counter = 0
         self.vlm_rules = vlm_rules or [VLMTriggerRule()]
         self._recent_events: deque = deque(maxlen=100)
         self._event_listeners: List[asyncio.Queue] = []
@@ -81,6 +84,7 @@ class CentralOrchestrator:
         self._reasoning_chain = reasoning_chain
         self._rag_retriever = rag_retriever
         self._anomaly_baseline = anomaly_baseline
+        self._vlm_config_guide = vlm_config_guide
 
     async def initialize(self) -> None:
         """Initialize orchestrator and load models."""
@@ -319,6 +323,37 @@ class CentralOrchestrator:
                             )
                         except Exception as ue:
                             logger.warning(f"Cloud upload failed: {ue}")
+
+                    # v2.2: VLM-guided edge configuration
+                    if self._vlm_config_guide and device_id:
+                        try:
+                            guidance = self._vlm_config_guide.parse_vlm_result(
+                                vlm_result, context={"device_id": device_id}
+                            )
+                            if guidance.should_apply:
+                                for adj in guidance.adjustments:
+                                    self._command_id_counter += 1
+                                    cmd_dict = self._vlm_config_guide.create_control_command(
+                                        adj, device_id, self._command_id_counter
+                                    )
+                                    # Create protobuf ControlCommand
+                                    import neuro_pipeline_pb2 as pb
+                                    cmd = pb.ControlCommand(
+                                        type=cmd_dict["type"],
+                                        command_id=cmd_dict["command_id"],
+                                    )
+                                    for k, v in cmd_dict.get("parameters", {}).items():
+                                        if isinstance(v, str):
+                                            cmd.parameters[k] = v
+                                        elif isinstance(v, (int, float)):
+                                            cmd.parameters[k] = str(v)
+                                    await self.send_command(cmd)
+                                    logger.info(
+                                        f"VLM-guided command sent: type={cmd.type}, "
+                                        f"device={device_id}, reason={adj.reason[:50]}"
+                                    )
+                        except Exception as ge:
+                            logger.warning(f"VLM config guide failed: {ge}")
                 except (asyncio.TimeoutError, Exception) as e:
                     self._circuit_breaker.record_failure()
                     vlm_requests_total.labels(status="error").inc()
