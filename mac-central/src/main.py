@@ -206,6 +206,43 @@ async def main():
         )
         logger.info(f"Anomaly baseline: z>{cfg.anomaly.z_score_threshold}, window={cfg.anomaly.baseline_window_hours}h")
 
+    # v2: ReID engine (cross-camera re-identification)
+    reid_engine = None
+    if cfg.reid.enabled:
+        from src.analytics.reid_engine import ReIDEngine
+        reid_engine = ReIDEngine(
+            similarity_threshold=cfg.reid.similarity_threshold,
+            time_window_seconds=cfg.reid.time_window_seconds,
+        )
+        logger.info(f"ReID engine: threshold={cfg.reid.similarity_threshold}, window={cfg.reid.time_window_seconds}s")
+
+    # v2: Time series engine
+    timeseries_engine = None
+    if cfg.timeseries.enabled:
+        from src.analytics.timeseries_engine import TimeSeriesEngine
+        timeseries_engine = TimeSeriesEngine(detection_store=store)
+        logger.info(f"Time series engine: interval={cfg.timeseries.aggregation_interval}s")
+
+    # v2: Auto annotator
+    auto_annotator = None
+    if cfg.auto_annotator.enabled:
+        from src.analytics.auto_annotator import AutoAnnotator
+        auto_annotator = AutoAnnotator(
+            detection_store=store,
+            min_confidence=cfg.auto_annotator.min_confidence,
+        )
+        logger.info(f"Auto annotator: min_confidence={cfg.auto_annotator.min_confidence}")
+
+    # v2: Report generator
+    report_generator = None
+    if cfg.reporting.enabled:
+        from src.reporting.report_generator import ReportGenerator
+        report_generator = ReportGenerator(
+            detection_store=store,
+            cloud_storage=cloud,
+        )
+        logger.info(f"Report generator: schedule={cfg.reporting.schedule_hours}h")
+
     orchestrator = CentralOrchestrator(
         model_path,
         vlm_rules=vlm_rules,
@@ -281,6 +318,11 @@ async def main():
             orchestrator=orchestrator,
             health_checker=None,
             ab_test_manager=ab_test_manager,
+            model_registry=model_registry,
+            reid_engine=reid_engine,
+            timeseries_engine=timeseries_engine,
+            auto_annotator=auto_annotator,
+            report_generator=report_generator,
         )
         import uvicorn
         dashboard_config = uvicorn.Config(

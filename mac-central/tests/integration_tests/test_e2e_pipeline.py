@@ -147,7 +147,8 @@ async def test_e2e_recent_events_in_memory(e2e_stack):
 @pytest.mark.asyncio
 async def test_e2e_dashboard_reads_sqlite(e2e_stack):
     """Dashboard /api/events/history returns data from the same SQLite store."""
-    from extensions.dashboard.app import app, set_detection_store
+    from extensions.dashboard.app import app
+    from extensions.dashboard.services import set_detection_store
 
     store = e2e_stack["store"]
     # Insert directly to ensure data exists

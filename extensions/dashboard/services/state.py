@@ -28,6 +28,12 @@ ab_test_manager: Any = None
 model_registry: Any = None
 config_path: Optional[str] = None
 
+# v2: Analytics modules
+reid_engine: Any = None
+timeseries_engine: Any = None
+auto_annotator: Any = None
+report_generator: Any = None
+
 
 # ── Setter Functions ──────────────────────────────────────
 
@@ -73,6 +79,30 @@ def set_config_path(path: str) -> None:
     config_path = path
 
 
+def set_reid_engine(engine: Any) -> None:
+    """Inject a ReIDEngine for cross-camera tracking."""
+    global reid_engine
+    reid_engine = engine
+
+
+def set_timeseries_engine(engine: Any) -> None:
+    """Inject a TimeSeriesEngine for trend analysis."""
+    global timeseries_engine
+    timeseries_engine = engine
+
+
+def set_auto_annotator(annotator: Any) -> None:
+    """Inject an AutoAnnotator for annotation export."""
+    global auto_annotator
+    auto_annotator = annotator
+
+
+def set_report_generator(generator: Any) -> None:
+    """Inject a ReportGenerator for report creation."""
+    global report_generator
+    report_generator = generator
+
+
 def inject_from_central(
     *,
     detection_store: Any = None,
@@ -82,6 +112,10 @@ def inject_from_central(
     ab_test_manager: Any = None,
     model_registry: Any = None,
     config_path: Optional[str] = None,
+    reid_engine: Any = None,
+    timeseries_engine: Any = None,
+    auto_annotator: Any = None,
+    report_generator: Any = None,
 ) -> None:
     """One-call injection from central server process.
 
@@ -114,3 +148,11 @@ def inject_from_central(
         set_model_registry(model_registry)
     if config_path is not None:
         set_config_path(config_path)
+    if reid_engine is not None:
+        set_reid_engine(reid_engine)
+    if timeseries_engine is not None:
+        set_timeseries_engine(timeseries_engine)
+    if auto_annotator is not None:
+        set_auto_annotator(auto_annotator)
+    if report_generator is not None:
+        set_report_generator(report_generator)

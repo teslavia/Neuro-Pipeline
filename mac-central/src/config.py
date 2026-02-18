@@ -160,6 +160,37 @@ class AnomalyConfig:
 
 
 @dataclass
+class ReIDConfig:
+    """Configuration for cross-camera re-identification."""
+    enabled: bool = False
+    similarity_threshold: float = 0.85
+    time_window_seconds: float = 300.0
+
+
+@dataclass
+class TimeSeriesConfig:
+    """Configuration for time series analysis."""
+    enabled: bool = False
+    aggregation_interval: int = 60  # seconds
+
+
+@dataclass
+class AutoAnnotatorConfig:
+    """Configuration for auto-annotation."""
+    enabled: bool = False
+    min_confidence: float = 0.9
+    output_dir: str = "data/annotations"
+
+
+@dataclass
+class ReportingConfig:
+    """Configuration for report generation."""
+    enabled: bool = False
+    output_dir: str = "data/reports"
+    schedule_hours: float = 24.0
+
+
+@dataclass
 class AppConfig:
     central: CentralConfig = field(default_factory=CentralConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
@@ -179,6 +210,10 @@ class AppConfig:
     rag: RAGConfig = field(default_factory=RAGConfig)
     ab_test: ABTestConfig = field(default_factory=ABTestConfig)
     anomaly: AnomalyConfig = field(default_factory=AnomalyConfig)
+    reid: ReIDConfig = field(default_factory=ReIDConfig)
+    timeseries: TimeSeriesConfig = field(default_factory=TimeSeriesConfig)
+    auto_annotator: AutoAnnotatorConfig = field(default_factory=AutoAnnotatorConfig)
+    reporting: ReportingConfig = field(default_factory=ReportingConfig)
 
     @classmethod
     def from_yaml(cls, path: Path) -> "AppConfig":
@@ -323,6 +358,33 @@ class AppConfig:
             baseline_window_hours=float(an.get("baseline_window_hours", cfg.anomaly.baseline_window_hours)),
             z_score_threshold=float(an.get("z_score_threshold", cfg.anomaly.z_score_threshold)),
             min_samples=int(an.get("min_samples", cfg.anomaly.min_samples)),
+        )
+        # v2: ReID engine
+        reid = data.get("reid", {})
+        cfg.reid = ReIDConfig(
+            enabled=bool(reid.get("enabled", cfg.reid.enabled)),
+            similarity_threshold=float(reid.get("similarity_threshold", cfg.reid.similarity_threshold)),
+            time_window_seconds=float(reid.get("time_window_seconds", cfg.reid.time_window_seconds)),
+        )
+        # v2: Time series engine
+        ts = data.get("timeseries", {})
+        cfg.timeseries = TimeSeriesConfig(
+            enabled=bool(ts.get("enabled", cfg.timeseries.enabled)),
+            aggregation_interval=int(ts.get("aggregation_interval", cfg.timeseries.aggregation_interval)),
+        )
+        # v2: Auto annotator
+        aa = data.get("auto_annotator", {})
+        cfg.auto_annotator = AutoAnnotatorConfig(
+            enabled=bool(aa.get("enabled", cfg.auto_annotator.enabled)),
+            min_confidence=float(aa.get("min_confidence", cfg.auto_annotator.min_confidence)),
+            output_dir=aa.get("output_dir", cfg.auto_annotator.output_dir),
+        )
+        # v2: Report generator
+        rp = data.get("reporting", {})
+        cfg.reporting = ReportingConfig(
+            enabled=bool(rp.get("enabled", cfg.reporting.enabled)),
+            output_dir=rp.get("output_dir", cfg.reporting.output_dir),
+            schedule_hours=float(rp.get("schedule_hours", cfg.reporting.schedule_hours)),
         )
         return cfg
 

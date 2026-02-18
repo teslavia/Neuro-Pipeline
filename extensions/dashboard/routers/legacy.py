@@ -51,6 +51,14 @@ async def api_events(
     return events[-limit:]
 
 
+@router.post("/events")
+async def api_events_post(body: dict, _=Depends(verify_credentials)):
+    """Post a new event (legacy endpoint for testing)."""
+    body["timestamp"] = body.get("timestamp", time.time())
+    events.append(body)
+    return {"status": "ok", "count": len(events)}
+
+
 @router.get("/events/history")
 async def api_events_history(
     hours: float = Query(24, ge=0.1, le=720),
@@ -59,23 +67,24 @@ async def api_events_history(
     _=Depends(verify_credentials),
 ):
     """Query historical events from SQLite store."""
-    from ..services import detection_store
+    from ..services import state
 
-    if detection_store is None:
+    if state.detection_store is None:
         return {"error": "No persistent store configured", "events": []}
 
     since = time.time() - hours * 3600
-    stored_events = detection_store.query(since=since, limit=limit, device_id=device_id)
+    stored_events = state.detection_store.query(since=since, limit=limit, device_id=device_id)
     return {"count": len(stored_events), "hours": hours, "events": stored_events}
 
 
 @router.get("/devices")
 async def api_devices(_=Depends(verify_credentials)):
     """List all connected edge devices."""
-    if session_manager is None:
+    from ..services import state
+    if state.session_manager is None:
         return []
 
-    sessions = session_manager.list_sessions()
+    sessions = state.session_manager.list_sessions()
     return [
         {
             "device_id": s.device_id,
