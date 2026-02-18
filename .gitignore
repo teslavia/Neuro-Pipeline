@@ -75,7 +75,7 @@ desktop.ini
 
 # Logs & Debug
 *.log
-core
+/core
 vgcore.*
 perf.data
 perf.data.old

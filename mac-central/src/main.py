@@ -17,6 +17,7 @@ from src.observability.alerting import AlertManager, AlertRule, AlertSeverity, A
 from src.observability.metrics import edge_device_status
 from src.storage.detection_store import DetectionStore
 from src.storage.cloud_storage import CloudStorageClient
+from src.core import __version__
 
 
 def setup_logging(cfg) -> None:
@@ -79,7 +80,7 @@ async def main():
     model_path = Path(args.model_path or cfg.central.model_path)
 
     logger.info("=" * 60)
-    logger.info("  Neuro-Pipeline Central Server v2.2.0")
+    logger.info(f"  Neuro-Pipeline Central Server v{__version__}")
     logger.info("=" * 60)
     logger.info(f"Host: {host}:{port}  TLS: {cfg.tls.enabled}")
     logger.info(f"Model: {model_path}  Mode: {cfg.central.inference_mode}")
