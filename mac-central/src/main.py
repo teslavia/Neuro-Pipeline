@@ -18,6 +18,7 @@ from src.observability.metrics import edge_device_status
 from src.storage.detection_store import DetectionStore
 from src.storage.cloud_storage import CloudStorageClient
 from src.core import __version__
+from src.core.hot_reload import get_config_watcher
 
 
 def setup_logging(cfg) -> None:
@@ -309,6 +310,50 @@ async def main():
         _session_cleanup_loop(session_mgr, cfg.sessions.expiry_timeout)
     )
 
+    # --- Hot reload ---
+    config_path = str(args.config) if args.config else None
+    config_watcher = None
+    if config_path:
+        async def _on_config_change(path, change):
+            try:
+                new_cfg = AppConfig.from_yaml(Path(config_path))
+                new_cfg.validate()
+                # Logging level
+                new_level = getattr(logging, new_cfg.logging.level.upper(), None)
+                if new_level and new_level != logging.getLogger().level:
+                    logging.getLogger().setLevel(new_level)
+                    logger.info(f"Log level changed to {new_cfg.logging.level}")
+                # VLM rules
+                new_vlm_rules = [
+                    VLMTriggerRule(
+                        class_name=r.class_name,
+                        min_confidence=r.min_confidence,
+                        prompt_template=r.prompt_template,
+                    )
+                    for r in new_cfg.vlm_rules
+                ]
+                orchestrator.vlm_rules = new_vlm_rules
+                # Rate limiter
+                if rate_limiter and new_cfg.rate_limiting.enabled:
+                    rate_limiter.update_limits(
+                        new_cfg.rate_limiting.max_rps,
+                        new_cfg.rate_limiting.burst,
+                    )
+                # Alert manager
+                if alert_mgr and new_cfg.alerting.enabled:
+                    from src.observability.alerting import AlertRule as _AR, AlertSeverity as _AS, AlertRoute as _ARt
+                    new_rules = [_AR(name=r.name, cooldown_seconds=r.cooldown_seconds) for r in new_cfg.alerting.rules]
+                    new_routes = [_ARt(severity=_AS(rt.severity), webhook_url=rt.webhook_url) for rt in new_cfg.alerting.routes]
+                    alert_mgr.update_rules(new_rules, new_routes)
+                logger.info("Config hot-reloaded successfully")
+            except Exception as e:
+                logger.error(f"Config reload failed (keeping current): {e}")
+
+        config_watcher = get_config_watcher()
+        config_watcher.watch(config_path, async_callback=_on_config_change)
+        await config_watcher.start()
+        logger.info(f"Config watcher started for {config_path}")
+
     # Embedded dashboard (same process, shares subsystem instances)
     dashboard_server = None
     if args.dashboard:
@@ -356,6 +401,8 @@ async def main():
         await cleanup_task
     except asyncio.CancelledError:
         pass
+    if config_watcher:
+        await config_watcher.stop()
     if dashboard_server:
         dashboard_server.should_exit = True
     try:
