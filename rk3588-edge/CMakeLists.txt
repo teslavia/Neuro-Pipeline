@@ -109,6 +109,7 @@ endif()
 include_directories(
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${CMAKE_CURRENT_SOURCE_DIR}/src/generated
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party
 )
 
 # ==============================================================================
@@ -194,6 +195,10 @@ set(APP_SOURCES
   src/app/adaptive_fps.cpp
 )
 
+set(UTILS_SOURCES
+  src/utils/stb_image_write_impl.cpp
+)
+
 # Conditionally include generated protobuf sources
 if(EXISTS "${PROTO_SRCS}" OR GRPC_CPP_PLUGIN)
   set(GENERATED_SOURCES ${PROTO_SRCS} ${GRPC_SRCS})
@@ -207,6 +212,7 @@ add_library(neuro_edge_lib STATIC
   ${DATA_PROCESSING_SOURCES}
   ${AI_INFERENCE_SOURCES}
   ${COMMUNICATION_SOURCES}
+  ${UTILS_SOURCES}
   src/app/pipeline_coordinator.cpp
   src/app/config_manager.cpp
   src/app/edge_metrics.cpp

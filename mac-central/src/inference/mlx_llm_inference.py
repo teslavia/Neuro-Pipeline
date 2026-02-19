@@ -167,22 +167,28 @@ class MLXInferenceEngine:
         if self.mode == "vlm" and self.vlm_model and self.vlm_processor:
             try:
                 from mlx_vlm import generate as vlm_generate
-                from PIL import Image
-                import io
+                import tempfile, os
 
-                image = Image.open(io.BytesIO(image_data))
-                t0 = time.perf_counter()
-                result = vlm_generate(
-                    self.vlm_model,
-                    self.vlm_processor,
-                    image,
-                    prompt,
-                    max_tokens=max_tokens,
-                    verbose=False,
-                )
-                t1 = time.perf_counter()
-                logger.info(f"[Perf] MLX VLM inference: {(t1-t0)*1000:.1f}ms")
-                return result
+                # mlx_vlm.generate expects a file path, not PIL Image
+                with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as f:
+                    f.write(image_data)
+                    tmp_path = f.name
+                try:
+                    t0 = time.perf_counter()
+                    result = vlm_generate(
+                        self.vlm_model,
+                        self.vlm_processor,
+                        prompt,
+                        image=tmp_path,
+                        max_tokens=max_tokens,
+                        verbose=False,
+                    )
+                    t1 = time.perf_counter()
+                    logger.info(f"[Perf] MLX VLM inference: {(t1-t0)*1000:.1f}ms")
+                    # mlx_vlm returns GenerationResult; extract .text
+                    return result.text if hasattr(result, 'text') else str(result)
+                finally:
+                    os.unlink(tmp_path)
             except (RuntimeError, ValueError, OSError) as e:
                 logger.error(f"VLM inference failed, falling back to LLM: {e}")
 

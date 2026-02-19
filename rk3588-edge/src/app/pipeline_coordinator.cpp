@@ -23,6 +23,7 @@
 #include "neuro/inference/multi_model_manager.hpp"
 #include "neuro/comm/grpc_client.hpp"
 #include "neuro/hal/drm_allocator.hpp"
+#include "neuro/utils/jpeg_encoder.hpp"
 #include "neuro/hal/mpp_decoder.hpp"
 #include "neuro/hal/rga_processor.hpp"
 #include "neuro/hal/rtsp_source.hpp"
@@ -500,6 +501,18 @@ class PipelineCoordinator::Impl {
               // v2: set track_id if temporal tracker assigned one
               if (!track_ids.empty() && di < track_ids.size()) {
                 box->set_track_id(track_ids[di]);
+              }
+            }
+
+            // Encode JPEG frame for VLM analysis on central
+            if (config_.send_frame_data && processed) {
+              auto jpeg = neuro::utils::EncodeJPEG(
+                  static_cast<const uint8_t*>(processed->Data()),
+                  processed->GetMetadata().width,
+                  processed->GetMetadata().height,
+                  config_.jpeg_quality);
+              if (!jpeg.empty()) {
+                result.set_frame_data(std::move(jpeg));
               }
             }
 

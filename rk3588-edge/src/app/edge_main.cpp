@@ -107,6 +107,10 @@ int main(int argc, char* argv[]) {
         config.enable_adaptive_fps = cfg.GetBool("edge.enable_adaptive_fps", config.enable_adaptive_fps);
         config.enable_multi_model = cfg.GetBool("edge.enable_multi_model", config.enable_multi_model);
 
+        // Frame data (JPEG) for VLM
+        config.send_frame_data = cfg.GetBool("edge.send_frame_data", config.send_frame_data);
+        config.jpeg_quality = cfg.GetInt("edge.jpeg_quality", config.jpeg_quality);
+
         // Multi-camera config: cameras.0.device, cameras.0.width, etc.
         for (int i = 0; i < static_cast<int>(neuro::core::kMaxCameras); ++i) {
           std::string prefix = "cameras." + std::to_string(i);

@@ -20,6 +20,8 @@ edge:
   class_names_file: ""
   frame_skip_interval: 0  # 0 = send every frame, N = send every Nth frame
   grpc_compression: true  # Enable gzip compression for gRPC
+  send_frame_data: false   # Send JPEG frame with detections (enables VLM on central)
+  jpeg_quality: 70         # JPEG quality 1-100 (lower = smaller, ~30-50KB @70)
   cache_queue:
     max_entries: 1000       # ~33s @30fps
     max_memory_mb: 64       # 64MB max buffer
