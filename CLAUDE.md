@@ -69,19 +69,17 @@ cd mac-central
 source .venv/bin/activate  # venv lives at mac-central/.venv
 
 # All unit + integration tests
-pytest tests/ -v --tb=short -o "addopts="
+pytest tests/ -v --tb=short
 
 # Single test file
-pytest tests/unit_tests/test_grpc_server.py -v -o "addopts="
+pytest tests/unit_tests/test_grpc_server.py -v
 
 # Single test
-pytest tests/unit_tests/test_grpc_server.py::test_health_check -v -o "addopts="
+pytest tests/unit_tests/test_grpc_server.py::test_health_check -v
 
 # Dashboard + E2E + chaos tests (from repo root)
-pytest extensions/dashboard/tests/ tests/e2e/ tests/chaos/ -v -o "addopts="
+pytest extensions/dashboard/tests/ tests/e2e/ tests/chaos/ -v
 ```
-
-The `-o "addopts="` override is required — `pyproject.toml` sets coverage flags that break targeted test runs.
 
 ### C++ Single Test
 ```bash
@@ -104,25 +102,37 @@ v2.3: `DetectionQueue` (`src/communication/detection_queue.cpp`) buffers detecti
 
 v2.4: JPEG frame encoding via `stb_image_write` — `pipeline_coordinator.cpp` encodes RGA output (RGB888 640×640) to JPEG and sets `frame_data` on gRPC `DetectionResult`. Controlled by `edge.send_frame_data` (default off) and `edge.jpeg_quality` (default 70). Files: `src/utils/jpeg_encoder.hpp`, `src/utils/stb_image_write_impl.cpp`, `third_party/stb_image_write.h`.
 
+v2.4.1: `InputSource` Strategy pattern (`include/neuro/hal/input_source.hpp`) replaces 18-branch switch with polymorphism. `InputSourceFactory` creates V4L2/RTSP/File sources. Config struct split into 4 sub-structs (`pipeline_config.hpp`).
+
 ### Central Server (Python, async)
 ```
-gRPC Server → Orchestrator → [SQLite Store, VLM Queue, Alert Manager, Metrics]
-                                    ↓
-                              MLX Inference Engine (LLM or VLM mode)
+gRPC Server → DetectionProcessor → [SQLite Store, VLM Pipeline, Alert Manager, Metrics]
+                     ↓ EventBus                    ↓
+               ServiceContainer          MLX Inference Engine (LLM or VLM mode)
 ```
 Entry point: `mac-central/src/main.py`. Config: `config.yaml` (root).
 
 Key subsystems:
+- `src/core/container.py` — DI container with lazy subsystem initialization (v2.4.1)
+- `src/core/config_loader.py` — Generic dataclass config loader (v2.4.1)
+- `src/core/logging.py` — Unified logger factory (v2.4.1)
+- `src/core/event_bus.py` — EventBus for decoupled event dispatch (v2.4.1)
+- `src/core/error_handling.py` — `@safe_async` decorator (v2.4.1)
 - `src/communication/grpc_server.py` — gRPC server with rate limiting and input validation
-- `src/application_logic/central_orchestrator.py` — core detection processing, VLM queue, event dispatch
+- `src/communication/model_actions.py` — ModelActionHandler Strategy pattern (v2.4.1)
+- `src/pipeline/detection_processor.py` — Detection processing (extracted from orchestrator, v2.4.1)
+- `src/pipeline/vlm_pipeline.py` — VLM processing pipeline (extracted from orchestrator, v2.4.1)
+- `src/application_logic/central_orchestrator.py` — Slim orchestrator (503→120 lines, v2.4.1)
 - `src/llm_vlm/mlx_llm_inference.py` — dual-mode MLX engine (LLM text / VLM multimodal), runtime model switching
-- `src/storage/detection_store.py` — SQLite persistence with retry and backup
+- `src/storage/detection_store.py` — SQLite Facade with 3 internal repos (v2.4.1)
 - `src/observability/` — Prometheus metrics, circuit breaker, alerting with severity routing, OTel tracing
 - `src/core/hot_reload.py` — Config file watcher with debounced change detection (v2.3)
 - `src/model_management/vlm_validator.py` — VLM model validation pipeline with benchmarks (v2.3)
 
 ### Dashboard
 `extensions/dashboard/app.py` — FastAPI + htmx + WebSocket. HTTP Basic Auth (env vars `DASHBOARD_USER`/`DASHBOARD_PASS`).
+
+v2.4.1: FastAPI DI via `extensions/dashboard/services/deps.py` — eliminates 14 global variables.
 
 v2.3 endpoints:
 - `GET/PUT /api/v2/logging/level` — dynamic log level
