@@ -1,5 +1,6 @@
 {
   "annotations": {"list": []},
+  "description": "Neuro-Pipeline comprehensive monitoring dashboard",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -7,69 +8,198 @@
   "links": [],
   "panels": [
     {
-      "title": "FPS per Device",
-      "type": "timeseries",
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
-      "targets": [{"expr": "rate(np_detections_total[1m])", "legendFormat": "{{class_name}}"}],
-      "fieldConfig": {"defaults": {"unit": "ops"}}
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+      "id": 100,
+      "panels": [],
+      "title": "Overview",
+      "type": "row"
     },
     {
-      "title": "Detections by Class",
-      "type": "timeseries",
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
-      "targets": [{"expr": "increase(np_detections_total[5m])", "legendFormat": "{{class_name}}"}]
-    },
-    {
-      "title": "VLM Inference Latency",
-      "type": "timeseries",
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
-      "targets": [
-        {"expr": "histogram_quantile(0.50, rate(np_vlm_latency_seconds_bucket[5m]))", "legendFormat": "p50"},
-        {"expr": "histogram_quantile(0.95, rate(np_vlm_latency_seconds_bucket[5m]))", "legendFormat": "p95"},
-        {"expr": "histogram_quantile(0.99, rate(np_vlm_latency_seconds_bucket[5m]))", "legendFormat": "p99"}
-      ],
-      "fieldConfig": {"defaults": {"unit": "s"}}
-    },
-    {
-      "title": "gRPC Latency",
-      "type": "timeseries",
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
-      "targets": [
-        {"expr": "histogram_quantile(0.95, rate(np_grpc_latency_seconds_bucket[5m]))", "legendFormat": "p95 {{method}}"}
-      ],
-      "fieldConfig": {"defaults": {"unit": "s"}}
+      "title": "Detection Rate",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 1},
+      "targets": [{"expr": "sum(rate(np_detections_total[1m]))", "legendFormat": "FPS"}],
+      "fieldConfig": {"defaults": {"unit": "ops", "color": {"mode": "thresholds"}, "thresholds": {"steps": [{"color": "green", "value": 0}, {"color": "yellow", "value": 20}, {"color": "red", "value": 35}]}}},
+      "options": {"colorMode": "value", "graphMode": "area"}
     },
     {
       "title": "Edge Connections",
       "type": "stat",
-      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 16},
-      "targets": [{"expr": "np_edge_connections", "legendFormat": "connections"}]
+      "gridPos": {"h": 4, "w": 4, "x": 4, "y": 1},
+      "targets": [{"expr": "np_edge_connections", "legendFormat": "connections"}],
+      "fieldConfig": {"defaults": {"unit": "short", "color": {"mode": "thresholds"}, "thresholds": {"steps": [{"color": "green", "value": 0}]}}},
+      "options": {"colorMode": "value", "graphMode": "none"}
     },
     {
       "title": "VLM Queue Depth",
       "type": "gauge",
-      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 16},
+      "gridPos": {"h": 4, "w": 4, "x": 8, "y": 1},
       "targets": [{"expr": "np_vlm_queue_depth", "legendFormat": "queue"}],
-      "fieldConfig": {"defaults": {"max": 32, "thresholds": {"steps": [{"color": "green", "value": 0}, {"color": "yellow", "value": 16}, {"color": "red", "value": 28}]}}}
+      "fieldConfig": {"defaults": {"min": 0, "max": 32, "unit": "short", "thresholds": {"steps": [{"color": "green", "value": 0}, {"color": "yellow", "value": 16}, {"color": "red", "value": 28}]}}}
     },
     {
-      "title": "Circuit Breaker State",
+      "title": "Circuit Breaker",
       "type": "stat",
-      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 16},
-      "targets": [{"expr": "increase(np_vlm_requests_total{status='circuit_open'}[5m])", "legendFormat": "circuit_open"}]
+      "gridPos": {"h": 4, "w": 4, "x": 12, "y": 1},
+      "targets": [{"expr": "sum(increase(np_vlm_requests_total{status='circuit_open'}[5m]))", "legendFormat": "opens"}],
+      "fieldConfig": {"defaults": {"unit": "short", "color": {"mode": "thresholds"}, "thresholds": {"steps": [{"color": "green", "value": 0}, {"color": "red", "value": 1}]}}},
+      "options": {"colorMode": "background", "graphMode": "none"}
     },
     {
       "title": "Events Stored",
       "type": "stat",
-      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 16},
-      "targets": [{"expr": "np_events_stored_total", "legendFormat": "total"}]
+      "gridPos": {"h": 4, "w": 4, "x": 16, "y": 1},
+      "targets": [{"expr": "np_events_stored_total", "legendFormat": "total"}],
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "options": {"colorMode": "value", "graphMode": "area"}
+    },
+    {
+      "title": "Error Rate (5m)",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 20, "y": 1},
+      "targets": [
+        {"expr": "sum(increase(np_grpc_validation_errors_total[5m])) + sum(increase(np_edge_inference_errors[5m]))", "legendFormat": "errors"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "short", "color": {"mode": "thresholds"}, "thresholds": {"steps": [{"color": "green", "value": 0}, {"color": "red", "value": 1}]}}},
+      "options": {"colorMode": "value", "graphMode": "area"}
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 5},
+      "id": 200,
+      "panels": [],
+      "title": "Edge Metrics",
+      "type": "row"
+    },
+    {
+      "title": "Edge FPS per Device",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 8, "x": 0, "y": 6},
+      "targets": [{"expr": "np_edge_fps", "legendFormat": "{{device_id}}"}],
+      "fieldConfig": {"defaults": {"unit": "ops", "min": 0, "max": 35}},
+      "options": {"legend": {"displayMode": "table", "calcs": ["mean", "lastNotNull"]}}
+    },
+    {
+      "title": "Edge Inference Latency",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 8, "x": 8, "y": 6},
+      "targets": [{"expr": "np_edge_inference_latency_avg_ms", "legendFormat": "{{device_id}}"}],
+      "fieldConfig": {"defaults": {"unit": "ms", "min": 0}},
+      "options": {"legend": {"displayMode": "table", "calcs": ["mean", "max"]}}
+    },
+    {
+      "title": "Device Status",
+      "type": "stat",
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 6},
+      "targets": [{"expr": "np_edge_device_status", "legendFormat": "{{device_id}}"}],
+      "fieldConfig": {"defaults": {"unit": "none", "mappings": [{"type": "value", "options": {"0": {"text": "OFFLINE", "color": "red"}, "1": {"text": "ONLINE", "color": "green"}}}]}},
+      "options": {"colorMode": "background", "displayMode": "auto", "orientation": "vertical"}
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 14},
+      "id": 300,
+      "panels": [],
+      "title": "Detection Metrics",
+      "type": "row"
+    },
+    {
+      "title": "FPS per Device",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 15},
+      "targets": [{"expr": "rate(np_detections_total[1m])", "legendFormat": "{{device_id}} - {{class_name}}"}],
+      "fieldConfig": {"defaults": {"unit": "ops"}},
+      "options": {"legend": {"displayMode": "table", "calcs": ["mean", "max"]}}
+    },
+    {
+      "title": "Detections by Class",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 15},
+      "targets": [{"expr": "sum by (class_name) (increase(np_detections_total[5m]))", "legendFormat": "{{class_name}}"}],
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "options": {"legend": {"displayMode": "table", "calcs": ["sum"]}}
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 23},
+      "id": 400,
+      "panels": [],
+      "title": "Central Metrics",
+      "type": "row"
+    },
+    {
+      "title": "VLM Inference Latency",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+      "targets": [
+        {"expr": "histogram_quantile(0.50, rate(np_vlm_latency_seconds_bucket[5m])) * 1000", "legendFormat": "P50"},
+        {"expr": "histogram_quantile(0.95, rate(np_vlm_latency_seconds_bucket[5m])) * 1000", "legendFormat": "P95"},
+        {"expr": "histogram_quantile(0.99, rate(np_vlm_latency_seconds_bucket[5m])) * 1000", "legendFormat": "P99"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms", "min": 0}},
+      "options": {"legend": {"displayMode": "table", "calcs": ["mean", "max"]}}
+    },
+    {
+      "title": "gRPC Latency",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+      "targets": [
+        {"expr": "histogram_quantile(0.50, rate(np_grpc_latency_seconds_bucket[5m])) * 1000", "legendFormat": "P50 {{method}}"},
+        {"expr": "histogram_quantile(0.95, rate(np_grpc_latency_seconds_bucket[5m])) * 1000", "legendFormat": "P95 {{method}}"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms", "min": 0}},
+      "options": {"legend": {"displayMode": "table", "calcs": ["mean", "max"]}}
+    },
+    {
+      "title": "gRPC Request Rate",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 32},
+      "targets": [{"expr": "rate(np_grpc_requests_total[1m])", "legendFormat": "{{method}} - {{status}}"}],
+      "fieldConfig": {"defaults": {"unit": "ops"}},
+      "options": {"legend": {"displayMode": "table", "calcs": ["mean"]}}
+    },
+    {
+      "title": "Control Commands",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 32},
+      "targets": [{"expr": "increase(np_control_commands_total[5m])", "legendFormat": "{{command_type}}"}],
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "options": {"legend": {"displayMode": "table", "calcs": ["sum"]}}
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 40},
+      "id": 500,
+      "panels": [],
+      "title": "Errors",
+      "type": "row"
+    },
+    {
+      "title": "Validation Errors",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 41},
+      "targets": [{"expr": "rate(np_grpc_validation_errors_total[5m])", "legendFormat": "{{reason}}"}],
+      "fieldConfig": {"defaults": {"unit": "ops"}},
+      "options": {"legend": {"displayMode": "table", "calcs": ["sum"]}}
+    },
+    {
+      "title": "Edge Inference Errors",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 41},
+      "targets": [{"expr": "rate(np_edge_inference_errors[5m])", "legendFormat": "{{device_id}}"}],
+      "fieldConfig": {"defaults": {"unit": "ops"}},
+      "options": {"legend": {"displayMode": "table", "calcs": ["sum"]}}
     }
   ],
+  "refresh": "5s",
   "schemaVersion": 39,
-  "tags": ["neuro-pipeline"],
+  "tags": ["neuro-pipeline", "edge-ai", "monitoring"],
   "templating": {"list": []},
   "time": {"from": "now-1h", "to": "now"},
+  "timepicker": {},
+  "timezone": "",
   "title": "Neuro-Pipeline Overview",
   "uid": "neuro-pipeline-overview",
-  "version": 1
+  "version": 2
 }
