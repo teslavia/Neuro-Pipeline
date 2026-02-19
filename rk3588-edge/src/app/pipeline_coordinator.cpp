@@ -2,7 +2,6 @@
 
 #include <chrono>
 #include <cstdio>
-#include <fstream>
 #include <iostream>
 #include <mutex>
 #include <thread>
@@ -24,10 +23,9 @@
 #include "neuro/comm/grpc_client.hpp"
 #include "neuro/hal/drm_allocator.hpp"
 #include "neuro/utils/jpeg_encoder.hpp"
-#include "neuro/hal/mpp_decoder.hpp"
+#include "neuro/hal/input_source.hpp"
+#include "neuro/hal/input_source_factory.hpp"
 #include "neuro/hal/rga_processor.hpp"
-#include "neuro/hal/rtsp_source.hpp"
-#include "neuro/hal/v4l2_camera.hpp"
 
 namespace neuro::app {
 
@@ -35,11 +33,11 @@ class PipelineCoordinator::Impl {
  public:
   explicit Impl(const Config& config) : config_(config),
       detection_cache_(config.dedup_iou_threshold, config.dedup_ttl_seconds) {
-    if (config_.enable_grpc) {
+    if (config_.grpc.enabled) {
       neuro::comm::GRPCClient::Config grpc_cfg;
-      grpc_cfg.server_address = config_.grpc_server;
-      grpc_cfg.cache_queue.max_entries = config_.cache_queue_max_entries;
-      grpc_cfg.cache_queue.max_memory_bytes = config_.cache_queue_max_memory_bytes;
+      grpc_cfg.server_address = config_.grpc.server_address;
+      grpc_cfg.cache_queue.max_entries = config_.grpc.cache_queue_max_entries;
+      grpc_cfg.cache_queue.max_memory_bytes = config_.grpc.cache_queue_max_memory_bytes;
       grpc_client_ = std::make_unique<neuro::comm::GRPCClient>(grpc_cfg);
     }
   }
@@ -52,88 +50,47 @@ class PipelineCoordinator::Impl {
       return false;
     }
 
-    // Input source: RTSP, camera(s), or video file
-    use_rtsp_ = (!config_.video_source.empty() &&
-                 config_.video_source.substr(0, 7) == "rtsp://");
-    use_camera_ = config_.video_source.empty();
-
-    if (use_rtsp_) {
-      // RTSP mode
-      neuro::hal::RTSPSource::Config rtsp_cfg;
-      rtsp_cfg.url = config_.video_source;
-      rtsp_cfg.width = config_.width;
-      rtsp_cfg.height = config_.height;
-      rtsp_cfg.fps = config_.fps;
-      rtsp_source_ = std::make_unique<neuro::hal::RTSPSource>(rtsp_cfg);
-      if (!rtsp_source_->Initialize()) {
-        LOG_ERROR("Pipeline", "RTSP source init failed: %s", config_.video_source.c_str());
-        return false;
-      }
-      LOG_INFO("Pipeline", "RTSP source: %s", config_.video_source.c_str());
-    } else if (use_camera_) {
-      if (!config_.cameras.empty()) {
-        // Multi-camera mode
-        for (size_t i = 0; i < config_.cameras.size(); ++i) {
-          const auto& cam_cfg_in = config_.cameras[i];
-          neuro::hal::V4L2Camera::Config cam_cfg;
-          cam_cfg.device_path = cam_cfg_in.device;
-          cam_cfg.width = cam_cfg_in.width;
-          cam_cfg.height = cam_cfg_in.height;
-          cam_cfg.fps = cam_cfg_in.fps;
-          auto cam = std::make_unique<neuro::hal::V4L2Camera>(cam_cfg);
-          if (!cam->Initialize()) {
-            LOG_ERROR("Pipeline", "Camera[%zu] init failed: %s", i, cam_cfg_in.device.c_str());
-            return false;
-          }
-          cameras_.push_back(std::move(cam));
-
-          // Per-camera RGA processor
-          neuro::hal::RGAProcessor::Config rga_cfg;
-          rga_cfg.src_width = cam_cfg_in.width;
-          rga_cfg.src_height = cam_cfg_in.height;
-          rga_cfg.dst_width = config_.model_width;
-          rga_cfg.dst_height = config_.model_height;
-          auto rga = std::make_unique<neuro::hal::RGAProcessor>(rga_cfg);
-          if (!rga->Initialize()) {
-            LOG_ERROR("Pipeline", "RGA[%zu] init failed", i);
-            return false;
-          }
-          rga_processors_.push_back(std::move(rga));
-        }
-        LOG_INFO("Pipeline", "Multi-camera: %zu cameras initialized", cameras_.size());
-      } else {
-        // Single-camera fallback
-        neuro::hal::V4L2Camera::Config cam_cfg;
-        cam_cfg.device_path = config_.camera_device;
-        cam_cfg.width = config_.width;
-        cam_cfg.height = config_.height;
-        cam_cfg.fps = config_.fps;
-        camera_ = std::make_unique<neuro::hal::V4L2Camera>(cam_cfg);
-        if (!camera_->Initialize()) {
-          LOG_ERROR("Pipeline", "V4L2 camera init failed");
+    // Input source(s) via factory
+    if (!config_.cameras.empty()) {
+      // Multi-camera mode: one InputSource per camera + per-camera RGA
+      for (size_t i = 0; i < config_.cameras.size(); ++i) {
+        const auto& cam_cfg_in = config_.cameras[i];
+        auto src = neuro::hal::InputSourceFactory::Create(
+            "", cam_cfg_in.device,
+            cam_cfg_in.width, cam_cfg_in.height, cam_cfg_in.fps);
+        if (!src->Initialize()) {
+          LOG_ERROR("Pipeline", "Camera[%zu] init failed: %s", i, cam_cfg_in.device.c_str());
           return false;
         }
+        sources_.push_back(std::move(src));
+
+        neuro::hal::RGAProcessor::Config rga_cfg;
+        rga_cfg.src_width = cam_cfg_in.width;
+        rga_cfg.src_height = cam_cfg_in.height;
+        rga_cfg.dst_width = config_.model_width;
+        rga_cfg.dst_height = config_.model_height;
+        auto rga = std::make_unique<neuro::hal::RGAProcessor>(rga_cfg);
+        if (!rga->Initialize()) {
+          LOG_ERROR("Pipeline", "RGA[%zu] init failed", i);
+          return false;
+        }
+        rga_processors_.push_back(std::move(rga));
       }
+      LOG_INFO("Pipeline", "Multi-camera: %zu sources initialized", sources_.size());
     } else {
-      neuro::hal::MPPDecoder::Config dec_cfg;
-      dec_cfg.width = config_.width;
-      dec_cfg.height = config_.height;
-      dec_cfg.codec = 7;  // H.264
-      decoder_ = std::make_unique<neuro::hal::MPPDecoder>(dec_cfg);
-      if (!decoder_->Initialize()) {
-        LOG_ERROR("Pipeline", "MPP decoder init failed");
+      // Single source: RTSP, camera, or video file
+      auto src = neuro::hal::InputSourceFactory::Create(
+          config_.video_source, config_.camera_device,
+          config_.width, config_.height, config_.fps);
+      if (!src->Initialize()) {
+        LOG_ERROR("Pipeline", "Input source init failed");
         return false;
       }
-      // Load video file
-      video_file_.open(config_.video_source, std::ios::binary);
-      if (!video_file_.is_open()) {
-        LOG_ERROR("Pipeline", "Failed to open video: %s", config_.video_source.c_str());
-        return false;
-      }
+      sources_.push_back(std::move(src));
     }
 
-    // RGA processor (shared for single-camera / video mode)
-    if (cameras_.empty()) {
+    // RGA processor (shared for single-source mode)
+    if (rga_processors_.empty()) {
       neuro::hal::RGAProcessor::Config rga_cfg;
       rga_cfg.src_width = config_.width;
       rga_cfg.src_height = config_.height;
@@ -269,27 +226,12 @@ class PipelineCoordinator::Impl {
       void* get() const { return ptr; }
     };
 
-    if (use_rtsp_) {
-      if (rtsp_source_ && !rtsp_source_->Start()) {
-        LOG_ERROR("Pipeline", "RTSP source start failed");
+    // Start all sources
+    for (auto& src : sources_) {
+      if (!src->Start()) {
+        LOG_ERROR("Pipeline", "Input source start failed");
         running = false;
         return;
-      }
-    } else if (use_camera_) {
-      if (!cameras_.empty()) {
-        for (auto& cam : cameras_) {
-          if (!cam->Start()) {
-            LOG_ERROR("Pipeline", "Multi-camera start failed");
-            running = false;
-            return;
-          }
-        }
-      } else if (camera_) {
-        if (!camera_->Start()) {
-          LOG_ERROR("Pipeline", "Camera start failed");
-          running = false;
-          return;
-        }
       }
     }
 
@@ -317,43 +259,25 @@ class PipelineCoordinator::Impl {
       // Allocate inference buffer from pool (RAII)
       PoolGuard pool_buf(inference_pool_.get());
 
-      if (use_rtsp_) {
-        frame = rtsp_source_->CaptureFrame();
-        if (!frame) {
-          LOG_INFO("Pipeline", "RTSP stream ended");
+      // 1. Acquire frame via InputSource
+      active_cam_idx = frame_count % sources_.size();
+      frame = sources_[active_cam_idx]->CaptureFrame();
+      if (!frame) {
+        if (sources_.size() == 1) {
+          LOG_INFO("Pipeline", "Input stream ended");
           break;
         }
-        processed = rga_->Process(frame);
-      } else if (use_camera_ && !cameras_.empty()) {
-        // Multi-camera: round-robin across cameras
-        active_cam_idx = frame_count % cameras_.size();
-        frame = cameras_[active_cam_idx]->CaptureFrame();
-        if (!frame) continue;
-        // 2. Preprocess with per-camera RGA
+        continue;
+      }
+      // 2. Preprocess with RGA
+      if (!rga_processors_.empty()) {
         processed = rga_processors_[active_cam_idx]->Process(frame);
-      } else if (use_camera_) {
-        frame = camera_->CaptureFrame();
-        if (!frame) continue;
-        // 2. Preprocess
-        processed = rga_->Process(frame);
       } else {
-        frame = ReadAndDecodePacket();
-        if (!frame) {
-          LOG_INFO("Pipeline", "End of video stream");
-          break;
-        }
-        // 2. Preprocess
         processed = rga_->Process(frame);
       }
       if (!processed) {
         LOG_ERROR("Pipeline", "RGA processing failed");
-        if (use_rtsp_) {
-          rtsp_source_->ReleaseFrame(frame);
-        } else if (use_camera_ && !cameras_.empty()) {
-          cameras_[active_cam_idx]->ReleaseFrame(frame);
-        } else if (use_camera_) {
-          camera_->ReleaseFrame(frame);
-        }
+        sources_[active_cam_idx]->ReleaseFrame(frame);
         continue;
       }
 
@@ -371,13 +295,7 @@ class PipelineCoordinator::Impl {
               LOG_ERROR("Pipeline", "Inference failed (model: %s)",
                         active->model_id.c_str());
               neuro::pipeline::EdgeMetrics::Instance().IncrementInferenceErrors();
-              if (use_rtsp_) {
-                rtsp_source_->ReleaseFrame(frame);
-              } else if (use_camera_ && !cameras_.empty()) {
-                cameras_[active_cam_idx]->ReleaseFrame(frame);
-              } else if (use_camera_) {
-                camera_->ReleaseFrame(frame);
-              }
+              sources_[active_cam_idx]->ReleaseFrame(frame);
               continue;
             }
             double infer_ms = std::chrono::duration<double, std::milli>(
@@ -395,7 +313,7 @@ class PipelineCoordinator::Impl {
           if (npu_scheduler_) {
             int core = npu_scheduler_->SelectCore();
             engine_->SetCoreMask(core);
-          } else if (!cameras_.empty() && config_.npu_core_mask == 7) {
+          } else if (sources_.size() > 1 && config_.npu_core_mask == 7) {
             int core = 1 << (active_cam_idx % 3);
             engine_->SetCoreMask(core);
           }
@@ -403,13 +321,7 @@ class PipelineCoordinator::Impl {
           if (!engine_->Infer(processed)) {
             LOG_ERROR("Pipeline", "Inference failed");
             neuro::pipeline::EdgeMetrics::Instance().IncrementInferenceErrors();
-            if (use_rtsp_) {
-              rtsp_source_->ReleaseFrame(frame);
-            } else if (use_camera_ && !cameras_.empty()) {
-              cameras_[active_cam_idx]->ReleaseFrame(frame);
-            } else if (use_camera_) {
-              camera_->ReleaseFrame(frame);
-            }
+            sources_[active_cam_idx]->ReleaseFrame(frame);
             continue;
           }
           double infer_ms = std::chrono::duration<double, std::milli>(
@@ -529,13 +441,7 @@ class PipelineCoordinator::Impl {
       }
 
       // 6. Release frame
-      if (use_rtsp_) {
-        rtsp_source_->ReleaseFrame(frame);
-      } else if (use_camera_ && !cameras_.empty()) {
-        cameras_[active_cam_idx]->ReleaseFrame(frame);
-      } else if (use_camera_) {
-        camera_->ReleaseFrame(frame);
-      }
+      sources_[active_cam_idx]->ReleaseFrame(frame);
 
       // Stats
       auto t1 = Clock::now();
@@ -595,15 +501,8 @@ class PipelineCoordinator::Impl {
       grpc_client_->StopEventStream();
     }
 
-    if (use_rtsp_) {
-      if (rtsp_source_) rtsp_source_->Stop();
-    } else if (use_camera_) {
-      if (!cameras_.empty()) {
-        for (auto& cam : cameras_) cam->Stop();
-      } else if (camera_) {
-        camera_->Stop();
-      }
-    }
+    // Stop all sources
+    for (auto& src : sources_) src->Stop();
 
     LOG_INFO("Pipeline", "Stopped. Processed %lu frames, avg latency=%.1fms",
              frame_count, avg_latency);
@@ -693,28 +592,13 @@ class PipelineCoordinator::Impl {
     }
   }
 
-  std::shared_ptr<neuro::core::Buffer> ReadAndDecodePacket() {
-    // Read a chunk from the video file and decode
-    constexpr size_t kChunkSize = neuro::core::kVideoChunkSize;
-    std::vector<uint8_t> chunk(kChunkSize);
-    video_file_.read(reinterpret_cast<char*>(chunk.data()), kChunkSize);
-    auto bytes_read = video_file_.gcount();
-    if (bytes_read <= 0) return nullptr;
-
-    return decoder_->Decode(chunk.data(), static_cast<size_t>(bytes_read));
-  }
 
   Config config_;
-  bool use_camera_ = true;
-  bool use_rtsp_ = false;
 
   std::unique_ptr<neuro::hal::DRMAllocator> drm_allocator_;
-  std::unique_ptr<neuro::hal::V4L2Camera> camera_;           // Single-camera fallback
-  std::vector<std::unique_ptr<neuro::hal::V4L2Camera>> cameras_;  // Multi-camera
-  std::unique_ptr<neuro::hal::MPPDecoder> decoder_;
-  std::unique_ptr<neuro::hal::RTSPSource> rtsp_source_;       // RTSP input
-  std::unique_ptr<neuro::hal::RGAProcessor> rga_;             // Single-camera/video RGA
-  std::vector<std::unique_ptr<neuro::hal::RGAProcessor>> rga_processors_;  // Per-camera RGA
+  std::vector<std::unique_ptr<neuro::hal::InputSource>> sources_;  // Unified input sources
+  std::unique_ptr<neuro::hal::RGAProcessor> rga_;             // Single-source RGA
+  std::vector<std::unique_ptr<neuro::hal::RGAProcessor>> rga_processors_;  // Per-source RGA
   std::unique_ptr<neuro::inference::RKNNEngine> engine_;
   std::unique_ptr<neuro::inference::YOLOPostProcessor> postprocessor_;
   std::unique_ptr<neuro::comm::GRPCClient> grpc_client_;
@@ -726,8 +610,6 @@ class PipelineCoordinator::Impl {
   std::unique_ptr<neuro::pipeline::TemporalTracker> temporal_tracker_;
   std::unique_ptr<neuro::pipeline::AdaptiveFPSController> adaptive_fps_;
   std::unique_ptr<neuro::inference::MultiModelManager> model_mgr_;
-
-  std::ifstream video_file_;
 };
 
 // ============================================================================

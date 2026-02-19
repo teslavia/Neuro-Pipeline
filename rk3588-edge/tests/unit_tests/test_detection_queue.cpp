@@ -11,14 +11,14 @@ namespace {
 neuro_pipeline::DetectionResult MakeResult(int id, float confidence = 0.9f) {
   neuro_pipeline::DetectionResult result;
   result.set_device_id("test-device");
-  result.set_frame_number(id);
-  auto* det = result.add_detections();
-  det->set_class_name("person");
-  det->set_confidence(confidence);
-  det->mutable_bbox()->set_x(0.1f);
-  det->mutable_bbox()->set_y(0.2f);
-  det->mutable_bbox()->set_width(0.3f);
-  det->mutable_bbox()->set_height(0.4f);
+  result.set_frame_id(static_cast<uint64_t>(id));
+  auto* box = result.add_boxes();
+  box->set_class_name("person");
+  box->set_confidence(confidence);
+  box->set_x_min(0.1f);
+  box->set_y_min(0.2f);
+  box->set_x_max(0.4f);
+  box->set_y_max(0.6f);
   return result;
 }
 
@@ -32,7 +32,7 @@ TEST(DetectionQueueTest, EnqueueDequeue) {
 
   neuro_pipeline::DetectionResult out;
   EXPECT_TRUE(queue.Dequeue(&out));
-  EXPECT_EQ(out.frame_number(), 1);
+  EXPECT_EQ(out.frame_id(), 1u);
   EXPECT_TRUE(queue.Empty());
 }
 
@@ -46,7 +46,7 @@ TEST(DetectionQueueTest, FIFOOrder) {
   for (int i = 0; i < 5; ++i) {
     neuro_pipeline::DetectionResult out;
     EXPECT_TRUE(queue.Dequeue(&out));
-    EXPECT_EQ(out.frame_number(), i);
+    EXPECT_EQ(out.frame_id(), static_cast<uint64_t>(i));
   }
 }
 
@@ -64,7 +64,7 @@ TEST(DetectionQueueTest, FullEviction) {
 
   neuro_pipeline::DetectionResult out;
   EXPECT_TRUE(queue.Dequeue(&out));
-  EXPECT_EQ(out.frame_number(), 2);  // oldest surviving
+  EXPECT_EQ(out.frame_id(), 2u);  // oldest surviving
 }
 
 TEST(DetectionQueueTest, MemoryLimit) {
