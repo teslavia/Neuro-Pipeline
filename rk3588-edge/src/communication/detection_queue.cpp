@@ -4,6 +4,7 @@
 
 namespace neuro::comm {
 
+DetectionQueue::DetectionQueue() : config_() {}
 DetectionQueue::DetectionQueue(const Config& config) : config_(config) {}
 
 bool DetectionQueue::Enqueue(const neuro_pipeline::DetectionResult& result) {

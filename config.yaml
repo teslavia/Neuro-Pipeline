@@ -4,7 +4,7 @@
 edge:
   device_id: "edge-001"
   video_source: ""
-  camera_device: "/dev/video0"
+  camera_device: "/dev/video3"
   model_path: "/opt/neuro-pipeline/models/yolov5s-640-640.rknn"
   width: 1920
   height: 1080

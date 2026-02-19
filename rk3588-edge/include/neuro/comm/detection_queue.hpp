@@ -22,7 +22,8 @@ class DetectionQueue {
     size_t max_memory_bytes = 64 * 1024 * 1024;  // 64MB
   };
 
-  explicit DetectionQueue(const Config& config = {});
+  DetectionQueue();
+  explicit DetectionQueue(const Config& config);
 
   /// Enqueue a detection result. Evicts oldest if at capacity. Returns true.
   bool Enqueue(const neuro_pipeline::DetectionResult& result);
