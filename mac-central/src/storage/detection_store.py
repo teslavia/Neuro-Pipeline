@@ -1,9 +1,13 @@
-"""SQLite-based detection event storage with retry on lock."""
+"""SQLite-based detection event storage with retry on lock.
+
+Facade that delegates to domain-specific repo modules:
+  _detection_repo  — detection CRUD
+  _timeseries_repo — time-series CRUD
+  _conversation_repo — conversation CRUD
+"""
 
 import asyncio
-import json
 import logging
-import shutil
 import sqlite3
 import threading
 import time
@@ -11,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from src.observability.retry import retry_sync
+from src.storage import _conversation_repo, _detection_repo, _timeseries_repo
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +55,7 @@ CREATE INDEX IF NOT EXISTS idx_conv_device_ts ON conversations(device_id, timest
 
 
 class DetectionStore:
-    """Thread-safe SQLite store for detection events."""
+    """Thread-safe SQLite store — thin facade over domain repos."""
 
     def __init__(self, db_path: Path, retention_days: int = 7) -> None:
         self.db_path = db_path
@@ -87,164 +91,48 @@ class DetectionStore:
             self._conn.commit()
             logger.info("Migrated: added device_id column")
 
+    # --- Detections (delegated) ---
+
     def record(self, event: dict) -> None:
-        """Insert a detection event (retries on SQLite lock)."""
-        def _do_insert():
-            with self._lock:
-                self._conn.execute(
-                    "INSERT INTO detections "
-                    "(timestamp, frame_id, trace_id, event_type, detections_json, vlm_result, rule_matched, device_id) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                    (
-                        event.get("timestamp", time.time()),
-                        event.get("frame_id"),
-                        event.get("trace_id"),
-                        event.get("type", "detection"),
-                        json.dumps(event.get("detections", [])),
-                        event.get("vlm_result"),
-                        event.get("rule"),
-                        event.get("device_id", ""),
-                    ),
-                )
-                self._conn.commit()
-        retry_sync(_do_insert, max_retries=3, backoff=0.1, exceptions=(sqlite3.OperationalError,))
+        _detection_repo.record(self._conn, self._lock, event)
 
     def query(
         self, since: float, until: float = 0, limit: int = 100, device_id: str = ""
     ) -> list[dict]:
-        """Query events in a time range, optionally filtered by device_id."""
-        if until <= 0:
-            until = time.time()
-        def _do_query():
-            with self._lock:
-                if device_id:
-                    rows = self._conn.execute(
-                        "SELECT * FROM detections WHERE timestamp >= ? AND timestamp <= ? "
-                        "AND device_id = ? ORDER BY timestamp DESC LIMIT ?",
-                        (since, until, device_id, limit),
-                    ).fetchall()
-                else:
-                    rows = self._conn.execute(
-                        "SELECT * FROM detections WHERE timestamp >= ? AND timestamp <= ? "
-                        "ORDER BY timestamp DESC LIMIT ?",
-                        (since, until, limit),
-                    ).fetchall()
-            return [self._row_to_dict(r) for r in rows]
-        return retry_sync(_do_query, max_retries=3, backoff=0.1, exceptions=(sqlite3.OperationalError,))
+        return _detection_repo.query(self._conn, self._lock, since, until, limit, device_id)
 
     def cleanup(self) -> int:
-        """Delete events older than retention_days. Returns count deleted."""
-        cutoff = time.time() - self.retention_days * 86400
-        with self._lock:
-            cur = self._conn.execute(
-                "DELETE FROM detections WHERE timestamp < ?", (cutoff,)
-            )
-            self._conn.commit()
-            logger.info(f"Cleaned up {cur.rowcount} old events")
-            return cur.rowcount
+        return _detection_repo.cleanup(self._conn, self._lock, self.retention_days)
 
     def count(self) -> int:
-        with self._lock:
-            row = self._conn.execute("SELECT COUNT(*) FROM detections").fetchone()
-            return row[0]
+        return _detection_repo.count(self._conn, self._lock)
 
-    # --- Time Series ---
+    # --- Time Series (delegated) ---
 
     def record_timeseries(self, device_id: str, metric_name: str, value: float,
                           timestamp: float = 0) -> None:
-        """Record a time-series data point."""
-        ts = timestamp or time.time()
-        def _do():
-            with self._lock:
-                self._conn.execute(
-                    "INSERT INTO timeseries (timestamp, device_id, metric_name, value) "
-                    "VALUES (?, ?, ?, ?)",
-                    (ts, device_id, metric_name, value),
-                )
-                self._conn.commit()
-        retry_sync(_do, max_retries=3, backoff=0.1, exceptions=(sqlite3.OperationalError,))
+        _timeseries_repo.record(self._conn, self._lock, device_id, metric_name, value, timestamp)
 
     def query_timeseries(self, metric_name: str, device_id: str = "",
                          start_time: float = 0, end_time: float = 0,
                          aggregation: str = "avg", bucket_seconds: int = 0,
                          limit: int = 1000) -> list[dict]:
-        """Query time-series data with optional aggregation."""
-        if end_time <= 0:
-            end_time = time.time()
-        if start_time <= 0:
-            start_time = end_time - 86400  # default 24h
+        return _timeseries_repo.query(
+            self._conn, self._lock, metric_name, device_id,
+            start_time, end_time, aggregation, bucket_seconds, limit,
+        )
 
-        def _do():
-            with self._lock:
-                if bucket_seconds > 0:
-                    agg_fn = {"avg": "AVG", "sum": "SUM", "max": "MAX",
-                              "min": "MIN", "count": "COUNT"}.get(aggregation, "AVG")
-                    sql = (
-                        f"SELECT CAST(timestamp / ? AS INTEGER) * ? AS bucket_ts, "
-                        f"{agg_fn}(value) AS agg_value "
-                        f"FROM timeseries WHERE metric_name = ? AND timestamp >= ? AND timestamp <= ? "
-                    )
-                    params: list = [bucket_seconds, bucket_seconds, metric_name, start_time, end_time]
-                    if device_id:
-                        sql += "AND device_id = ? "
-                        params.append(device_id)
-                    sql += "GROUP BY bucket_ts ORDER BY bucket_ts LIMIT ?"
-                    params.append(limit)
-                    rows = self._conn.execute(sql, params).fetchall()
-                    return [{"timestamp": r[0], "value": r[1], "labels": {}} for r in rows]
-                else:
-                    sql = (
-                        "SELECT timestamp, value FROM timeseries "
-                        "WHERE metric_name = ? AND timestamp >= ? AND timestamp <= ? "
-                    )
-                    params = [metric_name, start_time, end_time]
-                    if device_id:
-                        sql += "AND device_id = ? "
-                        params.append(device_id)
-                    sql += "ORDER BY timestamp LIMIT ?"
-                    params.append(limit)
-                    rows = self._conn.execute(sql, params).fetchall()
-                    return [{"timestamp": r[0], "value": r[1], "labels": {}} for r in rows]
-        return retry_sync(_do, max_retries=3, backoff=0.1, exceptions=(sqlite3.OperationalError,))
-
-    # --- Conversations ---
+    # --- Conversations (delegated) ---
 
     def record_conversation(self, device_id: str, role: str, content: str,
                             context_type: str = "vlm", timestamp: float = 0) -> None:
-        """Record a conversation turn (for multi-round reasoning)."""
-        ts = timestamp or time.time()
-        def _do():
-            with self._lock:
-                self._conn.execute(
-                    "INSERT INTO conversations (device_id, timestamp, role, content, context_type) "
-                    "VALUES (?, ?, ?, ?, ?)",
-                    (device_id, ts, role, content, context_type),
-                )
-                self._conn.commit()
-        retry_sync(_do, max_retries=3, backoff=0.1, exceptions=(sqlite3.OperationalError,))
+        _conversation_repo.record(self._conn, self._lock, device_id, role, content, context_type, timestamp)
 
     def query_conversations(self, device_id: str, limit: int = 20,
                             context_type: str = "", since: float = 0) -> list[dict]:
-        """Query conversation history for a device."""
-        def _do():
-            with self._lock:
-                sql = "SELECT device_id, timestamp, role, content, context_type FROM conversations WHERE device_id = ? "
-                params: list = [device_id]
-                if context_type:
-                    sql += "AND context_type = ? "
-                    params.append(context_type)
-                if since > 0:
-                    sql += "AND timestamp >= ? "
-                    params.append(since)
-                sql += "ORDER BY timestamp DESC LIMIT ?"
-                params.append(limit)
-                rows = self._conn.execute(sql, params).fetchall()
-                return [
-                    {"device_id": r[0], "timestamp": r[1], "role": r[2],
-                     "content": r[3], "context_type": r[4]}
-                    for r in rows
-                ][::-1]  # reverse to chronological order
-        return retry_sync(_do, max_retries=3, backoff=0.1, exceptions=(sqlite3.OperationalError,))
+        return _conversation_repo.query(self._conn, self._lock, device_id, limit, context_type, since)
+
+    # --- Lifecycle ---
 
     def close(self) -> None:
         if self._conn:
@@ -280,13 +168,3 @@ class DetectionStore:
             date_str = datetime.now().strftime("%Y%m%d-%H%M%S")
             dest = backup_dir / f"detections-{date_str}.db"
             self.backup(dest)
-
-    @staticmethod
-    def _row_to_dict(row: sqlite3.Row) -> dict:
-        d = dict(row)
-        if d.get("detections_json"):
-            d["detections"] = json.loads(d.pop("detections_json"))
-        else:
-            d.pop("detections_json", None)
-            d["detections"] = []
-        return d
