@@ -32,6 +32,10 @@ Thank you for your interest in contributing to Neuro-Pipeline! This document pro
 git clone --recursive https://github.com/your-org/neuro-pipeline.git
 cd neuro-pipeline
 
+# Option A: Devcontainer (recommended — zero setup)
+# Open in VS Code → "Reopen in Container"
+
+# Option B: Manual setup
 # Initialize submodules (if already cloned)
 git submodule update --init --depth 1
 
@@ -47,6 +51,16 @@ cd ../rk3588-edge
 mkdir build && cd build
 cmake .. -DUSE_MOCK_HAL=ON -DBUILD_TESTING=ON
 make -j$(sysctl -n hw.ncpu)
+```
+
+### Using Justfile
+
+Install [just](https://github.com/casey/just) (`brew install just`), then:
+```bash
+just --list          # Show all commands
+just test-all        # Run all tests
+just build-edge      # Build C++ edge
+just monitoring-up   # Start Prometheus + Grafana
 ```
 
 ### IDE Configuration
@@ -135,6 +149,10 @@ are provided to analyze() method.
 
 2. **Run all tests:**
    ```bash
+   # Quick (via justfile)
+   just test-all
+
+   # Or manually:
    # Python tests
    cd mac-central
    source .venv/bin/activate

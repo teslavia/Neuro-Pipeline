@@ -1,7 +1,7 @@
 # Neuro-Pipeline 部署指南 (Deployment Guide)
 
-**版本**: v1.3.0
-**更新日期**: 2026-02-16
+**版本**: v2.3.0
+**更新日期**: 2026-02-19
 
 ---
 
@@ -856,40 +856,56 @@ async def RegisterDevice(self, request, context):
 
 ---
 
-## 十四、Grafana 监控栈部署 (v1.1.0+)
+## 十四、Grafana 监控栈部署 (v2.3.0+)
 
 ### 14.1 启动 Prometheus + Grafana
 
 ```bash
-cd extensions/monitoring
-docker-compose up -d
+# 推荐方式 (justfile)
+just monitoring-up
+
+# 或手动
+cd infra
+docker compose -f docker-compose.monitoring.yml up -d
 ```
 
 **服务**:
-- Prometheus: http://localhost:9090
+- Prometheus: http://localhost:9091
 - Grafana: http://localhost:3000 (admin/admin)
 
 ### 14.2 配置数据源
 
 Grafana 自动配置 Prometheus 数据源（通过 provisioning）。
 
-### 14.3 导入仪表盘
+### 14.3 仪表盘
 
-仪表盘已自动加载：`extensions/monitoring/grafana/dashboards/neuro-pipeline.json`
+两个仪表盘已自动加载：
 
-**8 个面板**:
-1. Detections Total (Counter)
-2. VLM Inference Latency (Histogram)
-3. NPU Utilization (Gauge)
-4. VLM Queue Depth (Gauge)
-5. gRPC Requests Total (Counter)
-6. Circuit Breaker State (Gauge)
-7. Active Devices (Gauge)
-8. Error Rate (Counter)
+**运维仪表盘** (`infra/grafana/dashboards/neuro-pipeline.json`):
+1. Detection Rate / Edge Connections / VLM Queue / Circuit Breaker
+2. Events Stored / gRPC Requests / Error Rate / NPU Utilization
+
+**SLO 仪表盘** (`infra/grafana/dashboards/slo-dashboard.json`, v2.3.0+):
+1. Availability (7d) — 目标 99.5%
+2. Detection P99 Latency — 目标 <50ms
+3. VLM P99 Latency — 目标 <5s
+4. Error Budget Remaining (30d)
+5. Edge FPS per Device vs 25 FPS 目标线
+6. gRPC Latency SLI (P50/P95/P99 vs 500ms)
+7. Active Alerts
+8. SLO Summary Table
 
 ### 14.4 告警规则
 
-编辑 `extensions/monitoring/prometheus/alerts.yml` 添加自定义告警。
+告警规则位于 `infra/prometheus/rules/neuro-pipeline.rules.yml`：
+- `EdgeDeviceDisconnected` — 无设备连接 30s (warning)
+- `VLMQueueNearFull` — VLM 队列深度 >24 (warning)
+- `VLMHighErrorRate` — VLM 错误率 >0.1/s (critical)
+- `GRPCLatencyHigh` — P99 延迟 >1s (warning)
+- `DetectionRateDrop` — 检测率为零 3m (warning)
+- `HighValidationErrorRate` — 验证错误率 >1/s (critical)
+
+Grafana 告警通知配置: `infra/grafana/provisioning/alerting.yml`
 
 ---
 

@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-02-19
+
+### Added
+- Edge offline detection cache queue (`DetectionQueue`) — buffers during gRPC disconnects, auto-drains on reconnect
+- Config hot-reload integration in `main.py` — live updates for logging level, VLM rules, alerting, rate limiting
+- Dynamic log level REST endpoint `GET/PUT /api/v2/logging/level`
+- Prometheus alert rules (6 rules: EdgeDisconnected, VLMQueueNearFull, VLMHighErrorRate, GRPCLatencyHigh, DetectionRateDrop, HighValidationErrorRate)
+- Grafana SLO dashboard (8 panels: availability, latency P99, error budget, FPS, gRPC SLI)
+- Grafana alerting provisioning with webhook contact point
+- Justfile unified build/test entry point (`just --list`)
+- VLM model validation pipeline (`VLMValidator`) with load + inference benchmarks
+- Multi-VLM model support (`central.vlm_models` config, `switch_vlm_model()` runtime switching)
+- Devcontainer for contributor onboarding (`.devcontainer/`)
+
+### Changed
+- `GRPCClient::StreamDetection()` now buffers on failure instead of dropping detections
+- `AlertManager` gains `update_rules()` for hot-reload
+- `TokenBucketRateLimiter` gains `update_limits()` for hot-reload
+- `ModelRecord` extended with `benchmark` field
+- Dashboard config PUT endpoint triggers `ConfigWatcher.force_reload()`
+- Docker compose monitoring stack mounts Prometheus rules and Grafana alerting
+
 ## [2.2.2] - 2026-02-18
 
 ### Changed

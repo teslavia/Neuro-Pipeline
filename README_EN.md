@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://github.com/teslavia/Neuro-Pipeline/actions"><img src="https://github.com/teslavia/Neuro-Pipeline/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <img src="https://img.shields.io/badge/version-2.2.2-green.svg" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.3.0-green.svg" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License">
   <img src="https://img.shields.io/badge/tests-522+-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/C%2B%2B-17-00599C.svg?logo=cplusplus&logoColor=white" alt="C++17">
@@ -195,7 +195,7 @@ neuro-pipeline/
 │   ├── certs/                     #   mTLS certificate generation
 │   └── services/                  #   systemd + launchd configs
 ├── config.yaml                    # Unified configuration
-└── VERSION.json                   # v2.2.2
+└── VERSION.json                   # v2.3.0
 ```
 
 ## Test Coverage
@@ -250,6 +250,7 @@ neuro-pipeline/
 | v2.2.0 | VLM-Guided Config | VLMConfigGuide, auto-generate config adjustment suggestions |
 | v2.2.1 | Intelligence API Real Data | Dashboard integration with real analysis data |
 | v2.2.2 | C++ Header Refactoring | Unified neuro:: namespace |
+| v2.3.0 | Production Hardening | Offline cache queue, config hot-reload, dynamic logging, Prometheus alerts, SLO dashboard, multi-VLM |
 
 ## License
 

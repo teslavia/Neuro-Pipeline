@@ -1,6 +1,6 @@
 # Neuro-Pipeline API Reference
 
-**Version**: 2.2.2
+**Version**: 2.3.0
 **Protocol**: gRPC with Protocol Buffers 3
 **Generated From**: `proto/neuro_pipeline.proto`
 
@@ -560,7 +560,8 @@ class MLXInferenceEngine:
 | `/api/v2/vlm/guidance` | GET | VLM 配置建议 |
 | `/api/v2/vlm/guidance/{id}/apply` | POST | 应用 VLM 建议 |
 | `/api/v2/models` | GET | 模型列表和状态 |
-| `/api/v2/config` | GET/PUT | 运行时配置 |
+| `/api/v2/config` | GET/PUT | 运行时配置 (PUT 触发热重载) |
+| `/api/v2/logging/level` | GET/PUT | 动态日志级别 (v2.3) |
 | `/api/v2/tracking/objects` | GET | 当前跟踪对象 |
 
 ### GET /api/status 响应示例
