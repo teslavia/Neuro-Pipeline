@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://github.com/teslavia/Neuro-Pipeline/actions"><img src="https://github.com/teslavia/Neuro-Pipeline/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <img src="https://img.shields.io/badge/version-2.0.0-green.svg" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.2.2-green.svg" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License">
   <img src="https://img.shields.io/badge/tests-522+-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/C%2B%2B-17-00599C.svg?logo=cplusplus&logoColor=white" alt="C++17">
@@ -175,11 +175,10 @@ neuro-pipeline/
 ├── mac-central/                   # Central server (Python)
 │   ├── src/
 │   │   ├── communication/         #   gRPC async server, rate limiter
-│   │   ├── llm_vlm/               #   MLX LLM/VLM, reasoning chain, RAG retrieval
-│   │   ├── application_logic/     #   Orchestrator, behavior analysis, anomaly baseline
+│   │   ├── inference/             #   MLX LLM/VLM, reasoning chain, RAG retrieval
+│   │   ├── pipeline/              #   Orchestrator, behavior analysis, anomaly baseline
 │   │   ├── model_management/      #   Model registry, A/B testing
-│   │   ├── analytics/             #   Time-series engine, auto-labeling, ReID
-│   │   ├── reporting/             #   Report generator
+│   │   ├── analytics/             #   Time-series engine, auto-labeling, ReID, reporting
 │   │   ├── storage/               #   SQLite persistence, cloud storage
 │   │   └── observability/         #   Metrics, tracing, alerting
 │   └── tests/                     #   pytest (311 tests: 250 unit + 61 e2e/chaos)
@@ -196,7 +195,7 @@ neuro-pipeline/
 │   ├── certs/                     #   mTLS certificate generation
 │   └── services/                  #   systemd + launchd configs
 ├── config.yaml                    # Unified configuration
-└── VERSION.json                   # v1.3.0
+└── VERSION.json                   # v2.2.2
 ```
 
 ## Test Coverage
@@ -247,6 +246,10 @@ neuro-pipeline/
 | v1.2.0 | Production Hardening | Exception hierarchy, config validation, graceful shutdown, RTSP, video recording |
 | v1.3.0 | Security + Activation | Rate limiting, input validation, dashboard auth, audit logging, dead code activation |
 | v2.0.0 | Intelligence | Multi-model hot switching (YOLOv5/v8), NPU 3-core scheduling, Temporal Tracking v2, Dynamic config |
+| v2.1.0 | Model Cascade + Dashboard Framework | ModelCascade, V2 API modularization |
+| v2.2.0 | VLM-Guided Config | VLMConfigGuide, auto-generate config adjustment suggestions |
+| v2.2.1 | Intelligence API Real Data | Dashboard integration with real analysis data |
+| v2.2.2 | C++ Header Refactoring | Unified neuro:: namespace |
 
 ## License
 

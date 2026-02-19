@@ -51,8 +51,9 @@ central:
   port: 50051
   model_path: "models/Llama-3.2-3B-Instruct-4bit-mlx"
   max_message_size_mb: 16
-  vlm_model_path: ""  # e.g. "models/Qwen2-VL-2B-Instruct-4bit-mlx"
-  inference_mode: "llm"  # "llm" or "vlm"
+  # VLM model path - run `python mac-central/scripts/download_vlm_model.py` to download
+  vlm_model_path: "models/Qwen2-VL-2B-Instruct-4bit-mlx"
+  inference_mode: "vlm"  # "llm" or "vlm"
 
 tls:
   enabled: false
@@ -139,7 +140,7 @@ rate_limiting:
   max_rps: 100
   burst: 20
 
-# v2: Model management
+# v2: Model management (requires edge.enable_multi_model: true)
 model_management:
   enabled: false
   max_models_per_device: 3
@@ -151,8 +152,9 @@ reasoning:
   timeout_per_step: 15.0
 
 # v2: Adaptive frame rate (edge)
+# Note: edge.enable_adaptive_fps controls feature toggle; this section defines parameters
 adaptive_fps:
-  enabled: false
+  enabled: false  # Mirror of edge.enable_adaptive_fps
   min_fps: 5
   max_fps: 30
   idle_fps: 10
@@ -173,10 +175,10 @@ ab_test:
   min_samples: 100
   metric: "accuracy"
 
-# v2: Anomaly baseline detection
+# v2: Anomaly baseline detection (requires accumulated historical data)
 anomaly:
   enabled: false
-  baseline_window_hours: 168.0
+  baseline_window_hours: 168.0  # 7 days
   z_score_threshold: 3.0
   min_samples: 50
 
@@ -202,3 +204,13 @@ reporting:
   enabled: false
   output_dir: "data/reports"
   schedule_hours: 24.0
+
+# v2: VLM-guided configuration (closed-loop edge optimization)
+vlm_config_guide:
+  enabled: false
+  min_confidence: 0.7
+  max_adjustments_per_result: 3
+  auto_apply: false
+  enable_region_adjustment: true
+  enable_sensitivity_adjustment: true
+  enable_fps_adjustment: false

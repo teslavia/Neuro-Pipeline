@@ -1,8 +1,8 @@
 # Technical Decisions Record
 
 **Project**: Neuro-Pipeline
-**Version**: v1.3.0
-**Last Updated**: 2026-02-16
+**Version**: v2.2.2
+**Last Updated**: 2026-02-18
 
 ---
 
@@ -278,6 +278,10 @@ void* vaddr = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, dma_fd, 0)
 | TD-033 | Dashboard HTTP Basic Auth | ✅ | 9 | Medium (security) | None |
 | TD-034 | Session Cleanup Scheduling | ✅ | 9 | Medium (reliability) | None |
 | TD-035 | OTel Span Hot Path | ✅ | 9 | Low (observability) | None |
+| TD-036 | Directory Renaming | ✅ | v2.1 | Medium (clarity) | Low |
+| TD-037 | Unified Version Management | ✅ | v2.2 | Low (consistency) | None |
+| TD-038 | C++ Namespace Unification | ✅ | v2.2.2 | Medium (organization) | None |
+| TD-039 | V2 API Modularization | ✅ | v2.1 | Medium (maintainability) | Low |
 
 ---
 
@@ -648,9 +652,84 @@ void* vaddr = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, dma_fd, 0)
 
 ---
 
+### TD-036: Directory Renaming for Clarity (v2)
+
+**Date**: 2026-02-15 (v2.1.0)
+**Status**: ✅ Implemented
+**Context**: Original directory names were inconsistent with module purposes
+
+**Decision**: Rename directories for semantic clarity
+- `application_logic/` → `pipeline/` (orchestrator, behavior analysis)
+- `llm_vlm/` → `inference/` (MLX LLM/VLM, reasoning chain, RAG)
+- Merge `reporting/` into `analytics/`
+
+**Rationale**: Names better reflect actual module responsibilities
+
+**Implementation**: Directory restructuring + import path updates
+
+---
+
+### TD-037: Unified Version Management (v2)
+
+**Date**: 2026-02-15 (v2.2.0)
+**Status**: ✅ Implemented
+**Context**: Version strings scattered across multiple files
+
+**Decision**: Single source of truth in `VERSION.json` + `core/version.py`
+
+**Rationale**: Ensures consistency across C++, Python, and dashboard
+
+**Implementation**: `VERSION.json`, `mac-central/src/core/version.py`
+
+---
+
+### TD-038: C++ Namespace Unification (v2)
+
+**Date**: 2026-02-18 (v2.2.2)
+**Status**: ✅ Implemented
+**Context**: C++ headers used inconsistent naming conventions
+
+**Decision**: All headers under `neuro::` namespace with hierarchical structure
+
+**Structure**:
+- `neuro::hal` — Hardware Abstraction Layer
+- `neuro::data_processing` — Buffers, pools, tracking
+- `neuro::ai_inference` — RKNN, YOLO post-processing
+- `neuro::communication` — gRPC client
+
+**Rationale**: Prevents symbol conflicts, improves code organization
+
+**Implementation**: `include/neuro/` directory structure
+
+---
+
+### TD-039: V2 API Modularization (v2)
+
+**Date**: 2026-02-15 (v2.1.0)
+**Status**: ✅ Implemented
+**Context**: Monolithic dashboard `app.py` becoming unwieldy
+
+**Decision**: Split into modular router packages
+
+**Structure**:
+- `routers/v2/status.py` — System status aggregation
+- `routers/v2/models.py` — Model management
+- `routers/v2/config.py` — Runtime configuration
+- `routers/v2/intelligence.py` — Behavior, anomaly, VLM guidance
+- `routers/v2/tracking.py` — Object tracking
+
+**Rationale**: Separation of concerns, easier maintenance
+
+**Implementation**: `extensions/dashboard/routers/v2/`
+
+---
+
 ## References
 
 - Architecture Design: `docs/ARCHITECTURE.md`
+- API Reference: `docs/API_REFERENCE.md`
+- Config Reference: `docs/CONFIG_REFERENCE.md`
+- Changelog: `CHANGELOG.md`
 - Week 1 Retro: `docs/devlog/week1-retro.md`
 - Week 2 Retro: `docs/devlog/week2-retro.md`
 - Week 3 Completion: `docs/devlog/WEEK3_COMPLETION_SUMMARY.md`
@@ -658,3 +737,5 @@ void* vaddr = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED, dma_fd, 0)
 - KPI Report: `docs/performance/kpi-report.md`
 - Week 8 Production Hardening: v1.2.0
 - Week 9 Security + Activation: v1.3.0
+- v2.0.0 Intelligence: Multi-model, analytics, reasoning
+- v2.2.2 C++ Refactoring: neuro:: namespace

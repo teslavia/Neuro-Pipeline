@@ -1,6 +1,6 @@
 # Neuro-Pipeline API Reference
 
-**Version**: 1.3.0
+**Version**: 2.2.2
 **Protocol**: gRPC with Protocol Buffers 3
 **Generated From**: `proto/neuro_pipeline.proto`
 
@@ -71,6 +71,9 @@ rpc SendControlCommand(ControlCommand) returns (CommandResponse);
 | `SET_DETECTION_THRESHOLD` | `{"threshold": "0.6"}` | 调整检测置信度阈值 |
 | `ENABLE_DEBUG` | `{"enabled": "true"}` | 开关调试日志 |
 | `SHUTDOWN` | `{}` | 优雅关机 |
+| `SWITCH_MODEL_VARIANT` | `{"model_id": "yolov8s"}` | (v2) 切换到指定模型变体 |
+| `SET_DETECTION_REGION` | `{"roi": "x,y,w,h"}` | (v2) 更新检测 ROI (VLM 引导) |
+| `SET_SENSITIVITY` | `{"level": "high"}` | (v2) 调整检测灵敏度 (VLM 引导) |
 
 ---
 
@@ -139,6 +142,63 @@ message RegistrationResponse {
 
 ---
 
+#### 6. ManageModel (v2)
+
+**Type**: Unary RPC
+
+```protobuf
+rpc ManageModel(ModelManagementRequest) returns (ModelManagementResponse);
+```
+
+**Description**: 模型生命周期管理 — 部署、卸载、查询、回滚模型。
+
+**Actions**:
+
+| Action | Parameters | Description |
+|---|---|---|
+| `DEPLOY` | `model_id`, `model_path`, `npu_core` | 部署模型到指定 NPU 核心 |
+| `UNDEPLOY` | `model_id` | 从设备卸载模型 |
+| `LIST` | — | 列出已部署的模型 |
+| `ROLLBACK` | `model_id` | 回滚到上一版本 |
+| `STATUS` | `model_id` | 获取模型部署状态 |
+
+**ModelManagementRequest**:
+```protobuf
+message ModelManagementRequest {
+  enum Action { DEPLOY = 0; UNDEPLOY = 1; LIST = 2; ROLLBACK = 3; STATUS = 4; }
+  Action action = 1;
+  ModelInfo model = 2;
+  string target_device_id = 3;
+  int32 npu_core = 4;  // 0-2, -1 = auto
+}
+```
+
+---
+
+#### 7. QueryTimeSeries (v2)
+
+**Type**: Unary RPC
+
+```protobuf
+rpc QueryTimeSeries(TimeSeriesQuery) returns (TimeSeriesResponse);
+```
+
+**Description**: 查询时序指标数据。
+
+**TimeSeriesQuery**:
+```protobuf
+message TimeSeriesQuery {
+  string metric_name = 1;      // "detections_count", "fps", "latency"
+  string device_id = 2;
+  double start_time = 3;       // Unix timestamp
+  double end_time = 4;         // Unix timestamp (0 = now)
+  string aggregation = 5;      // "avg", "sum", "max", "min", "count"
+  int32 bucket_seconds = 6;    // Aggregation bucket size
+}
+```
+
+---
+
 ## Message Definitions
 
 ### DetectionResult
@@ -150,8 +210,13 @@ message DetectionResult {
   repeated BoundingBox boxes = 3;  // 检测到的目标
   bytes frame_data = 4;            // 可选 JPEG 编码帧 (仅事件触发时发送)
   DeviceMetrics metrics = 5;       // 设备性能指标
-  string device_id = 6;            // 设备标识 (v1.1.0+)
-  string span_id = 7;              // 分布式追踪 span ID (v1.1.0+)
+  string trace_id = 6;             // 分布式追踪 trace ID (v1.1.0+)
+  string device_id = 7;            // 设备标识 (v1.1.0+)
+  string span_id = 8;              // 分布式追踪 span ID (v1.1.0+)
+
+  // v2 extensions
+  string model_id = 100;                  // 产生检测的模型 ID
+  repeated float feature_vector = 101;    // 帧级嵌入向量 (ReID/相似度)
 }
 ```
 
@@ -166,6 +231,9 @@ message BoundingBox {
   float y_min = 5;
   float x_max = 6;
   float y_max = 7;
+
+  // v2 extensions
+  uint64 track_id = 100;   // 对象跟踪 ID (TemporalTracker 分配)
 }
 ```
 
@@ -193,6 +261,62 @@ message VideoFrame {
   uint32 height = 4;
   PixelFormat format = 5;   // RGB888, NV12, JPEG
   bytes data = 6;
+}
+```
+
+### BehaviorAlert (v2)
+
+```protobuf
+message BehaviorAlert {
+  string device_id = 1;
+  uint64 timestamp_us = 2;
+  string behavior_type = 3;       // "loitering", "running", "lingering", "crowd"
+  float severity = 4;             // [0.0, 1.0]
+  uint64 track_id = 5;            // 关联的跟踪对象
+  string description = 6;
+  map<string, string> metadata = 7;
+}
+```
+
+### TimeSeriesPoint (v2)
+
+```protobuf
+message TimeSeriesPoint {
+  double timestamp = 1;           // Unix 时间戳 (秒)
+  double value = 2;
+  map<string, string> labels = 3; // 可选标签
+}
+```
+
+### TimeSeriesResponse (v2)
+
+```protobuf
+message TimeSeriesResponse {
+  bool success = 1;
+  string message = 2;
+  repeated TimeSeriesPoint points = 3;
+}
+```
+
+### ModelInfo (v2)
+
+```protobuf
+message ModelInfo {
+  string model_id = 1;            // 唯一模型标识 (e.g., "yolov5s-640")
+  string model_path = 2;          // 设备或注册表路径
+  string model_type = 3;          // "detection", "classification", "reid"
+  string version = 4;             // 语义版本号
+  map<string, string> metadata = 5;
+}
+```
+
+### ModelManagementResponse (v2)
+
+```protobuf
+message ModelManagementResponse {
+  bool success = 1;
+  string message = 2;
+  repeated ModelInfo models = 3;  // LIST 操作返回
 }
 ```
 
@@ -377,7 +501,7 @@ class AppConfig:
 
 ### CentralOrchestrator
 
-**文件**: `mac-central/src/application_logic/central_orchestrator.py`
+**文件**: `mac-central/src/pipeline/central_orchestrator.py`
 
 ```python
 class CentralOrchestrator:
@@ -392,7 +516,7 @@ class CentralOrchestrator:
 
 ### MLXInferenceEngine
 
-**文件**: `mac-central/src/llm_vlm/mlx_llm_inference.py`
+**文件**: `mac-central/src/inference/mlx_llm_inference.py`
 
 ```python
 class MLXInferenceEngine:
@@ -409,6 +533,8 @@ class MLXInferenceEngine:
 **位置**: `extensions/dashboard/app.py`
 **技术**: FastAPI + htmx + WebSocket
 
+### V1 Endpoints
+
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/` | GET | 仪表盘页面 (HTML) |
@@ -416,7 +542,26 @@ class MLXInferenceEngine:
 | `/api/devices` | GET | 已注册设备列表 (v1.1.0+) |
 | `/api/events` | GET | 最近事件列表 (`?limit=50&device_id=xxx`) |
 | `/api/events` | POST | 推送事件（供 orchestrator 调用） |
+| `/api/events/history` | GET | SQLite 历史查询 (`?hours=24&limit=100&device_id=xxx`) |
 | `/ws` | WebSocket | 实时事件流 |
+
+### V2 Endpoints (v2.0.0+)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v2/status` | GET | 聚合系统状态（Edge + Central + Analytics） |
+| `/api/v2/devices` | GET | 设备列表（含 metrics 和健康状态） |
+| `/api/v2/events` | GET | 事件查询（支持过滤和分页） |
+| `/api/v2/events/history` | GET | 历史事件（SQLite 查询） |
+| `/api/v2/command` | POST | 发送控制命令 |
+| `/api/v2/behavior/events` | GET | 行为分析事件 |
+| `/api/v2/anomaly/baselines` | GET | 异常检测基线 |
+| `/api/v2/anomaly/scores` | GET | 异常分数（支持时间范围过滤） |
+| `/api/v2/vlm/guidance` | GET | VLM 配置建议 |
+| `/api/v2/vlm/guidance/{id}/apply` | POST | 应用 VLM 建议 |
+| `/api/v2/models` | GET | 模型列表和状态 |
+| `/api/v2/config` | GET/PUT | 运行时配置 |
+| `/api/v2/tracking/objects` | GET | 当前跟踪对象 |
 
 ### GET /api/status 响应示例
 
@@ -514,4 +659,4 @@ Invalid messages are rejected with `INVALID_ARGUMENT` and counted in `grpc_valid
 
 ---
 
-_Generated from `proto/neuro_pipeline.proto` and source code. Last updated: 2026-02-16_
+_Generated from `proto/neuro_pipeline.proto` and source code. Last updated: 2026-02-18_

@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://github.com/teslavia/Neuro-Pipeline/actions"><img src="https://github.com/teslavia/Neuro-Pipeline/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <img src="https://img.shields.io/badge/version-2.0.0-green.svg" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.2.2-green.svg" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License">
   <img src="https://img.shields.io/badge/tests-522+-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/C%2B%2B-17-00599C.svg?logo=cplusplus&logoColor=white" alt="C++17">
@@ -175,11 +175,10 @@ neuro-pipeline/
 ├── mac-central/                   # 中心端 (Python)
 │   ├── src/
 │   │   ├── communication/         #   gRPC async server, 限流器
-│   │   ├── llm_vlm/               #   MLX LLM/VLM, 推理链, RAG 检索
-│   │   ├── application_logic/     #   orchestrator, 行为分析, 异常基线
+│   │   ├── inference/             #   MLX LLM/VLM, 推理链, RAG 检索
+│   │   ├── pipeline/              #   orchestrator, 行为分析, 异常基线
 │   │   ├── model_management/      #   模型注册表, A/B 测试
-│   │   ├── analytics/             #   时序引擎, 自动标注, ReID
-│   │   ├── reporting/             #   报告生成器
+│   │   ├── analytics/             #   时序引擎, 自动标注, ReID, 报告生成
 │   │   ├── storage/               #   SQLite, cloud storage
 │   │   └── observability/         #   metrics, tracing, alerting
 │   └── tests/                     #   pytest (311 tests: 250 unit + 61 e2e/chaos)
@@ -196,7 +195,7 @@ neuro-pipeline/
 │   ├── certs/                     #   mTLS cert gen
 │   └── services/                  #   systemd + launchd
 ├── config.yaml                    # unified config
-└── VERSION.json                   # v2.0.0
+└── VERSION.json                   # v2.2.2
 ```
 
 ## 测试覆盖
@@ -247,6 +246,10 @@ neuro-pipeline/
 | v1.2.0 | 生产加固 | 异常体系、配置校验、优雅关闭、RTSP、视频录制 |
 | v1.3.0 | 安全 + 激活 | 限流、输入校验、Dashboard 认证、审计日志、死代码激活 |
 | v2.0.0 | 智能演进 | 多模型热切换 (YOLOv5/v8)、NPU 三核调度、时序跟踪 v2、动态配置 |
+| v2.1.0 | 模型级联 + 仪表板框架 | ModelCascade, V2 API 模块化 |
+| v2.2.0 | VLM 引导配置 | VLMConfigGuide, 自动生成配置调整指令 |
+| v2.2.1 | Intelligence API 真实数据 | Dashboard 集成真实分析数据 |
+| v2.2.2 | C++ 头文件重构 | neuro:: 命名空间统一 |
 
 ## 许可证
 
