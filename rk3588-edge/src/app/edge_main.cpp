@@ -84,8 +84,8 @@ int main(int argc, char* argv[]) {
         config.confidence_threshold = cfg.GetFloat("edge.confidence_threshold", config.confidence_threshold);
         config.nms_threshold = cfg.GetFloat("edge.nms_threshold", config.nms_threshold);
         config.max_frames = cfg.GetInt("edge.max_frames", config.max_frames);
-        config.enable_grpc = cfg.GetBool("edge.enable_grpc", config.enable_grpc);
-        config.grpc_server = cfg.Get("edge.grpc_server", config.grpc_server);
+        config.grpc.enabled = cfg.GetBool("edge.enable_grpc", config.grpc.enabled);
+        config.grpc.server_address = cfg.Get("edge.grpc_server", config.grpc.server_address);
         config.device_id = cfg.Get("edge.device_id", config.device_id);
         config.dedup_iou_threshold = cfg.GetFloat("edge.dedup_iou_threshold", config.dedup_iou_threshold);
         config.dedup_ttl_seconds = cfg.GetFloat("edge.dedup_ttl_seconds", static_cast<float>(config.dedup_ttl_seconds));
@@ -98,9 +98,9 @@ int main(int argc, char* argv[]) {
         config.recording.fps = cfg.GetInt("edge.recording.fps", config.recording.fps);
 
         // Cache queue config
-        config.cache_queue_max_entries = cfg.GetInt("edge.cache_queue.max_entries", static_cast<int>(config.cache_queue_max_entries));
+        config.grpc.cache_queue_max_entries = cfg.GetInt("edge.cache_queue.max_entries", static_cast<int>(config.grpc.cache_queue_max_entries));
         int cache_mb = cfg.GetInt("edge.cache_queue.max_memory_mb", 64);
-        config.cache_queue_max_memory_bytes = static_cast<size_t>(cache_mb) * 1024 * 1024;
+        config.grpc.cache_queue_max_memory_bytes = static_cast<size_t>(cache_mb) * 1024 * 1024;
 
         // v2 feature toggles
         config.enable_temporal_tracker = cfg.GetBool("edge.enable_temporal_tracker", config.enable_temporal_tracker);
@@ -115,7 +115,7 @@ int main(int argc, char* argv[]) {
         for (int i = 0; i < static_cast<int>(neuro::core::kMaxCameras); ++i) {
           std::string prefix = "cameras." + std::to_string(i);
           if (!cfg.Has(prefix + ".device")) break;
-          neuro::app::PipelineCoordinator::CameraConfig cam;
+          neuro::app::CameraConfig cam;
           cam.device = cfg.Get(prefix + ".device", "/dev/video0");
           cam.width = cfg.GetInt(prefix + ".width", config.width);
           cam.height = cfg.GetInt(prefix + ".height", config.height);
@@ -128,7 +128,7 @@ int main(int argc, char* argv[]) {
         for (int i = 0; i < 10; ++i) {
           std::string prefix = "edge.models." + std::to_string(i);
           if (!cfg.Has(prefix + ".model_id")) break;
-          neuro::app::PipelineCoordinator::Config::ModelConfig mc;
+          neuro::app::ModelConfig mc;
           mc.model_id = cfg.Get(prefix + ".model_id");
           mc.model_path = cfg.Get(prefix + ".model_path");
           mc.postprocessor = cfg.Get(prefix + ".postprocessor", "yolov5");

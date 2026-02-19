@@ -16,13 +16,13 @@ TEST(PipelineCoordinatorConfig, DefaultValues) {
   EXPECT_FLOAT_EQ(cfg.confidence_threshold, 0.5f);
   EXPECT_FLOAT_EQ(cfg.nms_threshold, 0.45f);
   EXPECT_EQ(cfg.max_frames, 0u);
-  EXPECT_FALSE(cfg.enable_grpc);
+  EXPECT_FALSE(cfg.grpc.enabled);
   EXPECT_EQ(cfg.device_id, "edge-001");
   EXPECT_TRUE(cfg.cameras.empty());
 }
 
 TEST(PipelineCoordinatorConfig, CameraConfig) {
-  PipelineCoordinator::CameraConfig cam;
+  CameraConfig cam;
   EXPECT_EQ(cam.device, "/dev/video0");
   EXPECT_EQ(cam.width, 1920u);
   EXPECT_EQ(cam.height, 1080u);
@@ -33,7 +33,7 @@ TEST(PipelineCoordinatorConfig, CameraConfig) {
 TEST(PipelineCoordinatorConfig, MultiCameraSetup) {
   PipelineCoordinator::Config cfg;
   for (int i = 0; i < 3; ++i) {
-    PipelineCoordinator::CameraConfig cam;
+    CameraConfig cam;
     cam.device = "/dev/video" + std::to_string(i);
     cam.label = "cam" + std::to_string(i);
     cfg.cameras.push_back(cam);
