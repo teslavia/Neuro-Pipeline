@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "neuro-pipeline"
-version = "2.2.0"
+version = "2.4.1"
 description = "Edge-Cloud AI Inference System (RK3588 + Apple Silicon)"
 authors = [{name = "Teslavia"}]
 requires-python = ">=3.10"
@@ -50,12 +50,14 @@ testpaths = ["mac-central/tests"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = [
-    "--verbose",
-    "--cov=mac-central/src",
-    "--cov-report=html",
-    "--cov-report=term-missing",
-]
+addopts = ["--verbose"]
+pythonpath = ["mac-central/src", "mac-central", "."]
+
+[tool.coverage.run]
+source = ["mac-central/src"]
+
+[tool.coverage.report]
+show_missing = true
 
 [tool.mypy]
 python_version = "3.10"

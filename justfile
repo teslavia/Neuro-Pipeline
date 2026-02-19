@@ -10,16 +10,16 @@ proto:
 
 # ── Python Tests ───────────────────────────────────
 test-py:
-    cd mac-central && source .venv/bin/activate && pytest tests/ -v --tb=short -o "addopts="
+    cd mac-central && source .venv/bin/activate && pytest tests/ -v --tb=short --cov=src --cov-report=term-missing
 
 test-py-unit:
-    cd mac-central && source .venv/bin/activate && pytest tests/unit_tests/ -v -o "addopts="
+    cd mac-central && source .venv/bin/activate && pytest tests/unit_tests/ -v
 
 test-dashboard:
-    pytest extensions/dashboard/tests/ -v -o "addopts="
+    pytest extensions/dashboard/tests/ -v
 
 test-e2e:
-    pytest tests/e2e/ tests/chaos/ -v -o "addopts="
+    pytest tests/e2e/ tests/chaos/ -v
 
 lint:
     flake8 mac-central/src/ --max-line-length=100
