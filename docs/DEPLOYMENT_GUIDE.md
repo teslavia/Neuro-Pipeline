@@ -753,6 +753,109 @@ rate_limiting:
 
 ---
 
+## 14.5 多设备部署 (v2.2.0+)
+
+### 多设备架构
+
+```
+                    ┌─────────────────────┐
+                    │   Mac Mini Central  │
+                    │   (gRPC Server)     │
+                    │   :50051            │
+                    └──────────┬──────────┘
+                               │
+        ┌──────────────────────┼──────────────────────┐
+        │                      │                      │
+        ▼                      ▼                      ▼
+┌───────────────┐      ┌───────────────┐      ┌───────────────┐
+│   Edge-001    │      │   Edge-002    │      │   Edge-003    │
+│   RK3588      │      │   RK3588      │      │   RK3588      │
+│   192.168.1.70│      │   192.168.1.71│      │   192.168.1.72│
+└───────────────┘      └───────────────┘      └───────────────┘
+```
+
+### 设备配置模板
+
+为每个边缘设备创建配置文件：
+
+**config-edge-001.yaml:**
+```yaml
+edge:
+  device_id: "edge-001"
+  video_source: "/dev/video0"
+  width: 1920
+  height: 1080
+  fps: 30
+
+central:
+  server_address: "192.168.1.100:50051"
+  tls:
+    enabled: true
+    cert_path: "/opt/neuro-pipeline/certs/client-001.crt"
+    key_path: "/opt/neuro-pipeline/certs/client-001.key"
+```
+
+### 负载均衡策略
+
+中心服务器按 `device_id` 分片处理：
+
+```python
+# 在 central_orchestrator.py 中
+async def handle_detection(self, device_id: str, detection):
+    # 按 device_id 分片到不同队列
+    queue = self._get_device_queue(device_id)
+    await queue.put(detection)
+```
+
+### 集中监控配置
+
+**Prometheus 抓取配置:**
+```yaml
+# prometheus.yml
+scrape_configs:
+  - job_name: 'neuro-central'
+    static_configs:
+      - targets: ['192.168.1.100:9090']
+
+  - job_name: 'neuro-edge'
+    static_configs:
+      - targets:
+          - '192.168.1.70:9091'
+          - '192.168.1.71:9091'
+          - '192.168.1.72:9091'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: device_id
+        regex: '([^:]+):.*'
+        replacement: '${1}'
+```
+
+### 设备注册
+
+边缘设备启动时自动注册：
+
+```bash
+./neuro_pipeline_edge \
+  --device-id edge-001 \
+  --server 192.168.1.100:50051 \
+  --register
+```
+
+中心服务器维护设备注册表：
+
+```python
+# 在 grpc_server.py 中
+async def RegisterDevice(self, request, context):
+    device_id = request.device_id
+    self._device_registry[device_id] = {
+        "last_seen": time.time(),
+        "metadata": request.metadata,
+    }
+    return RegisterDeviceResponse(success=True)
+```
+
+---
+
 ## 十四、Grafana 监控栈部署 (v1.1.0+)
 
 ### 14.1 启动 Prometheus + Grafana
