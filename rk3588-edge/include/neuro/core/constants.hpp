@@ -22,7 +22,7 @@ constexpr double kHealthUpdateIntervalSec = 5.0;
 constexpr double kFPSUpdateIntervalSec = 1.0;
 
 // Version
-constexpr const char* kEdgeVersion = "2.4.0";
+constexpr const char* kEdgeVersion = "2.4.1";
 
 }  // namespace neuro::core
 

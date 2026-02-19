@@ -1,8 +1,8 @@
 {
-  "version": "2.4.0",
+  "version": "2.4.1",
   "name": "neuro-pipeline",
   "description": "Edge-Central AI inference pipeline for RK3588 + Mac Mini",
-  "milestone": "v2.4.0 - VLM Frame Data",
+  "milestone": "v2.4.1 - Deep Refactor",
   "components": {
     "rk3588-edge": "10.0.0",
     "mac-central": "10.0.0"
