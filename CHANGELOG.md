@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2026-02-19
+
+### Added
+- Edge JPEG frame encoding via stb_image_write (`send_frame_data` config)
+- `jpeg_quality` parameter (1-100, default 70, ~30-50KB per frame)
+- `jpeg_encoder.hpp` utility wrapping stbi_write_jpg_to_func
+- VLM end-to-end pipeline: Edge camera → JPEG → gRPC → Central Qwen2-VL analysis
+
+### Fixed
+- Central: mlx_vlm.generate() expects file path, not PIL Image — write tempfile
+- Central: Extract .text from GenerationResult return type
+- Test: Relax VLM synthetic image assertion (model may return empty for trivial images)
+
+## [2.3.1] - 2026-02-19
+
+### Fixed
+- GCC aggregate init error in DetectionQueue default param on aarch64
+- Camera device path updated to /dev/video3 (1080P USB Camera)
+
 ## [2.3.0] - 2026-02-19
 
 ### Added
