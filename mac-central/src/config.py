@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 import yaml
 
@@ -191,6 +191,22 @@ class ReportingConfig:
 
 
 @dataclass
+class VLMConfigGuideConfig:
+    """Configuration for VLM-guided edge configuration.
+
+    Enables closed-loop optimization where VLM analysis results
+    are used to automatically adjust edge device parameters.
+    """
+    enabled: bool = False
+    min_confidence: float = 0.7
+    max_adjustments_per_result: int = 3
+    auto_apply: bool = False
+    enable_region_adjustment: bool = True
+    enable_sensitivity_adjustment: bool = True
+    enable_fps_adjustment: bool = False
+
+
+@dataclass
 class AppConfig:
     central: CentralConfig = field(default_factory=CentralConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
@@ -214,6 +230,7 @@ class AppConfig:
     timeseries: TimeSeriesConfig = field(default_factory=TimeSeriesConfig)
     auto_annotator: AutoAnnotatorConfig = field(default_factory=AutoAnnotatorConfig)
     reporting: ReportingConfig = field(default_factory=ReportingConfig)
+    vlm_config_guide: VLMConfigGuideConfig = field(default_factory=VLMConfigGuideConfig)
 
     @classmethod
     def from_yaml(cls, path: Path) -> "AppConfig":
@@ -385,6 +402,17 @@ class AppConfig:
             enabled=bool(rp.get("enabled", cfg.reporting.enabled)),
             output_dir=rp.get("output_dir", cfg.reporting.output_dir),
             schedule_hours=float(rp.get("schedule_hours", cfg.reporting.schedule_hours)),
+        )
+        # v2: VLM config guide
+        vcg = data.get("vlm_config_guide", {})
+        cfg.vlm_config_guide = VLMConfigGuideConfig(
+            enabled=bool(vcg.get("enabled", cfg.vlm_config_guide.enabled)),
+            min_confidence=float(vcg.get("min_confidence", cfg.vlm_config_guide.min_confidence)),
+            max_adjustments_per_result=int(vcg.get("max_adjustments_per_result", cfg.vlm_config_guide.max_adjustments_per_result)),
+            auto_apply=bool(vcg.get("auto_apply", cfg.vlm_config_guide.auto_apply)),
+            enable_region_adjustment=bool(vcg.get("enable_region_adjustment", cfg.vlm_config_guide.enable_region_adjustment)),
+            enable_sensitivity_adjustment=bool(vcg.get("enable_sensitivity_adjustment", cfg.vlm_config_guide.enable_sensitivity_adjustment)),
+            enable_fps_adjustment=bool(vcg.get("enable_fps_adjustment", cfg.vlm_config_guide.enable_fps_adjustment)),
         )
         return cfg
 
