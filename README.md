@@ -6,9 +6,9 @@
 
 <p align="center">
   <a href="https://github.com/teslavia/Neuro-Pipeline/actions"><img src="https://github.com/teslavia/Neuro-Pipeline/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <img src="https://img.shields.io/badge/version-2.3.0-green.svg" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.4.0-green.svg" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License">
-  <img src="https://img.shields.io/badge/tests-522+-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-435+-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/C%2B%2B-17-00599C.svg?logo=cplusplus&logoColor=white" alt="C++17">
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?logo=python&logoColor=white" alt="Python">
 </p>
@@ -195,7 +195,7 @@ neuro-pipeline/
 │   ├── certs/                     #   mTLS cert gen
 │   └── services/                  #   systemd + launchd
 ├── config.yaml                    # unified config
-└── VERSION.json                   # v2.3.0
+└── VERSION.json                   # v2.4.0
 ```
 
 ## 测试覆盖
@@ -251,6 +251,8 @@ neuro-pipeline/
 | v2.2.1 | Intelligence API 真实数据 | Dashboard 集成真实分析数据 |
 | v2.2.2 | C++ 头文件重构 | neuro:: 命名空间统一 |
 | v2.3.0 | 生产化增强 | 离线缓存队列、配置热重载、动态日志、Prometheus 告警、SLO 仪表盘、多 VLM 模型 |
+| v2.3.1 | 兼容性修复 | GCC aggregate init 修复、摄像头设备路径更新 |
+| v2.4.0 | VLM 全链路 | Edge JPEG 帧编码 (stb_image_write)、Central mlx_vlm 修复、VLM 端到端验证 |
 
 ## 许可证
 

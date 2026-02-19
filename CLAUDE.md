@@ -102,6 +102,8 @@ All HAL modules have real + mock implementations, toggled by `USE_MOCK_HAL` at c
 
 v2.3: `DetectionQueue` (`src/communication/detection_queue.cpp`) buffers detections during gRPC disconnects; auto-drains on reconnect.
 
+v2.4: JPEG frame encoding via `stb_image_write` — `pipeline_coordinator.cpp` encodes RGA output (RGB888 640×640) to JPEG and sets `frame_data` on gRPC `DetectionResult`. Controlled by `edge.send_frame_data` (default off) and `edge.jpeg_quality` (default 70). Files: `src/utils/jpeg_encoder.hpp`, `src/utils/stb_image_write_impl.cpp`, `third_party/stb_image_write.h`.
+
 ### Central Server (Python, async)
 ```
 gRPC Server → Orchestrator → [SQLite Store, VLM Queue, Alert Manager, Metrics]
@@ -142,6 +144,7 @@ v2.3 endpoints:
 - **Dashboard tests** need `conftest.py` to add repo root to `sys.path` (extensions/ is outside mac-central/).
 - **common::Buffer** is abstract — use `BufferFactory::CreateDMABuffer()` for concrete instances.
 - **RGA `wrapbuffer_fd`** is a macro — use `wrapbuffer_fd_t()` in C++ code.
+- **stb_image_write**: Header-only JPEG encoder (`third_party/stb_image_write.h`). Implementation compiled in `src/utils/stb_image_write_impl.cpp` (defines `STB_IMAGE_WRITE_IMPLEMENTATION` once). Wrapper: `src/utils/jpeg_encoder.hpp`.
 
 ## Release Process
 
@@ -161,6 +164,10 @@ v2.3 additions:
 - `central.vlm_models` — multiple VLM model variants for runtime switching
 - Hot-reloadable sections (no restart): `logging.level`, `vlm_rules`, `alerting.rules`, `rate_limiting`
 - Non-hot-reloadable (needs restart): `central.host/port`, `tls.*`, `storage.*`, `central.model_path`
+
+v2.4 additions:
+- `edge.send_frame_data` — enable JPEG frame encoding in gRPC DetectionResult (default `false`)
+- `edge.jpeg_quality` — JPEG quality 1-100 (default 70, ~30-50KB per 640×640 frame)
 
 ## Devcontainer
 
