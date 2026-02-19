@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.1] - 2026-02-19
+
+### Changed
+- **Phase 0**: pyproject.toml unified pythonpath, Justfile test targets, conftest cleanup
+- **Phase 1**: Generic dataclass config loader — replaces 190-line `.get()` chains (`src/core/config_loader.py`)
+- **Phase 2**: Unified logger factory + `@safe_async` error decorator — eliminates 8 structlog fallbacks and 15 try-except blocks (`src/core/logging.py`, `src/core/error_handling.py`)
+- **Phase 3**: Split `CentralOrchestrator` (503→120 lines) into `EventBus`, `DetectionProcessor`, `VLMProcessingPipeline` (`src/core/event_bus.py`, `src/pipeline/`)
+- **Phase 4**: DI container with lazy subsystem init — `main.py` 427→150 lines (`src/core/container.py`)
+- **Phase 5**: gRPC `ModelActionHandler` Strategy pattern — replaces 6-branch if/elif (`src/communication/model_actions.py`)
+- **Phase 6**: Dashboard FastAPI DI — eliminates 14 global variables (`extensions/dashboard/services/deps.py`)
+- **Phase 7**: C++ `InputSource` Strategy pattern — 18 branches→polymorphism (`input_source.hpp`, `input_source_factory.hpp`)
+- **Phase 8**: C++ Config struct split — 30+ fields→4 sub-structs (`pipeline_config.hpp`)
+- **Phase 9**: `DetectionStore` Facade with 3 internal repos (`_detection_repo.py`, `_timeseries_repo.py`, `_conversation_repo.py`)
+- **Phase 10**: Shared test factories — reduce 143 duplicate mocks (`tests/factories.py`)
+
+### Stats
+- 39 files changed, +2071/−1567 lines
+- 435 Python tests (360 unit + 20 dashboard + 26 E2E + 29 chaos), 0 failures
+
 ## [2.4.0] - 2026-02-19
 
 ### Added

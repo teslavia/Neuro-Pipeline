@@ -6,9 +6,9 @@
 
 <p align="center">
   <a href="https://github.com/teslavia/Neuro-Pipeline/actions"><img src="https://github.com/teslavia/Neuro-Pipeline/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <img src="https://img.shields.io/badge/version-2.3.0-green.svg" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.4.1-green.svg" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License">
-  <img src="https://img.shields.io/badge/tests-522+-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-646+-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/C%2B%2B-17-00599C.svg?logo=cplusplus&logoColor=white" alt="C++17">
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?logo=python&logoColor=white" alt="Python">
 </p>
@@ -174,14 +174,15 @@ neuro-pipeline/
 │   └── cmake/                     #   aarch64 toolchain
 ├── mac-central/                   # Central server (Python)
 │   ├── src/
-│   │   ├── communication/         #   gRPC async server, rate limiter
+│   │   ├── core/                  #   Config loader, logger factory, DI container, event bus, error handling
+│   │   ├── communication/         #   gRPC async server, rate limiter, model action strategy
 │   │   ├── inference/             #   MLX LLM/VLM, reasoning chain, RAG retrieval
-│   │   ├── pipeline/              #   Orchestrator, behavior analysis, anomaly baseline
+│   │   ├── pipeline/              #   Detection processor, VLM pipeline, behavior analysis, anomaly baseline
 │   │   ├── model_management/      #   Model registry, A/B testing
 │   │   ├── analytics/             #   Time-series engine, auto-labeling, ReID, reporting
-│   │   ├── storage/               #   SQLite persistence, cloud storage
+│   │   ├── storage/               #   SQLite Facade (3 internal repos), cloud storage
 │   │   └── observability/         #   Metrics, tracing, alerting
-│   └── tests/                     #   pytest (311 tests: 250 unit + 61 e2e/chaos)
+│   └── tests/                     #   pytest (435 tests: 360 unit + 20 dashboard + 26 E2E + 29 chaos)
 ├── proto/                         # Protobuf service definitions
 ├── extensions/
 │   ├── dashboard/                 # FastAPI + htmx monitoring UI
@@ -195,7 +196,7 @@ neuro-pipeline/
 │   ├── certs/                     #   mTLS certificate generation
 │   └── services/                  #   systemd + launchd configs
 ├── config.yaml                    # Unified configuration
-└── VERSION.json                   # v2.3.0
+└── VERSION.json                   # v2.4.1
 ```
 
 ## Test Coverage
@@ -203,8 +204,8 @@ neuro-pipeline/
 | Component | Framework | Tests | Notes |
 |-----------|-----------|-------|-------|
 | C++ Edge (Mock HAL) | GoogleTest | 211 | Buffer, pool, HAL, YOLOv5/v8, multi-model, tracker, adaptive FPS |
-| Python Central | pytest | 311 | Rate limiting, health, circuit breaker, input validation, metrics, tracing, behavior, RAG |
-| Total | — | 522+ | Cross-compile mock ON/OFF both pass |
+| Python Central | pytest | 435 | Rate limiting, health, circuit breaker, input validation, metrics, tracing, behavior, RAG, DI container, event bus |
+| Total | — | 646+ | Cross-compile mock ON/OFF both pass |
 
 ## Technology Stack
 
@@ -251,6 +252,9 @@ neuro-pipeline/
 | v2.2.1 | Intelligence API Real Data | Dashboard integration with real analysis data |
 | v2.2.2 | C++ Header Refactoring | Unified neuro:: namespace |
 | v2.3.0 | Production Hardening | Offline cache queue, config hot-reload, dynamic logging, Prometheus alerts, SLO dashboard, multi-VLM |
+| v2.3.1 | Compatibility Fix | GCC aggregate init fix, camera device path update |
+| v2.4.0 | VLM Full Pipeline | Edge JPEG frame encoding (stb_image_write), Central mlx_vlm fix, VLM E2E verified |
+| v2.4.1 | Deep Refactoring | 11-phase refactor (DI container, Strategy pattern, Facade, EventBus), 39 files +2071/−1567 lines |
 
 ## License
 

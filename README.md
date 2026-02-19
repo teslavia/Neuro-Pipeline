@@ -6,9 +6,9 @@
 
 <p align="center">
   <a href="https://github.com/teslavia/Neuro-Pipeline/actions"><img src="https://github.com/teslavia/Neuro-Pipeline/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <img src="https://img.shields.io/badge/version-2.4.0-green.svg" alt="Version">
+  <img src="https://img.shields.io/badge/version-2.4.1-green.svg" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License">
-  <img src="https://img.shields.io/badge/tests-435+-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/tests-646+-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/C%2B%2B-17-00599C.svg?logo=cplusplus&logoColor=white" alt="C++17">
   <img src="https://img.shields.io/badge/Python-3.10%2B-3776AB.svg?logo=python&logoColor=white" alt="Python">
 </p>
@@ -174,14 +174,15 @@ neuro-pipeline/
 │   └── cmake/                     #   aarch64 toolchain
 ├── mac-central/                   # 中心端 (Python)
 │   ├── src/
-│   │   ├── communication/         #   gRPC async server, 限流器
+│   │   ├── core/                  #   配置加载器, 日志工厂, DI 容器, 事件总线, 错误处理
+│   │   ├── communication/         #   gRPC async server, 限流器, 模型操作策略
 │   │   ├── inference/             #   MLX LLM/VLM, 推理链, RAG 检索
-│   │   ├── pipeline/              #   orchestrator, 行为分析, 异常基线
+│   │   ├── pipeline/              #   检测处理器, VLM 管线, 行为分析, 异常基线
 │   │   ├── model_management/      #   模型注册表, A/B 测试
 │   │   ├── analytics/             #   时序引擎, 自动标注, ReID, 报告生成
-│   │   ├── storage/               #   SQLite, cloud storage
+│   │   ├── storage/               #   SQLite Facade (3 内部仓库), cloud storage
 │   │   └── observability/         #   metrics, tracing, alerting
-│   └── tests/                     #   pytest (311 tests: 250 unit + 61 e2e/chaos)
+│   └── tests/                     #   pytest (435 tests: 360 unit + 20 dashboard + 26 E2E + 29 chaos)
 ├── proto/                         # Protobuf definitions
 ├── extensions/
 │   ├── dashboard/                 # FastAPI + htmx UI
@@ -195,7 +196,7 @@ neuro-pipeline/
 │   ├── certs/                     #   mTLS cert gen
 │   └── services/                  #   systemd + launchd
 ├── config.yaml                    # unified config
-└── VERSION.json                   # v2.4.0
+└── VERSION.json                   # v2.4.1
 ```
 
 ## 测试覆盖
@@ -203,8 +204,8 @@ neuro-pipeline/
 | 组件 | 框架 | 测试数 | 说明 |
 |------|------|--------|------|
 | C++ 边缘端 (Mock HAL) | GoogleTest | 211 | buffer, pool, HAL, YOLOv5/v8, 多模型, 跟踪器, 自适应帧率 |
-| Python 中心端 | pytest | 311 | 限流, 健康检查, 熔断器, 输入校验, 指标, 追踪, 行为分析, RAG |
-| 合计 | — | 522+ | 跨编译 mock ON/OFF 均通过 |
+| Python 中心端 | pytest | 435 | 限流, 健康检查, 熔断器, 输入校验, 指标, 追踪, 行为分析, RAG, DI 容器, 事件总线 |
+| 合计 | — | 646+ | 跨编译 mock ON/OFF 均通过 |
 
 ## 技术栈
 
@@ -253,6 +254,7 @@ neuro-pipeline/
 | v2.3.0 | 生产化增强 | 离线缓存队列、配置热重载、动态日志、Prometheus 告警、SLO 仪表盘、多 VLM 模型 |
 | v2.3.1 | 兼容性修复 | GCC aggregate init 修复、摄像头设备路径更新 |
 | v2.4.0 | VLM 全链路 | Edge JPEG 帧编码 (stb_image_write)、Central mlx_vlm 修复、VLM 端到端验证 |
+| v2.4.1 | 深度重构 | 11 阶段重构 (DI 容器、策略模式、Facade、事件总线)，39 文件 +2071/−1567 行 |
 
 ## 许可证
 
