@@ -17,7 +17,8 @@ std::string ReadFile(const std::string& path) {
 
 namespace neuro::comm {
 
-GRPCClient::GRPCClient(const Config& config) : config_(config) {}
+GRPCClient::GRPCClient(const Config& config)
+    : config_(config), queue_(config.cache_queue) {}
 
 GRPCClient::~GRPCClient() {
   Disconnect();
@@ -173,7 +174,10 @@ bool GRPCClient::StreamDetection(const neuro_pipeline::DetectionResult& result) 
     // Attempt reconnection
     if (reconnect_attempts_ >= config_.max_reconnect_attempts) {
     LOG_ERROR("GRPCClient", "Max reconnect attempts reached");
-      return false;
+      // Buffer instead of dropping
+      lock.unlock();
+      queue_.Enqueue(result);
+      return true;
     }
 
     int backoff = GetBackoffMs(reconnect_attempts_);
@@ -186,18 +190,37 @@ bool GRPCClient::StreamDetection(const neuro_pipeline::DetectionResult& result) 
 
     reconnect_attempts_++;
     // Re-create channel (Connect logic inlined since we already hold mu_)
-    if (!CreateChannel()) return false;
+    if (!CreateChannel()) {
+      lock.unlock();
+      queue_.Enqueue(result);
+      return true;
+    }
     auto deadline = std::chrono::system_clock::now() + std::chrono::seconds(5);
-    if (!channel_->WaitForConnected(deadline)) return false;
-    if (!HealthCheckLocked()) return false;
+    if (!channel_->WaitForConnected(deadline)) {
+      lock.unlock();
+      queue_.Enqueue(result);
+      return true;
+    }
+    if (!HealthCheckLocked()) {
+      lock.unlock();
+      queue_.Enqueue(result);
+      return true;
+    }
     connected_ = true;
     reconnect_attempts_ = 0;
+
+    // Reconnected — drain queued items
+    lock.unlock();
+    DrainQueue();
+    lock.lock();
   }
 
   // Lazily open persistent stream
   if (!stream_open_ && !OpenStream()) {
     connected_ = false;
-    return false;
+    lock.unlock();
+    queue_.Enqueue(result);
+    return true;
   }
 
   // Write into the persistent stream
@@ -205,10 +228,52 @@ bool GRPCClient::StreamDetection(const neuro_pipeline::DetectionResult& result) 
     LOG_ERROR("GRPCClient", "Stream write failed, resetting stream");
     CloseStream();
     connected_ = false;
-    return false;
+    lock.unlock();
+    queue_.Enqueue(result);
+    return true;
+  }
+
+  // On successful write, try to drain one queued item
+  if (!queue_.Empty()) {
+    neuro_pipeline::DetectionResult queued;
+    // Temporarily unlock to access queue (which has its own mutex)
+    lock.unlock();
+    if (queue_.Dequeue(&queued)) {
+      lock.lock();
+      if (stream_open_ && stream_) {
+        if (!stream_->Write(queued)) {
+          LOG_WARN("GRPCClient", "Failed to drain queued item, re-queuing");
+          lock.unlock();
+          queue_.Enqueue(queued);
+          lock.lock();
+        }
+      }
+    } else {
+      lock.lock();
+    }
   }
 
   return true;
+}
+
+void GRPCClient::DrainQueue() {
+  neuro_pipeline::DetectionResult queued;
+  int drained = 0;
+  while (queue_.Dequeue(&queued)) {
+    std::lock_guard<std::mutex> lock(mu_);
+    if (!stream_open_ && !OpenStream()) {
+      queue_.Enqueue(queued);
+      break;
+    }
+    if (!stream_->Write(queued)) {
+      queue_.Enqueue(queued);
+      break;
+    }
+    ++drained;
+  }
+  if (drained > 0) {
+    LOG_INFO("GRPCClient", "Drained %d queued detections", drained);
+  }
 }
 
 bool GRPCClient::FlushStream() {

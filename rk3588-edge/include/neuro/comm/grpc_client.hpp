@@ -8,6 +8,7 @@
 #include <string>
 #include <thread>
 #include <grpcpp/grpcpp.h>
+#include "neuro/comm/detection_queue.hpp"
 #include "neuro_pipeline.grpc.pb.h"
 
 namespace neuro::comm {
@@ -25,6 +26,8 @@ class GRPCClient {
     std::string ca_cert_path;
     std::string client_cert_path;
     std::string client_key_path;
+    // Offline cache queue
+    DetectionQueue::Config cache_queue;
   };
 
   using CommandCallback = std::function<void(const neuro_pipeline::ControlCommand&)>;
@@ -57,6 +60,7 @@ class GRPCClient {
   bool HealthCheckLocked();
   bool OpenStream();
   void CloseStream();
+  void DrainQueue();
 
   Config config_;
   std::atomic<bool> connected_{false};
@@ -65,6 +69,9 @@ class GRPCClient {
   std::shared_ptr<grpc::Channel> channel_;
   std::unique_ptr<neuro_pipeline::NeuroPipelineService::Stub> stub_;
   int reconnect_attempts_ = 0;
+
+  // Offline cache queue for buffering during disconnects
+  DetectionQueue queue_;
 
   // Persistent detection stream state
   std::unique_ptr<grpc::ClientContext> stream_context_;

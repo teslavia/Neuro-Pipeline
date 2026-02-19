@@ -182,6 +182,7 @@ set(AI_INFERENCE_SOURCES
 
 set(COMMUNICATION_SOURCES
   src/communication/grpc_client.cpp
+  src/communication/detection_queue.cpp
 )
 
 set(APP_SOURCES

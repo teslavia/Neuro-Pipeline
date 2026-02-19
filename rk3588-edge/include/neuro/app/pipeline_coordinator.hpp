@@ -49,6 +49,10 @@ class PipelineCoordinator {
     uint32_t max_frames = 0;        // 0=unlimited
     bool enable_grpc = false;       // Enable gRPC communication
     std::string grpc_server = "192.168.1.100:50051";
+    bool grpc_compression = true;
+    // Offline cache queue config
+    size_t cache_queue_max_entries = 1000;
+    size_t cache_queue_max_memory_bytes = 64 * 1024 * 1024;
     uint32_t frame_skip_interval = 0;  // 0=send every frame, N=send every Nth
     std::vector<CameraConfig> cameras;  // Multi-camera configs (empty = single-cam)
     float dedup_iou_threshold = 0.5f;
