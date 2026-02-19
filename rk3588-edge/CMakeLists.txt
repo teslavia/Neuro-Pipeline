@@ -26,6 +26,20 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # ==============================================================================
 option(BUILD_TESTING "Build unit and integration tests" ON)
 option(USE_MOCK_HAL "Use mock HAL for development without RK3588 hardware" OFF)
+option(ENABLE_COVERAGE "Enable code coverage reporting (GCC/Clang)" OFF)
+
+# ==============================================================================
+# Coverage
+# ==============================================================================
+if(ENABLE_COVERAGE)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --coverage -fprofile-arcs -ftest-coverage")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage")
+    message(STATUS "Coverage reporting enabled")
+  else()
+    message(WARNING "Coverage only supported on GCC/Clang compilers")
+  endif()
+endif()
 
 # ==============================================================================
 # Dependencies

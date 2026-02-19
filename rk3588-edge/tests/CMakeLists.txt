@@ -29,6 +29,7 @@ set(UNIT_TEST_SOURCES
   unit_tests/test_memory_pool.cpp
   unit_tests/test_thread_pool.cpp
   unit_tests/test_zero_copy_buffer.cpp
+  unit_tests/test_buffer_factory.cpp
   unit_tests/test_yolo_postprocess.cpp
   unit_tests/test_grpc_client.cpp
   unit_tests/test_mmap_ipc.cpp

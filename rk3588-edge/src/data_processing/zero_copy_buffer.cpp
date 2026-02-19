@@ -1,6 +1,9 @@
 #include "neuro/core/buffer.hpp"
+#include "neuro/hal/drm_allocator.hpp"
 
 #include <cstring>
+#include <memory>
+#include <mutex>
 #include <vector>
 
 namespace neuro::core {
@@ -26,12 +29,39 @@ class HeapBuffer : public Buffer {
   Metadata metadata_;
 };
 
-// TODO: DMABuffer implementation (requires Linux DRM/DMA-BUF APIs)
-// class DMABuffer : public Buffer { ... };
+/// Get or create the global DRM allocator instance (thread-safe lazy init).
+static hal::DRMAllocator& GetGlobalDRMAllocator() {
+  static std::mutex g_drm_mutex;
+  static std::unique_ptr<hal::DRMAllocator> g_drm_allocator;
+  static bool g_drm_initialized = false;
+
+  std::lock_guard<std::mutex> lock(g_drm_mutex);
+  if (!g_drm_initialized) {
+    g_drm_allocator = std::make_unique<hal::DRMAllocator>();
+    if (g_drm_allocator->Initialize()) {
+      g_drm_initialized = true;
+    } else {
+      // Initialize failed - allocator will remain null
+      g_drm_allocator.reset();
+      g_drm_initialized = true;  // Mark as attempted to avoid retry
+    }
+  }
+
+  // Return a reference - may be null if init failed
+  static hal::DRMAllocator null_allocator;
+  return g_drm_allocator ? *g_drm_allocator : null_allocator;
+}
 
 std::shared_ptr<Buffer> BufferFactory::CreateDMABuffer(size_t size) {
-  // TODO: Implement DMA buffer allocation via DRM
-  // For now, fallback to heap buffer
+  // Try to allocate via DRM allocator for zero-copy
+  auto& allocator = GetGlobalDRMAllocator();
+  auto buffer = allocator.Allocate(size);
+  if (buffer) {
+    return buffer;
+  }
+
+  // Fallback to heap buffer if DRM allocation fails
+  // (e.g., in development environments without DRM device)
   return std::make_shared<HeapBuffer>(size);
 }
 
