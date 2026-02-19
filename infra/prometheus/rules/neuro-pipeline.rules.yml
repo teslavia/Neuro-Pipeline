@@ -1,0 +1,56 @@
+groups:
+  - name: neuro-pipeline
+    rules:
+      - alert: EdgeDeviceDisconnected
+        expr: np_active_devices == 0
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: "No edge devices connected"
+          description: "No active edge devices for 30 seconds."
+
+      - alert: VLMQueueNearFull
+        expr: np_vlm_queue_depth > 24
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: "VLM queue depth high"
+          description: "VLM queue depth {{ $value }} exceeds 24 (max 32)."
+
+      - alert: VLMHighErrorRate
+        expr: rate(np_vlm_inferences_total{status="error"}[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "VLM inference error rate high"
+          description: "VLM error rate {{ $value }}/s over 5m window."
+
+      - alert: GRPCLatencyHigh
+        expr: histogram_quantile(0.99, rate(np_grpc_request_duration_seconds_bucket[5m])) > 1.0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "gRPC P99 latency exceeds 1s"
+          description: "P99 gRPC latency is {{ $value }}s."
+
+      - alert: DetectionRateDrop
+        expr: rate(np_detections_total[5m]) == 0
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "No detections received"
+          description: "Detection rate has been zero for 3 minutes."
+
+      - alert: HighValidationErrorRate
+        expr: rate(np_grpc_validation_errors_total[5m]) > 1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High gRPC validation error rate"
+          description: "Validation errors at {{ $value }}/s over 5m."
