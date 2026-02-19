@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Central server main entry point — wires all subsystems from config."""
+"""Central server main entry point — wires all subsystems via ServiceContainer."""
 import argparse
 import asyncio
 import logging
@@ -8,17 +8,12 @@ import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from src.communication.grpc_server import NeuroPipelineServer
-from src.pipeline.central_orchestrator import CentralOrchestrator, VLMTriggerRule
-from src.communication.device_session import DeviceSessionManager
 from src.config import AppConfig
-from src.observability.circuit_breaker import CircuitBreaker
-from src.observability.alerting import AlertManager, AlertRule, AlertSeverity, AlertRoute
-from src.observability.metrics import edge_device_status
-from src.storage.detection_store import DetectionStore
-from src.storage.cloud_storage import CloudStorageClient
 from src.core import __version__
+from src.core.container import ServiceContainer
 from src.core.hot_reload import get_config_watcher
+from src.observability.metrics import edge_device_status
+from src.pipeline.central_orchestrator import VLMTriggerRule
 
 
 def setup_logging(cfg) -> None:
@@ -74,73 +69,29 @@ async def main():
 
     cfg = AppConfig.from_yaml(args.config) if args.config else AppConfig()
     cfg.validate()
-    setup_logging(cfg)
 
-    host = args.host or cfg.central.host
-    port = args.port or cfg.central.port
-    model_path = Path(args.model_path or cfg.central.model_path)
+    # CLI overrides
+    if args.host:
+        cfg.central.host = args.host
+    if args.port:
+        cfg.central.port = args.port
+    if args.model_path:
+        cfg.central.model_path = str(args.model_path)
+
+    setup_logging(cfg)
 
     logger.info("=" * 60)
     logger.info(f"  Neuro-Pipeline Central Server v{__version__}")
     logger.info("=" * 60)
-    logger.info(f"Host: {host}:{port}  TLS: {cfg.tls.enabled}")
-    logger.info(f"Model: {model_path}  Mode: {cfg.central.inference_mode}")
+    logger.info(f"Host: {cfg.central.host}:{cfg.central.port}  TLS: {cfg.tls.enabled}")
+    logger.info(f"Model: {cfg.central.model_path}  Mode: {cfg.central.inference_mode}")
     logger.info(f"VLM rules: {len(cfg.vlm_rules)}  Batch: {cfg.batch.max_size}x{cfg.batch.timeout_seconds}s")
     logger.info(f"Sessions: max {cfg.sessions.max_devices} devices, expiry {cfg.sessions.expiry_timeout}s")
     logger.info(f"Storage: {cfg.storage.db_path}  Cloud: {cfg.cloud_storage.enabled}")
     logger.info(f"Tracing: {cfg.tracing.enabled}  Metrics: {cfg.metrics.enabled}")
 
-    # --- Subsystem init ---
-
-    # Detection store (SQLite)
-    db_path = Path(cfg.storage.db_path)
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    store = DetectionStore(db_path, retention_days=cfg.storage.retention_days)
-
-    # Device session manager
-    session_mgr = DeviceSessionManager(
-        max_devices=cfg.sessions.max_devices,
-        expiry_timeout=cfg.sessions.expiry_timeout,
-    )
-
-    # Circuit breaker
-    breaker = CircuitBreaker(
-        failure_threshold=cfg.circuit_breaker.failure_threshold,
-        recovery_timeout=cfg.circuit_breaker.recovery_timeout,
-        half_open_max=cfg.circuit_breaker.half_open_max,
-    )
-
-    # Alert manager (always create when enabled, even without webhook — log-only alerts still fire)
-    alert_mgr = None
-    if cfg.alerting.enabled:
-        alert_rules = [
-            AlertRule(name=r.name, cooldown_seconds=r.cooldown_seconds)
-            for r in cfg.alerting.rules
-        ]
-        alert_routes = []
-        if hasattr(cfg.alerting, 'routes'):
-            for route_cfg in getattr(cfg.alerting, 'routes', []):
-                sev = getattr(route_cfg, 'severity', 'critical')
-                url = getattr(route_cfg, 'webhook_url', '')
-                alert_routes.append(AlertRoute(
-                    severity=AlertSeverity(sev) if isinstance(sev, str) else sev,
-                    webhook_url=url,
-                ))
-        alert_mgr = AlertManager(
-            rules=alert_rules,
-            webhook_url=cfg.alerting.webhook_url,
-            routes=alert_routes if alert_routes else None,
-        )
-
-    # Cloud storage (lazy boto3)
-    cloud = None
-    if cfg.cloud_storage.enabled:
-        cloud = CloudStorageClient(
-            bucket=cfg.cloud_storage.bucket,
-            prefix=cfg.cloud_storage.prefix,
-            endpoint_url=cfg.cloud_storage.endpoint_url,
-            region=cfg.cloud_storage.region,
-        )
+    # --- Build services via container ---
+    container = ServiceContainer(cfg)
 
     # Distributed tracing (lazy OTel)
     if cfg.tracing.enabled:
@@ -156,156 +107,13 @@ async def main():
         except Exception as e:
             logger.warning(f"Metrics server failed: {e}")
 
-    # VLM trigger rules
-    vlm_rules = [
-        VLMTriggerRule(
-            class_name=r.class_name,
-            min_confidence=r.min_confidence,
-            prompt_template=r.prompt_template,
-        )
-        for r in cfg.vlm_rules
-    ]
-
-    # Orchestrator (core logic)
-    vlm_model_path = Path(cfg.central.vlm_model_path) if cfg.central.vlm_model_path else None
-
-    # v2: Behavior analyzer
-    behavior_analyzer = None
-    if True:  # always available, lightweight
-        from src.pipeline.behavior_analyzer import BehaviorAnalyzer
-        behavior_analyzer = BehaviorAnalyzer(detection_store=store)
-
-    # v2: Reasoning chain
-    reasoning_chain = None
-    if cfg.reasoning.enabled:
-        from src.inference.reasoning_chain import ReasoningChain
-        reasoning_chain = ReasoningChain(
-            max_steps=cfg.reasoning.max_steps,
-            timeout_per_step=cfg.reasoning.timeout_per_step,
-        )
-        logger.info(f"Reasoning chain: {cfg.reasoning.max_steps} steps, {cfg.reasoning.timeout_per_step}s/step")
-
-    # v2: RAG retriever
-    rag_retriever = None
-    if cfg.rag.enabled:
-        from src.inference.rag_retriever import RAGRetriever
-        rag_retriever = RAGRetriever(
-            detection_store=store,
-            max_items=cfg.rag.max_history_items,
-            time_window_hours=cfg.rag.time_window_hours,
-        )
-        logger.info(f"RAG retriever: {cfg.rag.max_history_items} items, {cfg.rag.time_window_hours}h window")
-
-    # v2: Anomaly baseline
-    anomaly_baseline = None
-    if cfg.anomaly.enabled:
-        from src.pipeline.anomaly_baseline import AnomalyBaseline
-        anomaly_baseline = AnomalyBaseline(
-            detection_store=store,
-            baseline_window_hours=cfg.anomaly.baseline_window_hours,
-            z_score_threshold=cfg.anomaly.z_score_threshold,
-            min_samples=cfg.anomaly.min_samples,
-        )
-        logger.info(f"Anomaly baseline: z>{cfg.anomaly.z_score_threshold}, window={cfg.anomaly.baseline_window_hours}h")
-
-    # v2: ReID engine (cross-camera re-identification)
-    reid_engine = None
-    if cfg.reid.enabled:
-        from src.analytics.reid_engine import ReIDEngine
-        reid_engine = ReIDEngine(
-            similarity_threshold=cfg.reid.similarity_threshold,
-            time_window_seconds=cfg.reid.time_window_seconds,
-        )
-        logger.info(f"ReID engine: threshold={cfg.reid.similarity_threshold}, window={cfg.reid.time_window_seconds}s")
-
-    # v2: Time series engine
-    timeseries_engine = None
-    if cfg.timeseries.enabled:
-        from src.analytics.timeseries_engine import TimeSeriesEngine
-        timeseries_engine = TimeSeriesEngine(detection_store=store)
-        logger.info(f"Time series engine: interval={cfg.timeseries.aggregation_interval}s")
-
-    # v2: Auto annotator
-    auto_annotator = None
-    if cfg.auto_annotator.enabled:
-        from src.analytics.auto_annotator import AutoAnnotator
-        auto_annotator = AutoAnnotator(
-            detection_store=store,
-            min_confidence=cfg.auto_annotator.min_confidence,
-        )
-        logger.info(f"Auto annotator: min_confidence={cfg.auto_annotator.min_confidence}")
-
-    # v2: Report generator
-    report_generator = None
-    if cfg.reporting.enabled:
-        from src.analytics.report_generator import ReportGenerator
-        report_generator = ReportGenerator(
-            detection_store=store,
-            cloud_storage=cloud,
-        )
-        logger.info(f"Report generator: schedule={cfg.reporting.schedule_hours}h")
-
-    orchestrator = CentralOrchestrator(
-        model_path,
-        vlm_rules=vlm_rules,
-        detection_store=store,
-        inference_mode=cfg.central.inference_mode,
-        vlm_model_path=vlm_model_path,
-        circuit_breaker=breaker,
-        alert_manager=alert_mgr,
-        cloud_storage=cloud,
-        batch_config=cfg.batch,
-        behavior_analyzer=behavior_analyzer,
-        reasoning_chain=reasoning_chain,
-        rag_retriever=rag_retriever,
-        anomaly_baseline=anomaly_baseline,
-    )
+    orchestrator = container.get("orchestrator")
     await orchestrator.initialize()
 
-    # Rate limiter
-    rate_limiter = None
-    if cfg.rate_limiting.enabled:
-        from src.communication.rate_limiter import TokenBucketRateLimiter
-        rate_limiter = TokenBucketRateLimiter(
-            max_per_sec=cfg.rate_limiting.max_rps,
-            burst=cfg.rate_limiting.burst,
-        )
-        logger.info(f"Rate limiting: {cfg.rate_limiting.max_rps} rps, burst {cfg.rate_limiting.burst}")
-
-    # Model registry (v2)
-    model_registry = None
-    if cfg.model_management.enabled:
-        from src.model_management.model_registry import ModelRegistry
-        model_registry = ModelRegistry(
-            max_models_per_device=cfg.model_management.max_models_per_device,
-        )
-        logger.info(f"Model management: max {cfg.model_management.max_models_per_device} models/device")
-
-    # A/B test manager (v2)
-    ab_test_manager = None
-    if cfg.ab_test.enabled:
-        from src.model_management.ab_test_manager import ABTestManager
-        ab_test_manager = ABTestManager(
-            traffic_split=cfg.ab_test.traffic_split,
-            min_samples=cfg.ab_test.min_samples,
-            metric=cfg.ab_test.metric,
-        )
-        logger.info(f"A/B testing: split={cfg.ab_test.traffic_split}, metric={cfg.ab_test.metric}")
-
-    # gRPC server (with mTLS + session manager + rate limiter + model registry)
-    server = NeuroPipelineServer(
-        host, port, orchestrator,
-        max_message_size_mb=cfg.central.max_message_size_mb,
-        tls_config=cfg.tls if cfg.tls.enabled else None,
-        session_manager=session_mgr,
-        rate_limiter=rate_limiter,
-        model_registry=model_registry,
-        detection_store=store,
-        ab_test_manager=ab_test_manager,
-    )
+    server = container.get("grpc_server")
     await server.start()
 
-    # Session cleanup background task
+    session_mgr = container.get("session_manager")
     cleanup_task = asyncio.create_task(
         _session_cleanup_loop(session_mgr, cfg.sessions.expiry_timeout)
     )
@@ -318,12 +126,10 @@ async def main():
             try:
                 new_cfg = AppConfig.from_yaml(Path(config_path))
                 new_cfg.validate()
-                # Logging level
                 new_level = getattr(logging, new_cfg.logging.level.upper(), None)
                 if new_level and new_level != logging.getLogger().level:
                     logging.getLogger().setLevel(new_level)
                     logger.info(f"Log level changed to {new_cfg.logging.level}")
-                # VLM rules
                 new_vlm_rules = [
                     VLMTriggerRule(
                         class_name=r.class_name,
@@ -333,13 +139,13 @@ async def main():
                     for r in new_cfg.vlm_rules
                 ]
                 orchestrator.vlm_rules = new_vlm_rules
-                # Rate limiter
+                rate_limiter = container.get("rate_limiter")
                 if rate_limiter and new_cfg.rate_limiting.enabled:
                     rate_limiter.update_limits(
                         new_cfg.rate_limiting.max_rps,
                         new_cfg.rate_limiting.burst,
                     )
-                # Alert manager
+                alert_mgr = container.get("alert_manager")
                 if alert_mgr and new_cfg.alerting.enabled:
                     from src.observability.alerting import AlertRule as _AR, AlertSeverity as _AS, AlertRoute as _ARt
                     new_rules = [_AR(name=r.name, cooldown_seconds=r.cooldown_seconds) for r in new_cfg.alerting.rules]
@@ -354,25 +160,25 @@ async def main():
         await config_watcher.start()
         logger.info(f"Config watcher started for {config_path}")
 
-    # Embedded dashboard (same process, shares subsystem instances)
+    # Embedded dashboard
     dashboard_server = None
     if args.dashboard:
         from dashboard.app import app as dashboard_app, inject_from_central
         inject_from_central(
-            detection_store=store,
+            detection_store=container.get("store"),
             session_manager=session_mgr,
             orchestrator=orchestrator,
             health_checker=None,
-            ab_test_manager=ab_test_manager,
-            model_registry=model_registry,
-            reid_engine=reid_engine,
-            timeseries_engine=timeseries_engine,
-            auto_annotator=auto_annotator,
-            report_generator=report_generator,
-            behavior_analyzer=behavior_analyzer,
-            anomaly_baseline=anomaly_baseline,
-            reasoning_chain=reasoning_chain,
-            rag_retriever=rag_retriever,
+            ab_test_manager=container.get("ab_test_manager"),
+            model_registry=container.get("model_registry"),
+            reid_engine=container.get("reid_engine"),
+            timeseries_engine=container.get("timeseries_engine"),
+            auto_annotator=container.get("auto_annotator"),
+            report_generator=container.get("report_generator"),
+            behavior_analyzer=container.get("behavior_analyzer"),
+            anomaly_baseline=container.get("anomaly_baseline"),
+            reasoning_chain=container.get("reasoning_chain"),
+            rag_retriever=container.get("rag_retriever"),
         )
         import uvicorn
         dashboard_config = uvicorn.Config(
@@ -406,7 +212,10 @@ async def main():
     if dashboard_server:
         dashboard_server.should_exit = True
     try:
-        await asyncio.wait_for(_shutdown_sequence(server, orchestrator, store), timeout=60)
+        await asyncio.wait_for(
+            _shutdown_sequence(server, orchestrator, container.get("store")),
+            timeout=60,
+        )
     except asyncio.TimeoutError:
         logger.error("Global shutdown timeout (60s), forcing exit")
     logger.info("Shutdown complete")
