@@ -8,11 +8,9 @@ from typing import AsyncIterator
 
 import grpc
 
-try:
-    import structlog
-    logger = structlog.get_logger(__name__)
-except ImportError:
-    logger = logging.getLogger(__name__)
+from src.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 from src.generated import neuro_pipeline_pb2, neuro_pipeline_pb2_grpc
 from src.observability.metrics import grpc_requests_total, grpc_latency, edge_connections, control_commands_total, grpc_validation_errors
@@ -30,6 +28,10 @@ class NeuroPipelineServicer(neuro_pipeline_pb2_grpc.NeuroPipelineServiceServicer
         self._model_registry = model_registry
         self._detection_store = detection_store
         self._ab_test_manager = ab_test_manager
+        self._model_action_handler = None
+        if model_registry:
+            from src.communication.model_actions import ModelActionHandler
+            self._model_action_handler = ModelActionHandler(model_registry, neuro_pipeline_pb2)
         logger.info("NeuroPipelineServicer initialized")
 
     @staticmethod
@@ -228,77 +230,13 @@ class NeuroPipelineServicer(neuro_pipeline_pb2_grpc.NeuroPipelineServiceServicer
     async def ManageModel(self, request, context: grpc.aio.ServicerContext):
         """v2: Model lifecycle management."""
         grpc_requests_total.labels(method="ManageModel", status="ok").inc()
-        action = request.action
-        model = request.model
 
-        if not self._model_registry:
+        if not self._model_action_handler:
             return neuro_pipeline_pb2.ModelManagementResponse(
                 success=False, message="Model management not enabled"
             )
 
-        # DEPLOY
-        if action == neuro_pipeline_pb2.ModelManagementRequest.DEPLOY:
-            ok = self._model_registry.deploy(
-                model_id=model.model_id,
-                model_path=model.model_path,
-                model_type=model.model_type,
-                version=model.version,
-                target_device_id=request.target_device_id,
-                npu_core=request.npu_core,
-                metadata=dict(model.metadata),
-            )
-            return neuro_pipeline_pb2.ModelManagementResponse(
-                success=ok, message="Deployed" if ok else "Deploy failed"
-            )
-
-        # UNDEPLOY
-        if action == neuro_pipeline_pb2.ModelManagementRequest.UNDEPLOY:
-            ok = self._model_registry.undeploy(model.model_id)
-            return neuro_pipeline_pb2.ModelManagementResponse(
-                success=ok, message="Undeployed" if ok else "Undeploy failed"
-            )
-
-        # LIST
-        if action == neuro_pipeline_pb2.ModelManagementRequest.LIST:
-            records = self._model_registry.list_models(device_id=request.target_device_id)
-            model_infos = [
-                neuro_pipeline_pb2.ModelInfo(
-                    model_id=r.model_id, model_path=r.model_path,
-                    model_type=r.model_type, version=r.version,
-                    metadata=r.metadata,
-                )
-                for r in records
-            ]
-            return neuro_pipeline_pb2.ModelManagementResponse(
-                success=True, message=f"{len(model_infos)} models", models=model_infos
-            )
-
-        # ROLLBACK
-        if action == neuro_pipeline_pb2.ModelManagementRequest.ROLLBACK:
-            ok = self._model_registry.rollback(model.model_id)
-            return neuro_pipeline_pb2.ModelManagementResponse(
-                success=ok, message="Rolled back" if ok else "Rollback failed"
-            )
-
-        # STATUS
-        if action == neuro_pipeline_pb2.ModelManagementRequest.STATUS:
-            record = self._model_registry.get_model(model.model_id)
-            if not record:
-                return neuro_pipeline_pb2.ModelManagementResponse(
-                    success=False, message="Model not found"
-                )
-            info = neuro_pipeline_pb2.ModelInfo(
-                model_id=record.model_id, model_path=record.model_path,
-                model_type=record.model_type, version=record.version,
-                metadata={**record.metadata, "status": record.status.value},
-            )
-            return neuro_pipeline_pb2.ModelManagementResponse(
-                success=True, message=record.status.value, models=[info]
-            )
-
-        return neuro_pipeline_pb2.ModelManagementResponse(
-            success=False, message=f"Unknown action: {action}"
-        )
+        return await self._model_action_handler.handle(request)
 
     async def QueryTimeSeries(self, request, context: grpc.aio.ServicerContext):
         """v2: Query time-series metrics."""
