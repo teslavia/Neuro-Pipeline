@@ -1,7 +1,7 @@
 # Neuro-Pipeline 部署指南 (Deployment Guide)
 
-**版本**: v1.3.0
-**更新日期**: 2026-02-16
+**版本**: v2.3.0
+**更新日期**: 2026-02-19
 
 ---
 
@@ -753,40 +753,159 @@ rate_limiting:
 
 ---
 
-## 十四、Grafana 监控栈部署 (v1.1.0+)
+## 14.5 多设备部署 (v2.2.0+)
+
+### 多设备架构
+
+```
+                    ┌─────────────────────┐
+                    │   Mac Mini Central  │
+                    │   (gRPC Server)     │
+                    │   :50051            │
+                    └──────────┬──────────┘
+                               │
+        ┌──────────────────────┼──────────────────────┐
+        │                      │                      │
+        ▼                      ▼                      ▼
+┌───────────────┐      ┌───────────────┐      ┌───────────────┐
+│   Edge-001    │      │   Edge-002    │      │   Edge-003    │
+│   RK3588      │      │   RK3588      │      │   RK3588      │
+│   192.168.1.70│      │   192.168.1.71│      │   192.168.1.72│
+└───────────────┘      └───────────────┘      └───────────────┘
+```
+
+### 设备配置模板
+
+为每个边缘设备创建配置文件：
+
+**config-edge-001.yaml:**
+```yaml
+edge:
+  device_id: "edge-001"
+  video_source: "/dev/video0"
+  width: 1920
+  height: 1080
+  fps: 30
+
+central:
+  server_address: "192.168.1.100:50051"
+  tls:
+    enabled: true
+    cert_path: "/opt/neuro-pipeline/certs/client-001.crt"
+    key_path: "/opt/neuro-pipeline/certs/client-001.key"
+```
+
+### 负载均衡策略
+
+中心服务器按 `device_id` 分片处理：
+
+```python
+# 在 central_orchestrator.py 中
+async def handle_detection(self, device_id: str, detection):
+    # 按 device_id 分片到不同队列
+    queue = self._get_device_queue(device_id)
+    await queue.put(detection)
+```
+
+### 集中监控配置
+
+**Prometheus 抓取配置:**
+```yaml
+# prometheus.yml
+scrape_configs:
+  - job_name: 'neuro-central'
+    static_configs:
+      - targets: ['192.168.1.100:9090']
+
+  - job_name: 'neuro-edge'
+    static_configs:
+      - targets:
+          - '192.168.1.70:9091'
+          - '192.168.1.71:9091'
+          - '192.168.1.72:9091'
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: device_id
+        regex: '([^:]+):.*'
+        replacement: '${1}'
+```
+
+### 设备注册
+
+边缘设备启动时自动注册：
+
+```bash
+./neuro_pipeline_edge \
+  --device-id edge-001 \
+  --server 192.168.1.100:50051 \
+  --register
+```
+
+中心服务器维护设备注册表：
+
+```python
+# 在 grpc_server.py 中
+async def RegisterDevice(self, request, context):
+    device_id = request.device_id
+    self._device_registry[device_id] = {
+        "last_seen": time.time(),
+        "metadata": request.metadata,
+    }
+    return RegisterDeviceResponse(success=True)
+```
+
+---
+
+## 十四、Grafana 监控栈部署 (v2.3.0+)
 
 ### 14.1 启动 Prometheus + Grafana
 
 ```bash
-cd extensions/monitoring
-docker-compose up -d
+# 推荐方式 (justfile)
+just monitoring-up
+
+# 或手动
+cd infra
+docker compose -f docker-compose.monitoring.yml up -d
 ```
 
 **服务**:
-- Prometheus: http://localhost:9090
+- Prometheus: http://localhost:9091
 - Grafana: http://localhost:3000 (admin/admin)
 
 ### 14.2 配置数据源
 
 Grafana 自动配置 Prometheus 数据源（通过 provisioning）。
 
-### 14.3 导入仪表盘
+### 14.3 仪表盘
 
-仪表盘已自动加载：`extensions/monitoring/grafana/dashboards/neuro-pipeline.json`
+两个仪表盘已自动加载：
 
-**8 个面板**:
-1. Detections Total (Counter)
-2. VLM Inference Latency (Histogram)
-3. NPU Utilization (Gauge)
-4. VLM Queue Depth (Gauge)
-5. gRPC Requests Total (Counter)
-6. Circuit Breaker State (Gauge)
-7. Active Devices (Gauge)
-8. Error Rate (Counter)
+**运维仪表盘** (`infra/grafana/dashboards/neuro-pipeline.json`):
+1. Detection Rate / Edge Connections / VLM Queue / Circuit Breaker
+2. Events Stored / gRPC Requests / Error Rate / NPU Utilization
+
+**SLO 仪表盘** (`infra/grafana/dashboards/slo-dashboard.json`, v2.3.0+):
+1. Availability (7d) — 目标 99.5%
+2. Detection P99 Latency — 目标 <50ms
+3. VLM P99 Latency — 目标 <5s
+4. Error Budget Remaining (30d)
+5. Edge FPS per Device vs 25 FPS 目标线
+6. gRPC Latency SLI (P50/P95/P99 vs 500ms)
+7. Active Alerts
+8. SLO Summary Table
 
 ### 14.4 告警规则
 
-编辑 `extensions/monitoring/prometheus/alerts.yml` 添加自定义告警。
+告警规则位于 `infra/prometheus/rules/neuro-pipeline.rules.yml`：
+- `EdgeDeviceDisconnected` — 无设备连接 30s (warning)
+- `VLMQueueNearFull` — VLM 队列深度 >24 (warning)
+- `VLMHighErrorRate` — VLM 错误率 >0.1/s (critical)
+- `GRPCLatencyHigh` — P99 延迟 >1s (warning)
+- `DetectionRateDrop` — 检测率为零 3m (warning)
+- `HighValidationErrorRate` — 验证错误率 >1/s (critical)
+
+Grafana 告警通知配置: `infra/grafana/provisioning/alerting.yml`
 
 ---
 

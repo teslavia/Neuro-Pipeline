@@ -26,6 +26,14 @@ class TokenBucketRateLimiter:
                 self._buckets[key] = _Bucket(self.burst, self.max_per_sec)
             return self._buckets[key].consume()
 
+    def update_limits(self, max_per_sec: float, burst: int) -> None:
+        """Update rate limits. New limits apply to new buckets; existing buckets
+        are cleared so they pick up the new values on next request."""
+        with self._lock:
+            self.max_per_sec = max_per_sec
+            self.burst = burst
+            self._buckets.clear()
+
 
 class _Bucket:
     """Single token bucket."""

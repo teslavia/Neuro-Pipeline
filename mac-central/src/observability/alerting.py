@@ -52,6 +52,12 @@ class AlertManager:
         """Get webhook URL for severity, falling back to default."""
         return self._routes.get(severity, self.webhook_url)
 
+    def update_rules(self, rules: List[AlertRule], routes: Optional[List[AlertRoute]] = None) -> None:
+        """Hot-reload alert rules and routes."""
+        self.rules = {r.name: r for r in rules}
+        if routes is not None:
+            self._routes = {route.severity: route.webhook_url for route in routes}
+
     async def check_and_fire(self, event_type: str, context: dict) -> bool:
         """Check rule + cooldown, fire if appropriate. Returns True if fired."""
         if not self.enabled:

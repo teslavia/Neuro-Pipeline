@@ -74,3 +74,22 @@ class TestMLXInferenceEngine:
             assert engine.tokenizer is None
             assert engine.vlm_model is None
             assert engine._loaded is False
+
+    @pytest.mark.asyncio
+    async def test_switch_vlm_model_nonexistent(self, temp_model_dir):
+        """switch_vlm_model returns False for nonexistent path."""
+        with patch.dict("sys.modules", {"mlx": None, "mlx.core": None, "mlx_lm": None}):
+            engine = MLXInferenceEngine(temp_model_dir, mode="vlm")
+            await engine.load_model()
+            result = await engine.switch_vlm_model("/nonexistent/model")
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_switch_vlm_model_no_mlx_vlm(self, temp_model_dir):
+        """switch_vlm_model returns False when mlx_vlm not installed."""
+        with patch.dict("sys.modules", {"mlx": None, "mlx.core": None, "mlx_lm": None, "mlx_vlm": None}):
+            engine = MLXInferenceEngine(temp_model_dir, mode="vlm")
+            await engine.load_model()
+            # Use temp_model_dir as a valid path
+            result = await engine.switch_vlm_model(str(temp_model_dir))
+            assert result is False

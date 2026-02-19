@@ -1,8 +1,8 @@
 {
-  "version": "2.2.2",
+  "version": "2.3.0",
   "name": "neuro-pipeline",
   "description": "Edge-Central AI inference pipeline for RK3588 + Mac Mini",
-  "milestone": "v2.2.2 - C++ Header Refactoring (neuro:: namespace)",
+  "milestone": "v2.3.0 - Production Hardening",
   "components": {
     "rk3588-edge": "10.0.0",
     "mac-central": "10.0.0"

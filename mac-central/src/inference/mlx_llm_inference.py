@@ -230,6 +230,32 @@ class MLXInferenceEngine:
         self._conversations.clear()
         logger.info("Models unloaded")
 
+    async def switch_vlm_model(self, model_path: str) -> bool:
+        """Hot-swap the VLM model at runtime. Returns True on success."""
+        new_path = Path(model_path)
+        if not new_path.exists():
+            logger.error("VLM switch failed: path not found: %s", model_path)
+            return False
+
+        try:
+            from mlx_vlm import load as vlm_load
+            logger.info("Switching VLM model to %s...", model_path)
+            new_model, new_processor = vlm_load(str(new_path))
+            # Swap atomically
+            old_model = self.vlm_model
+            self.vlm_model = new_model
+            self.vlm_processor = new_processor
+            self.vlm_model_path = new_path
+            del old_model  # free old model memory
+            logger.info("VLM model switched to %s", model_path)
+            return True
+        except ImportError:
+            logger.warning("mlx_vlm not installed, cannot switch VLM model")
+            return False
+        except (OSError, RuntimeError, ValueError) as e:
+            logger.error("VLM switch failed: %s", e)
+            return False
+
     def get_conversation(self, device_id: str, max_turns: int = 10) -> ConversationContext:
         """Get or create a conversation context for a device."""
         if device_id not in self._conversations:

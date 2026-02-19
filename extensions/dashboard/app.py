@@ -19,9 +19,9 @@ Usage:
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
 
 from .routers import (
@@ -31,6 +31,7 @@ from .routers import (
     config_router,
     intelligence_router,
     tracking_router,
+    logging_router,
 )
 from .services import inject_from_central
 
@@ -76,6 +77,22 @@ app.include_router(models_router)
 app.include_router(config_router)
 app.include_router(intelligence_router)
 app.include_router(tracking_router)
+app.include_router(logging_router)
+
+
+# ── Root Page ──────────────────────────────────────
+
+@app.get("/", response_class=HTMLResponse)
+async def index(request: Request):
+    """Render main dashboard page at root URL."""
+    from .routers.legacy import _demo_status
+    from .services import events
+
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "status": _demo_status(),
+        "events": events[-20:],
+    })
 
 
 # ── Health Probes ──────────────────────────────────────

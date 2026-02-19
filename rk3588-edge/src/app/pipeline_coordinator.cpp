@@ -37,6 +37,8 @@ class PipelineCoordinator::Impl {
     if (config_.enable_grpc) {
       neuro::comm::GRPCClient::Config grpc_cfg;
       grpc_cfg.server_address = config_.grpc_server;
+      grpc_cfg.cache_queue.max_entries = config_.cache_queue_max_entries;
+      grpc_cfg.cache_queue.max_memory_bytes = config_.cache_queue_max_memory_bytes;
       grpc_client_ = std::make_unique<neuro::comm::GRPCClient>(grpc_cfg);
     }
   }

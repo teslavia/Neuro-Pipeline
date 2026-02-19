@@ -17,6 +17,14 @@ class VLMRuleConfig:
 
 
 @dataclass
+class VLMModelConfig:
+    """Configuration for a single VLM model variant."""
+    model_id: str = ""
+    model_path: str = ""
+    is_default: bool = False
+
+
+@dataclass
 class CentralConfig:
     host: str = "0.0.0.0"
     port: int = 50051
@@ -24,6 +32,7 @@ class CentralConfig:
     max_message_size_mb: int = 16
     vlm_model_path: str = ""
     inference_mode: str = "llm"  # "llm" or "vlm"
+    vlm_models: List["VLMModelConfig"] = field(default_factory=list)
 
 
 @dataclass
@@ -248,6 +257,14 @@ class AppConfig:
             max_message_size_mb=int(c.get("max_message_size_mb", cfg.central.max_message_size_mb)),
             vlm_model_path=c.get("vlm_model_path", cfg.central.vlm_model_path),
             inference_mode=c.get("inference_mode", cfg.central.inference_mode),
+            vlm_models=[
+                VLMModelConfig(
+                    model_id=m.get("model_id", ""),
+                    model_path=m.get("model_path", ""),
+                    is_default=bool(m.get("is_default", False)),
+                )
+                for m in c.get("vlm_models", [])
+            ],
         )
         lg = data.get("logging", {})
         cfg.logging = LoggingConfig(

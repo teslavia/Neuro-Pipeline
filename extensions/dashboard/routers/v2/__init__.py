@@ -5,6 +5,7 @@ from .models import router as models_router
 from .config import router as config_router
 from .intelligence import router as intelligence_router
 from .tracking import router as tracking_router
+from .logging import router as logging_router
 
 __all__ = [
     "status_router",
@@ -12,4 +13,5 @@ __all__ = [
     "config_router",
     "intelligence_router",
     "tracking_router",
+    "logging_router",
 ]

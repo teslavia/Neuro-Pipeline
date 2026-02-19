@@ -66,6 +66,12 @@ async def api_v2_config_update(body: dict, _=Depends(verify_credentials)):
     try:
         with open(path, "w") as f:
             yaml.dump(new_config, f, default_flow_style=False, allow_unicode=True)
+        # Trigger hot-reload if watcher is active
+        try:
+            from src.core.hot_reload import get_config_watcher
+            get_config_watcher().force_reload(str(path))
+        except Exception:
+            pass  # Watcher may not be initialized in standalone mode
         return {"success": True, "message": "Config updated", "backupPath": str(backup_path)}
     except Exception as e:
         return {"success": False, "message": str(e)}

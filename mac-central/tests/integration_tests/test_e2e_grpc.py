@@ -50,7 +50,7 @@ async def test_e2e_health_check(grpc_server_and_channel):
         neuro_pipeline_pb2.HealthCheckRequest(client_id="test")
     )
     assert response.status == neuro_pipeline_pb2.HealthCheckResponse.SERVING
-    assert response.version == "2.2.2"
+    assert response.version == "2.3.0"
 
 
 @pytest.mark.asyncio

@@ -1,0 +1,127 @@
+{
+  "annotations": {"list": []},
+  "description": "Neuro-Pipeline SLO Dashboard — Service Level Objectives monitoring",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+      "id": 1,
+      "panels": [],
+      "title": "SLO Overview",
+      "type": "row"
+    },
+    {
+      "title": "Availability (7d)",
+      "description": "Target: 99.5%",
+      "type": "stat",
+      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 1},
+      "id": 2,
+      "targets": [{"expr": "avg_over_time(up{job=\"neuro-pipeline-central\"}[7d]) * 100", "legendFormat": "Availability %"}],
+      "fieldConfig": {"defaults": {"unit": "percent", "decimals": 2, "min": 0, "max": 100, "color": {"mode": "thresholds"}, "thresholds": {"steps": [{"color": "red", "value": 0}, {"color": "yellow", "value": 99}, {"color": "green", "value": 99.5}]}}},
+      "options": {"colorMode": "background", "graphMode": "none", "textMode": "value_and_name"}
+    },
+    {
+      "title": "Detection P99 Latency",
+      "description": "Target: <50ms",
+      "type": "gauge",
+      "gridPos": {"h": 6, "w": 6, "x": 6, "y": 1},
+      "id": 3,
+      "targets": [{"expr": "histogram_quantile(0.99, rate(np_grpc_request_duration_seconds_bucket[5m])) * 1000", "legendFormat": "P99 ms"}],
+      "fieldConfig": {"defaults": {"unit": "ms", "min": 0, "max": 200, "color": {"mode": "thresholds"}, "thresholds": {"steps": [{"color": "green", "value": 0}, {"color": "yellow", "value": 30}, {"color": "red", "value": 50}]}}},
+      "options": {"showThresholdLabels": true, "showThresholdMarkers": true}
+    },
+    {
+      "title": "VLM P99 Latency",
+      "description": "Target: <5s",
+      "type": "gauge",
+      "gridPos": {"h": 6, "w": 6, "x": 12, "y": 1},
+      "id": 4,
+      "targets": [{"expr": "histogram_quantile(0.99, rate(np_vlm_inference_duration_seconds_bucket[5m]))", "legendFormat": "P99 s"}],
+      "fieldConfig": {"defaults": {"unit": "s", "min": 0, "max": 10, "color": {"mode": "thresholds"}, "thresholds": {"steps": [{"color": "green", "value": 0}, {"color": "yellow", "value": 3}, {"color": "red", "value": 5}]}}},
+      "options": {"showThresholdLabels": true, "showThresholdMarkers": true}
+    },
+    {
+      "title": "Error Budget Remaining",
+      "description": "Based on 99.5% availability target over 30d",
+      "type": "gauge",
+      "gridPos": {"h": 6, "w": 6, "x": 18, "y": 1},
+      "id": 5,
+      "targets": [{"expr": "100 - ((1 - avg_over_time(up{job=\"neuro-pipeline-central\"}[30d])) / 0.005 * 100)", "legendFormat": "Budget %"}],
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100, "color": {"mode": "thresholds"}, "thresholds": {"steps": [{"color": "red", "value": 0}, {"color": "yellow", "value": 25}, {"color": "green", "value": 50}]}}},
+      "options": {"showThresholdLabels": true, "showThresholdMarkers": true}
+    },
+    {
+      "collapsed": false,
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 7},
+      "id": 10,
+      "panels": [],
+      "title": "SLI Trends",
+      "type": "row"
+    },
+    {
+      "title": "Edge FPS per Device",
+      "description": "Target: 25 FPS",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "id": 6,
+      "targets": [
+        {"expr": "rate(np_detections_total[1m])", "legendFormat": "{{device_id}}"},
+        {"expr": "25", "legendFormat": "Target (25 FPS)"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "ops", "custom": {"lineWidth": 2, "fillOpacity": 10}}},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}}
+    },
+    {
+      "title": "gRPC Latency SLI",
+      "description": "P50/P95/P99 vs 500ms target",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "id": 7,
+      "targets": [
+        {"expr": "histogram_quantile(0.50, rate(np_grpc_request_duration_seconds_bucket[5m])) * 1000", "legendFormat": "P50"},
+        {"expr": "histogram_quantile(0.95, rate(np_grpc_request_duration_seconds_bucket[5m])) * 1000", "legendFormat": "P95"},
+        {"expr": "histogram_quantile(0.99, rate(np_grpc_request_duration_seconds_bucket[5m])) * 1000", "legendFormat": "P99"},
+        {"expr": "500", "legendFormat": "Target (500ms)"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "ms", "custom": {"lineWidth": 2, "fillOpacity": 5}}},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}}
+    },
+    {
+      "title": "Active Alerts",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 16},
+      "id": 8,
+      "targets": [{"expr": "ALERTS{alertstate=\"firing\"}", "legendFormat": "Firing"}],
+      "fieldConfig": {"defaults": {"color": {"mode": "thresholds"}, "thresholds": {"steps": [{"color": "green", "value": 0}, {"color": "red", "value": 1}]}}},
+      "options": {"colorMode": "background", "graphMode": "none"}
+    },
+    {
+      "title": "SLO Summary",
+      "type": "table",
+      "gridPos": {"h": 8, "w": 18, "x": 6, "y": 16},
+      "id": 9,
+      "targets": [
+        {"expr": "avg_over_time(up{job=\"neuro-pipeline-central\"}[7d]) * 100", "legendFormat": "Availability", "refId": "A", "instant": true},
+        {"expr": "histogram_quantile(0.99, rate(np_grpc_request_duration_seconds_bucket[5m])) * 1000", "legendFormat": "Detection P99 (ms)", "refId": "B", "instant": true},
+        {"expr": "histogram_quantile(0.99, rate(np_vlm_inference_duration_seconds_bucket[5m]))", "legendFormat": "VLM P99 (s)", "refId": "C", "instant": true},
+        {"expr": "sum(rate(np_detections_total[1m]))", "legendFormat": "Detection Rate (fps)", "refId": "D", "instant": true}
+      ],
+      "fieldConfig": {"defaults": {}},
+      "options": {"showHeader": true}
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["neuro-pipeline", "slo"],
+  "templating": {"list": []},
+  "time": {"from": "now-7d", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Neuro-Pipeline SLO Dashboard",
+  "uid": "neuro-pipeline-slo",
+  "version": 1
+}

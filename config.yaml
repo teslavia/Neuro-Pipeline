@@ -20,6 +20,9 @@ edge:
   class_names_file: ""
   frame_skip_interval: 0  # 0 = send every frame, N = send every Nth frame
   grpc_compression: true  # Enable gzip compression for gRPC
+  cache_queue:
+    max_entries: 1000       # ~33s @30fps
+    max_memory_mb: 64       # 64MB max buffer
   recording:
     enabled: false
     pre_seconds: 10
@@ -54,6 +57,14 @@ central:
   # VLM model path - run `python mac-central/scripts/download_vlm_model.py` to download
   vlm_model_path: "models/Qwen2-VL-2B-Instruct-4bit-mlx"
   inference_mode: "vlm"  # "llm" or "vlm"
+  # Multiple VLM models for runtime switching
+  vlm_models:
+    - model_id: "qwen2-vl-2b"
+      model_path: "models/Qwen2-VL-2B-Instruct-4bit-mlx"
+      is_default: true
+    # - model_id: "qwen2-vl-7b"
+    #   model_path: "models/Qwen2-VL-7B-Instruct-4bit-mlx"
+    #   is_default: false
 
 tls:
   enabled: false

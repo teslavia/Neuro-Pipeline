@@ -31,6 +31,19 @@ The sysroot (`tools/cross_compile_env/sysroot/`) is a build artifact assembled b
 
 ## Build & Test Commands
 
+### Justfile (recommended)
+```bash
+just --list          # Show all commands
+just test-py         # All Python tests
+just test-py-unit    # Unit tests only
+just test-dashboard  # Dashboard tests
+just test-cpp        # C++ tests (requires build)
+just build-edge      # Build C++ edge (mock HAL)
+just test-all        # Python + dashboard + C++
+just proto           # Regenerate protobuf
+just monitoring-up   # Start Prometheus + Grafana
+```
+
 ### Protobuf Generation (required after proto changes)
 ```bash
 python3 tools/generate_proto.py
@@ -87,6 +100,8 @@ Layers: HAL (`src/hal/`) → Data Processing (`src/data_processing/`) → AI Inf
 
 All HAL modules have real + mock implementations, toggled by `USE_MOCK_HAL` at compile time.
 
+v2.3: `DetectionQueue` (`src/communication/detection_queue.cpp`) buffers detections during gRPC disconnects; auto-drains on reconnect.
+
 ### Central Server (Python, async)
 ```
 gRPC Server → Orchestrator → [SQLite Store, VLM Queue, Alert Manager, Metrics]
@@ -98,12 +113,23 @@ Entry point: `mac-central/src/main.py`. Config: `config.yaml` (root).
 Key subsystems:
 - `src/communication/grpc_server.py` — gRPC server with rate limiting and input validation
 - `src/application_logic/central_orchestrator.py` — core detection processing, VLM queue, event dispatch
-- `src/llm_vlm/mlx_llm_inference.py` — dual-mode MLX engine (LLM text / VLM multimodal)
+- `src/llm_vlm/mlx_llm_inference.py` — dual-mode MLX engine (LLM text / VLM multimodal), runtime model switching
 - `src/storage/detection_store.py` — SQLite persistence with retry and backup
 - `src/observability/` — Prometheus metrics, circuit breaker, alerting with severity routing, OTel tracing
+- `src/core/hot_reload.py` — Config file watcher with debounced change detection (v2.3)
+- `src/model_management/vlm_validator.py` — VLM model validation pipeline with benchmarks (v2.3)
 
 ### Dashboard
 `extensions/dashboard/app.py` — FastAPI + htmx + WebSocket. HTTP Basic Auth (env vars `DASHBOARD_USER`/`DASHBOARD_PASS`).
+
+v2.3 endpoints:
+- `GET/PUT /api/v2/logging/level` — dynamic log level
+- `PUT /api/v2/config` — triggers hot-reload via `ConfigWatcher.force_reload()`
+
+### Monitoring (v2.3)
+- Prometheus alert rules: `infra/prometheus/rules/neuro-pipeline.rules.yml`
+- SLO dashboard: `infra/grafana/dashboards/slo-dashboard.json`
+- Grafana alerting: `infra/grafana/provisioning/alerting.yml`
 
 ## Key Conventions
 
@@ -129,3 +155,13 @@ Key subsystems:
 ## Config
 
 `config.yaml` at repo root is the unified config. Key sections: `edge`, `central`, `tls`, `storage`, `vlm_rules`, `alerting` (with `routes` and `rules`), `rate_limiting`, `sessions`, `cloud_storage`, `tracing`, `batch`.
+
+v2.3 additions:
+- `edge.cache_queue` — offline detection buffer (max_entries, max_memory_mb)
+- `central.vlm_models` — multiple VLM model variants for runtime switching
+- Hot-reloadable sections (no restart): `logging.level`, `vlm_rules`, `alerting.rules`, `rate_limiting`
+- Non-hot-reloadable (needs restart): `central.host/port`, `tls.*`, `storage.*`, `central.model_path`
+
+## Devcontainer
+
+`.devcontainer/` provides a ready-to-use development environment. Run `just --list` after container creation.

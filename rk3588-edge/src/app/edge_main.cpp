@@ -97,6 +97,11 @@ int main(int argc, char* argv[]) {
         config.recording.output_dir = cfg.Get("edge.recording.output_dir", config.recording.output_dir);
         config.recording.fps = cfg.GetInt("edge.recording.fps", config.recording.fps);
 
+        // Cache queue config
+        config.cache_queue_max_entries = cfg.GetInt("edge.cache_queue.max_entries", static_cast<int>(config.cache_queue_max_entries));
+        int cache_mb = cfg.GetInt("edge.cache_queue.max_memory_mb", 64);
+        config.cache_queue_max_memory_bytes = static_cast<size_t>(cache_mb) * 1024 * 1024;
+
         // v2 feature toggles
         config.enable_temporal_tracker = cfg.GetBool("edge.enable_temporal_tracker", config.enable_temporal_tracker);
         config.enable_adaptive_fps = cfg.GetBool("edge.enable_adaptive_fps", config.enable_adaptive_fps);
