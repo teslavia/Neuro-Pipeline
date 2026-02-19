@@ -31,6 +31,7 @@ from .routers import (
     config_router,
     intelligence_router,
     tracking_router,
+    logging_router,
 )
 from .services import inject_from_central
 
@@ -76,6 +77,7 @@ app.include_router(models_router)
 app.include_router(config_router)
 app.include_router(intelligence_router)
 app.include_router(tracking_router)
+app.include_router(logging_router)
 
 
 # ── Root Page ──────────────────────────────────────

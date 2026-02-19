@@ -7,6 +7,7 @@ from .v2 import (
     config_router,
     intelligence_router,
     tracking_router,
+    logging_router,
 )
 
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     "config_router",
     "intelligence_router",
     "tracking_router",
+    "logging_router",
 ]
