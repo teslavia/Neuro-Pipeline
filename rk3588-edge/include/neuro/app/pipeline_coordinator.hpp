@@ -93,6 +93,10 @@ class PipelineCoordinator {
       float roi_padding = 0.1f;      // Padding around detection for ROI
     };
     CascadeConfig cascade;
+
+    // v2.3: Frame data (JPEG) sending for VLM analysis on central
+    bool send_frame_data = false;   // Send JPEG-encoded frame with detections
+    int jpeg_quality = 70;          // JPEG quality 1-100
   };
 
   explicit PipelineCoordinator(const Config& config);
