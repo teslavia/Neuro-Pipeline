@@ -29,6 +29,7 @@ class ModelRecord:
     target_device_id: str = ""
     npu_core: int = -1
     previous_version: Optional[str] = None
+    benchmark: Optional[Dict] = None  # VLM validation benchmark results
 
 
 class ModelRegistry:
